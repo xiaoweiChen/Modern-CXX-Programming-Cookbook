@@ -1,0 +1,130 @@
+
+上一个示例中，了解了什么是类型特征，标准提供了哪些特征。本示例中，将更进一步，了解如何定义自定义特征。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将了解如何解决以下问题：我几个支持序列化的类型。不涉及具体细节，假设有些类型提供一种“普通”的序列化到字符串的功能，而另一些类型则是基于指定的编码进行序列化。最终目标是为这些类型中的对象创建一个单一且统一的序列化API。为此，考虑以下两个类：foo，提供简单的序列化：以及 bar，提供带编码的序列化。
+
+来看一下代码：
+
+\begin{cpp}
+struct foo
+{
+    std::string serialize()
+    {
+        return "plain"s;
+    }
+};
+struct bar
+{
+    std::string serialize_with_encoding()
+    {
+        return "encoded"s;
+    }
+};
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+实现以下类和函数模板：
+
+\begin{itemize}
+\item
+名为 \verb|is_serializable_with_encoding| 的类型模板中，包含一个设置为 false 的静态 const bool 变量：
+
+\begin{cpp}
+template <typename T>
+struct is_serializable_with_encoding
+{
+    static const bool value = false;
+};
+\end{cpp}
+
+\item
+\verb|is_serializable_with_encoding| 模板的全特化版本，针对类型 bar 设置静态 const bool 变量为 true：
+
+\begin{cpp}
+template <>
+struct is_serializable_with_encoding<bar>
+{
+    static const bool value = true;
+};
+\end{cpp}
+
+\item
+名为 serializer 的类型模板中，包含一个名为 serialize 的静态模板方法，该方法接受一个模板类型 T 的参数，并调用该实例的 serialize() 方法：
+
+\begin{cpp}
+template <bool b>
+struct serializer
+{
+    template <typename T>
+    static auto serialize(T& v)
+    {
+        return v.serialize();
+    }
+};
+\end{cpp}
+
+\item
+一个全特化的类模板，针对 true，其 serialize() 静态方法调用参数的 \verb|serialize_with_encoding()| ：
+
+\begin{cpp}
+template <>
+struct serializer<true>
+{
+    template <typename T>
+    static auto serialize(T& v)
+    {
+        return v.serialize_with_encoding();
+    }
+};
+\end{cpp}
+
+\item
+名为 serialize() 的函数模板，使用前面定义的 serializer 类模板和 \verb|is_serializable_with_encoding| 类型特征，选择应该调用哪个实际的序列化方法（普通或带编码）：
+
+\begin{cpp}
+template <typename T>
+auto serialize(T& v)
+{
+    return serializer<is_serializable_with_encoding<T>::value>::
+    serialize(v);
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|is_serializable_with_encoding| 是一个类型特征，用于检查类型 T 是否支持带编码的序列化。其提供了一个名为 value 的静态成员，类型为 bool，如果 T 支持带编码的序列化，则该值为 true，否则为 false。作为具有单个类型模板参数 T 的类模板实现的；这个类模板对于支持编码序列化的类型进行了全特化，就是针对类型 bar：
+
+\begin{cpp}
+std::cout << std::boolalpha;
+std::cout <<
+    is_serializable_with_encoding<foo>::value << '\n';        // false
+std::cout <<
+    is_serializable_with_encoding<bar>::value << '\n';        // true
+std::cout <<
+    is_serializable_with_encoding<int>::value << '\n';        // false
+std::cout <<
+    is_serializable_with_encoding<std::string>::value << '\n';// false
+std::cout << std::boolalpha;
+\end{cpp}
+
+serialize() 方法是一个函数模板，表示一个通用的API，用于序列化支持任意类型序列化的实例。接受一个类型为模板参数 T 的单个参数，并使用辅助类模板 serializer 来调用参数的 serialize() 或 \verb|serialize_with_encoding()| 方法。
+
+serializer 类型是带有单个非类型模板参数（类型为 bool）的类模板。此类模板包含一个名为 serialize() 的静态函数模板。该函数模板接受一个类型为模板参数 T 的单个参数，调用参数的 serialize() 方法，并返回该调用返回的值。serializer 类模板对其非类型模板参数值为 true 的情况有一个完全特化版本。这个特化版本中，函数模板 serialize() 的签名保持不变，但调用的是 \verb|serialize_with_encoding()|，不是 serialize()。
+
+serialize() 函数模板中，使用 \verb|is_serializable_with_encoding| 类型特征来决定使用泛型还是完全特化的类模板。类型特征的静态成员 value 被用作 serializer 的非类型模板参数的参数。
+
+定义了所有这些之后，可以编写如下代码：
+
+\begin{cpp}
+foo f;
+bar b;
+std::cout << serialize(f) << '\n'; // plain
+std::cout << serialize(b) << '\n'; // encoded
+\end{cpp}
+
+使用 foo 参数调用 serialize() 将返回字符串 plain，而使用 bar 参数调用 serialize() 将返回字符串 encoded。
+

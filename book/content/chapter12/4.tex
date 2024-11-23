@@ -1,0 +1,187 @@
+
+上一个示例中，介绍了概念和约束的话题，借助几个完全基于现有类型特征的例子了解了它们。还使用了更简洁的语法来指定概念，即在模板声明中使用概念名称替代 typename 或 class 关键字。借助 requires 表达式，可以定义更复杂的概念。这些表达式是 bool 类型的 prvalue，描述了一些模板参数上的约束。
+
+本示例中，将介绍如何编写 requires 表达式，以及指定模板参数约束的另一种方法。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中呈现的代码，将使用在上一个示例中定义的类模板 NumericalValue<T> 和函数模板 wrap()。
+
+\mySubsubsection{}{How to do it...}
+
+为了指定模板参数的要求，可以使用 requires 关键字引入的 requires 表达式：
+
+\begin{itemize}
+\item
+使用编译器验证正确性的简单表达式。下面的代码中，操作符 + 必须为 T 模板参数重载：
+
+\begin{cpp}
+template <typename T>
+concept Addable = requires (T a, T b) {a + b;};
+template <Addable T>
+T add(T a, T b)
+{
+    return a + b;
+}
+add(1, 2);        // OK, integers
+add("1"s, "2"s);  // OK, std::string user-defined literals
+NumericalValue<int> a{1};
+NumericalValue<int> b{2};
+add(a, b); // error: no matching function for call to 'add'
+// 'NumericalValue<int>' does not satisfy 'Addable'
+
+\end{cpp}
+
+\item
+使用简单的表达式来要求特定函数的存在。在下面的代码中，必须存在一个以 T 模板参数作为参数的 wrap() 函数：
+
+\begin{cpp}
+template <typename T>
+concept Wrapable = requires(T x) { wrap(x); };
+template <Wrapable T>
+void do_wrap(T x)
+{
+    [[maybe_unused]] auto v = wrap(x);
+}
+do_wrap(42);    // OK, can wrap an int
+do_wrap(42.0);  // OK, can wrap a double
+do_wrap("42"s); // error, cannot wrap a std::string
+\end{cpp}
+
+\item
+使用 typename 关键字后跟类型名称（可选限定符）指定类型要求，以指定成员名称、类模板特化或别名模板替换等要求。下面的代码中，T 模板参数必须具有两个内部类型，分别称为 \verb|value_type| 和 iterator。此外，必须提供接受 T 参数的 begin() 和 end() 函数：
+
+\begin{cpp}
+template <typename T>
+concept Container = requires(T x)
+{
+    typename T::value_type;
+    typename T::iterator;
+    begin(x);
+    end(x);
+};
+template <Container T>
+void pass_container(T const & c)
+{
+    for(auto const & x : c)
+        std::cout << x << '\n';
+}
+std::vector<int> v { 1, 2, 3};
+std::array<int, 3> a {1, 2, 3};
+int arr[] {1,2,3};
+pass_container(v);   // OK
+pass_container(a);   // OK
+pass_container(arr); // error: 'int [3]' does not satisfy
+// 'Container'
+\end{cpp}
+
+\item
+使用复合要求来指定表达式的要求及其求值结果。下面的示例中，必须存在一个可以接受 T 模板参数类型的 wrap() 函数，而且调用该函数的结果必须是 NumericalValue<T> 类型：
+
+\begin{cpp}
+template <typename T>
+concept NumericalWrapable =
+requires(T x)
+{
+    {wrap(x)} -> std::same_as<NumericalValue<T>>;
+};
+template <NumericalWrapable T>
+void do_wrap_numerical(T x)
+{
+    [[maybe_unused]] auto v = wrap(x);
+}
+template <typename T>
+class any_wrapper
+{
+    public:
+    T value;
+};
+any_wrapper<std::string> wrap(std::string s)
+{
+    return any_wrapper<std::string>{s};
+}
+// OK, wrap(int) returns NumericalValue<int>
+do_wrap_numerical(42);
+// error, wrap(string) returns any_wrapper<string>
+do_wrap_numerical("42"s);
+\end{cpp}
+\end{itemize}
+
+模板参数上的约束也可以使用涉及 requires 关键字的语法指定，这称为 requires 子句：
+
+\begin{itemize}
+\item
+模板参数列表之后使用 requires 子句：
+
+\begin{cpp}
+template <typename T> requires Addable<T>
+T add(T a, T b)
+{
+    return a + b;
+}
+\end{cpp}
+
+\item
+或者，在函数声明符的最后一个元素之后使用 requires 子句：
+
+\begin{cpp}
+template <typename T>
+T add(T a, T b) requires Addable<T>
+{
+    return a + b;
+}
+\end{cpp}
+
+\item
+将 requires 子句与 requires 表达式结合使用，而不是使用命名概念。这时，requires 关键字会出现两次：
+
+\begin{cpp}
+template <typename T>
+T add(T a, T b) requires requires (T a, T b) {a + b;}
+{
+    return a + b;
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+新 requires 关键字有多种用途。一方面，引入一个指定模板参数约束的 requires 子句。另一方面，定义一个 bool 类型的 prvalue 形式的 requires 表达式，用于定义模板参数上的约束。
+
+\begin{myNotic}
+如果不熟悉 C++ 的值类别（lvalue、rvalue、prvalue、xvalue、glvalue），建议查阅 \url{https://en.cppreference.com/w/cpp/language/value_category}。术语 prvalue 指的是纯 rvalue，不是 xvalue（即将到期的值）。prvalue 的例子包括字面量、返回类型不是引用类型的函数调用、枚举器或 this 指针。
+\end{myNotic}
+
+在 requires 子句中，requires 关键字后面必须跟着一个 bool 类型的常量表达式。表达式必须是一个主表达式（如 \verb|std::is_arithmetic_v<T>| 或 \verb|std::integral<T>|）、括号内的表达式，或者是用 \verb|&&| 或 || 操作符连接的此类表达式序列。
+
+requires 表达式的形式为 \verb|requires (parameters-list) { requirements }|。参数列表是可选的，可以完全省略（包括括号）。指定的要求可能涉及：
+
+\begin{itemize}
+\item
+范围内的模板参数
+
+\item
+参数列表中引入的局部参数
+
+\item
+从封闭上下文可见的任何其他声明
+\end{itemize}
+
+requires 表达式的要求序列可以包含以下类型的要求：
+
+\begin{itemize}
+\item
+简单要求：这些不以 requires 关键字开头的表达式。编译器仅检查其语言正确性。
+
+\item
+类型要求：这些表达式以关键字 typename 开头，后跟一个类型名称，该名称必须有效。这使得编译器能够验证某个嵌套名称是否存在，或者某个类模板特化或别名模板替换是否存在。
+
+\item
+复合要求：形式为 \verb|{expression} noexcept -> type-constraint|。noexcept 关键字可选，如果不存在，则表达式不得可能抛出异常。返回类型要求（以 -> 引入）也是可选的。但如果存在，则 decltype(expression) 必须满足 type-constraint 施加的约束。
+
+\item
+嵌套要求：这些是更复杂的表达式，定义为 requires 表达式，后者可以是另一个嵌套要求。以 requires 关键字开头的要求被认为是嵌套要求。
+\end{itemize}
+
+计算之前，每个命名概念和每个 requires 表达式都会进行替换，直到获得一系列原子约束的合取和析取，这一过程称为规范化。实际的规范化细节和编译器执行的分析则超出了本书的范畴。
+

@@ -1,0 +1,231 @@
+手动处理堆内存分配及其释放（使用 new 和 delete）是 C++ 最具争议的功能之一。所有分配都必须正确地与相应的作用域内的 delete 操作配对。例如，在函数内进行了内存分配并且需要在函数返回前释放，则必须在所有返回路径上发生这种情况，包括由于异常导致函数返回的非正常情况。C++11 特性，如右值和移动语义，已经促进了更好的智能指针的发展（因为有些智能指针，比如 \verb|auto_ptr|，在 C++11 之前就已经存在）；这些指针可以管理一个内存资源，并在智能指针销毁时自动释放。本示例中，将介绍 \verb|std::unique_ptr|，这是一种拥有并管理在堆上分配的对象或对象数组的智能指针，并在智能指针超出作用域时执行清理操作。
+
+\mySubsubsection{}{Getting ready}
+
+示例中，将使用以下类型：
+
+\begin{cpp}
+class foo
+{
+    int a;
+    double b;
+    std::string c;
+public:
+    foo(int const a = 0, double const b = 0,
+    std::string const & c = "") :a(a), b(b), c(c)
+    {}
+    void print() const
+    {
+        std::cout << '(' << a << ',' << b << ',' << std::quoted(c) << ')'
+        << '\n';
+    }
+};
+\end{cpp}
+
+对于本示例，需要熟悉移动语义和 \verb|std::move()| 转换函数。类 \verb|std::unique_ptr| 在标准命名空间 std 中的 <memory> 头文件中可用。
+
+\mySubsubsection{}{How to do it...}
+
+以下是使用 \verb|std::unique_ptr| 时，需要的一些操作：
+
+\begin{itemize}
+\item
+使用可用的重载构造函数创建一个管理对象或对象数组的 \verb|std::unique_ptr|。默认构造函数创建一个不管理对象的指针：
+
+\begin{cpp}
+std::unique_ptr<int>   pnull;
+std::unique_ptr<int>   pi(new int(42));
+std::unique_ptr<int[]> pa(new int[3]{ 1,2,3 });
+std::unique_ptr<foo>   pf(new foo(42, 42.0, "42"));
+\end{cpp}
+
+\item
+或者，使用 C++14 中提供的 \verb|std::make_unique()| 函数模板来创建 \verb|std::unique_ptr| 对象：
+
+\begin{cpp}
+std::unique_ptr<int>   pi = std::make_unique<int>(42);
+std::unique_ptr<int[]> pa = std::make_unique<int[]>(3);
+std::unique_ptr<foo>   pf = std::make_unique<foo>(42, 42.0, "42");
+\end{cpp}
+
+\item
+C++20提供的 \verb|std::make_unique_for_overwrite()| 函数模板，创建一个默认初始化的对象或对象数组的 \verb|std::unique_ptr|。这些对象随后应确定值：
+
+\begin{cpp}
+std::unique_ptr<int>   pi = std::make_unique_for_overwrite<int>();
+std::unique_ptr<foo[]> pa = std::make_unique_for_overwrite<foo[]>();
+\end{cpp}
+
+\item
+如果默认的 delete 操作符不适合销毁托管的对象或数组，则使用带有自定义删除器的重载构造函数：
+
+\begin{cpp}
+struct foo_deleter
+{
+    void operator()(foo* pf) const
+    {
+        std::cout << "deleting foo..." << '\n';
+        delete pf;
+    }
+};
+std::unique_ptr<foo, foo_deleter> pf(
+    new foo(42, 42.0, "42"),
+        foo_deleter());
+\end{cpp}
+
+\item
+使用 \verb|std::move()| 将一个对象的所有权从一个 \verb|std::unique_ptr| 转移到另一个：
+
+\begin{cpp}
+auto pi = std::make_unique<int>(42);
+auto qi = std::move(pi);
+assert(pi.get() == nullptr);
+assert(qi.get() != nullptr);
+\end{cpp}
+
+\item
+若要访问托管对象的原始指针，如果想要保留对象的所有权，请使用 \verb|get()|；如果也想放弃所有权，请使用 \verb|release()|：
+
+\begin{cpp}
+void func(int* ptr)
+{
+    if (ptr != nullptr)
+        std::cout << *ptr << '\n';
+    else
+        std::cout << "null" << '\n';
+}
+std::unique_ptr<int> pi;
+func(pi.get()); // prints null
+pi = std::make_unique<int>(42);
+func(pi.get()); // prints 42
+\end{cpp}
+
+\item
+使用 \verb|operator*| 和 \verb|operator->| 解引用托管对象的指针：
+
+\begin{cpp}
+auto pi = std::make_unique<int>(42);
+*pi = 21;
+auto pf1 = std::make_unique<foo>();
+pf1->print(); // prints (0,0,"")
+auto pf2 = std::make_unique<foo>(42, 42.0, "42");
+pf2->print(); // prints (42,42,"42")
+\end{cpp}
+
+\item
+如果 \verb|std::unique_ptr| 管理的是对象数组，可以使用 \verb|operator[]| 访问数组中的各个元素：
+
+\begin{cpp}
+std::unique_ptr<int[]> pa = std::make_unique<int[]>(3);
+for (int i = 0; i < 3; ++i)
+    pa[i] = i + 1;
+\end{cpp}
+
+\item
+若要检查 \verb|std::unique_ptr| 是否管理了对象，可以使用显式转换操作符 \verb|bool| 或检查 \verb|get() != nullptr|（这就是 \verb|operator bool| 所做的）：
+
+\begin{cpp}
+std::unique_ptr<int> pi(new int(42));
+if (pi) std::cout << "not null" << '\n';
+\end{cpp}
+
+\item
+\verb|std::unique_ptr| 对象可以存储在容器中，\verb|make_unique()| 创建的对象可以直接存储。如果想将托管对象的所有权交给容器中的 \verb|std::unique_ptr|，可以使用 \verb|std::move()| 将左值对象静态转换为右值对象：
+
+\begin{cpp}
+std::vector<std::unique_ptr<foo>> data;
+for (int i = 0; i < 5; i++)
+    data.push_back(
+std::make_unique<foo>(i, i, std::to_string(i)));
+auto pf = std::make_unique<foo>(42, 42.0, "42");
+data.push_back(std::move(pf));
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|std::unique_ptr| 是一种智能指针，通过原始指针管理在堆上分配的对象或对象数组。当智能指针超出作用域、使用赋值操作符 \verb|=| 赋予新指针，或使用 \verb|release()| 方法放弃所有权时，会执行适当的清理操作。默认情况下，使用 delete 操作符来清理托管对象，用户可以在构建智能指针时提供自定义删除器。此删除器必须是一个函数对象，可以是函数对象的左值引用或函数，并且此可调用对象必须接受一个类型为 \verb|unique_ptr<T, Deleter>::pointer| 的单个参数。
+
+C++14 添加了 \verb|std::make_unique()| 实用函数模板来创建 \verb|std::unique_ptr|。避免了一些特定上下文中的内存泄漏，但也有一些限制：
+
+\begin{itemize}
+\item
+只能用于分配数组；不能用于初始化数组，而这是可以用 \verb|std::unique_ptr| 构造函数做到的。以下两段代码等效：
+
+\begin{cpp}
+// allocate and initialize an array
+std::unique_ptr<int[]> pa(new int[3]{ 1,2,3 });
+// allocate and then initialize an array
+std::unique_ptr<int[]> pa = std::make_unique<int[]>(3);
+for (int i = 0; i < 3; ++i)
+    pa[i] = i + 1;
+\end{cpp}
+
+\item
+不能用于创建具有用户定义删除器的 \verb|std::unique_ptr|。
+\end{itemize}
+
+正如刚才提到的，\verb|make_unique()| 的主要优点在于，在某些异常抛出的上下文中可避免内存泄漏。\verb|make_unique()| 本身在分配失败或创建的对象的构造函数抛出异常时可以抛出 \verb|std::bad_alloc|：
+
+\begin{cpp}
+void some_function(std::unique_ptr<foo> p)
+{ /* do something */ }
+some_function(std::unique_ptr<foo>(new foo()));
+some_function(std::make_unique<foo>());
+\end{cpp}
+
+无论 foo 的分配和构造发生了什么情况，都不会有内存泄漏，无论使用 \verb|make_unique()| 还是 \verb|std::unique_ptr| 的构造函数。但代码的不同版本会导致内存泄漏：
+
+\begin{cpp}
+void some_other_function(std::unique_ptr<foo> p, int const v)
+{
+}
+int function_that_throws()
+{
+    throw std::runtime_error("not implemented");
+}
+// possible memory leak
+some_other_function(std::unique_ptr<foo>(new foo),
+                    function_that_throws());
+// no possible memory leak
+some_other_function(std::make_unique<foo>(),
+                    function_that_throws());
+\end{cpp}
+
+例子中，\verb|some_other_function()| 有一个参数：一个整数值。传递给此函数的整数参数是另一个函数的返回值。如果此函数调用抛出异常，则使用 \verb|std::unique_ptr| 的构造函数创建智能指针可能会导致内存泄漏。调用 \verb|some_other_function()| 时，编译器可能会先调用 foo，然后调用 \verb|function_that_throws()|，最后调用 \verb|std::unique_ptr| 的构造函数。如果 \verb|function_that_throws()| 抛出错误，分配的 foo 就会泄漏。如果调用顺序是先调用 \verb|function_that_throws()| 再调用 new foo() 和 \verb|unique_ptr| 的构造函数，则不会发生内存泄漏；这是因为栈开始展开之前 foo 实例尚未分配。但通过使用 \verb|make_unique()| 函数，这种情况可以避免，唯一的调用是 \verb|make_unique()| 和 \verb|function_that_throws()|。如果首先调用 \verb|function_that_throws()|，则根本不会分配 foo 实例。如果首先调用 \verb|make_unique()|，则foo 实例将构建并且其所有权将传递给 \verb|std::unique_ptr|。如果后续调用 \verb|function_that_throws()| 抛出异常，当栈展开时 \verb|std::unique_ptr| 将销毁，foo 实例也将从智能指针的析构函数中销毁。C++17 修复了这个问题，要求参数在下一个参数开始计算之前必须完全求值。
+
+C++20 中，新增了一个名为 \verb|std::make_unique_for_overwrite()| 的函数。这个函数类似于 \verb|make_unique()|，区别在于它默认初始化对象或对象数组。该函数表达了创建一个可能未初始化的对象指针的意图，以便稍后对其进行覆盖。
+
+常量 \verb|std::unique_ptr| 实例不能将托管对象或数组的所有权转移给另一个 \verb|std::unique_ptr| 实例。另一方面，可以通过 \verb|get()| 或 \verb|release()| 获取托管对象的原始指针。前者仅返回底层指针，而后者的名称表明还会释放托管实例的所有权。调用 \verb|release()| 后，\verb|std::unique_ptr| 对象将为空，再次调用 \verb|get()| 将返回 \verb|nullptr|。
+
+如果派生类 Derived 继承自基类 Base，则管理 Derived 类型实例的 \verb|std::unique_ptr| 可以隐式转换为管理 Base 类型实例的 \verb|std::unique_ptr|。这种隐式转换只有在 Base 具有虚析构函数时才是安全的（所有基类都应该如此）；否则，将产生未定义行为：
+
+\begin{cpp}
+struct Base
+{
+    virtual ~Base()
+    {
+        std::cout << "~Base()" << '\n';
+    }
+};
+struct Derived : public Base
+{
+    virtual ~Derived()
+    {
+        std::cout << "~Derived()" << '\n';
+    }
+};
+std::unique_ptr<Derived> pd = std::make_unique<Derived>();
+std::unique_ptr<Base> pb = std::move(pd);
+\end{cpp}
+
+运行上述代码：
+
+\begin{shell}
+~Derived()
+~Base()
+\end{shell}
+
+\verb|std::unique_ptr| 可以存储在 \verb|std::vector| 容器中。因为只有一个 \verb|std::unique_ptr| 实例可以拥有托管对象，所以智能指针不能复制到容器中——必须移动。这可以通过 \verb|std::move()| 来实现，执行一个 \verb|static_cast| 到右值引用类型。这允许将托管实例的所有权转移到在容器中创建的 \verb|std::unique_ptr| 实例。
+
+

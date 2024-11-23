@@ -1,0 +1,151 @@
+
+异常规格是C++语言的一个特性，可以带来性能上的提升，但如果使用不当，也可能导致程序异常终止。C++03引入异常规格，允许指出函数可能抛出哪些类型的异常，这一特性在C++11中弃用，并在C++17中移除，被C++11中的noexcept修饰符所取代。此外，使用throw()修饰符来表明函数会抛出异常，但不指定异常类型的做法也在C++17中弃用，并在C++20中完全移除。noexcept修饰符只允许声明一个函数不会抛出异常（与旧的throw修饰符不同，后者可以指定函数可能会抛出的异常类型列表）。本节提供了关于现代C++异常规格的信息，以及何时使用它们。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下结构来指定或查询异常规格：
+
+\begin{itemize}
+\item
+函数声明中使用noexcept来表示该函数不会抛出异常：
+
+\begin{cpp}
+void func_no_throw() noexcept
+{
+}
+\end{cpp}
+
+\item
+在函数声明中使用noexcept(expr)，如模板元编程中，根据布尔值的条件来表示函数可能抛出异常：
+
+\begin{cpp}
+template <typename T>
+T generic_func_1()
+noexcept(std::is_nothrow_constructible_v<T>)
+{
+    return T{};
+}
+\end{cpp}
+
+\item
+在编译时使用noexcept操作符检查表达式，是否声明为不抛出异常：
+
+\begin{cpp}
+template <typename T>
+T generic_func_2() noexcept(noexcept(T{}))
+{
+    return T{};
+}
+template <typename F, typename A>
+auto func(F&& f, A&& arg) noexcept
+{
+    static_assert(noexcept(f(arg)), "F is throwing!");
+    return f(arg);
+}
+std::cout << noexcept(generic_func_2<int>) << '\n';
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+自C++17起，异常规格成为函数类型的一部分，但不是函数签名的一部分，可以出现在函数声明符中。异常规格不是函数签名的一部分，所以两个函数签名不能仅在异常规格上有所不同。
+
+C++17之前，异常规格不是函数类型的一部分，只能作为lambda声明符或顶层函数声明符的一部分，甚至不能在typedef或类型别名声明中出现。关于异常规格的进一步讨论仅涉及C++17。
+
+异常抛出过程可以有几种不同的方式：
+
+\begin{itemize}
+\item
+如果没有异常规格，则该函数可能会抛出异常。
+
+\item
+noexcept(false)等同于没有异常。
+
+\item
+noexcept(true)和noexcept表示函数不会抛出异常。
+
+\item
+throw()等同于noexcept(true)，但在C++17中弃用，并在C++20中彻底移除。
+\end{itemize}
+
+\begin{myNotic}
+使用异常规格必须谨慎，如果异常（无论是直接抛出还是从另一个调用的函数中抛出）离开了一个标记为不抛出异常的函数，程序会立即且异常地终止(调用std::terminate())。
+\end{myNotic}
+
+不抛出异常的函数指针,可以隐式转换为可能抛出异常的函数指针，反之则不行。另一方面，如果虚函数有一个不抛出异常的异常规格，这表明所有重写都必须保持这个规格，除非重写的函数声明为已删除。
+
+在编译时，可以使用noexcept操作符检查函数是否声明为不抛出异常。此操作符接受一个表达式，并在表达式声明为不抛出异常时返回true，否则返回false。其不会计算其检查的表达式。
+
+noexcept操作符与noexcept修饰符一起特别适用于模板元编程，以表明对于某些类型函数是否可能抛出异常。也用于\verb|static_assert|声明中，以检查表达式是否破坏了函数的不抛出保证。
+
+下面提供了更多关于noexcept操作符工作原理的例子：
+
+\begin{cpp}
+int double_it(int const i) noexcept
+{
+    return i + i;
+}
+int half_it(int const i)
+{
+    throw std::runtime_error("not implemented!");
+}
+struct foo
+{
+    foo() {}
+};
+std::cout << std::boolalpha
+    << noexcept(func_no_throw()) <<  '\n' // true
+    << noexcept(generic_func_1<int>()) <<  '\n' // true
+    << noexcept(generic_func_1<std::string>()) <<  '\n'// true
+    << noexcept(generic_func_2<int>()) << '\n' // true
+    << noexcept(generic_func_2<std::string>()) <<  '\n'// true
+    << noexcept(generic_func_2<foo>()) <<  '\n' // false
+    << noexcept(double_it(42)) <<  '\n' // true
+    << noexcept(half_it(42)) <<  '\n' // false
+    << noexcept(func(double_it, 42)) <<  '\n' // true
+    << noexcept(func(half_it, 42)) << '\n';            // true
+\end{cpp}
+
+noexcept修饰符并不提供编译时对异常的检查，只是用户告知编译器一个函数预期不会抛出异常的一种方式。编译器可以利用这一点启用某些优化。例如，std::vector如果元素的移动构造函数是noexcept的话，就会移动元素，否则复制。
+
+\mySubsubsection{}{There's more...}
+
+如前所述，声明为noexcept修饰符的函数如果因异常退出会导致程序异常终止。因此，应谨慎使用noexcept修饰符。其存在可以启用代码优化，帮助提高性能同时保持强异常保证。例如，库容器就是这种情况。
+
+\begin{myNotic}
+C++语言提供了几个级别的异常保证：
+
+\begin{itemize}
+\item
+第一级，无异常保证，不提供保证。如果发生异常，没有可以表明程序是否处于有效状态。资源可能泄露，内存可能损坏，可能会破坏实例的不变性。
+
+\item
+基本异常保证是最简单的保证级别，确保在抛出异常后，实例处于一致且可用的状态，不会发生资源泄漏，并且保持不变性。
+
+\item
+强异常保证规定要么操作成功完成，因异常完成操作，但程序恢复到操作开始前的状态。这确保了提交或回滚语义。
+
+\item
+无异常保证实际上是所有保证中最强大的，其规定操作保证不会抛出异常并成功完成。
+\end{itemize}
+\end{myNotic}
+
+许多标准容器为其一些操作提供了强异常保证。例如，vector的\verb|push_back()|方法。为了保持其强异常保证，只有当元素类型的移动构造函数或移动赋值操作符不抛出异常时，才能代替复制构造函数或复制赋值操作符来进行优化。
+
+\verb|std::move_if_noexcept()|工具函数如果其类型参数的移动构造函数标记为noexcept，则会执行这样的操作。能够指出移动构造函数或移动赋值操作符，不会抛出异常可能是使用noexcept最重要的场景。
+
+考虑以下异常规则：
+
+\begin{itemize}
+\item
+如果函数有可能抛出异常，则不要使用异常修饰符。
+
+\item
+只将那些保证不会抛出异常的函数标记为noexcept。
+
+\item
+只将那些基于条件抛出异常的函数标记为noexcept(expression)。
+\end{itemize}
+
+这些规则很重要，从noexcept函数中抛出异常会立即导致程序通过调用std::terminate()终止。
+

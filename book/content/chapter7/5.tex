@@ -1,0 +1,347 @@
+除了基于流的输入输出库之外，标准库还提供了一系列称为操纵符的辅助函数，这些函数通过使用操作符 <{}< 和 >{}> 控制输入和输出流。本示例中，将介绍一些这些操纵符，并通过一些格式化控制台输出的例子展示其用法。将在接下来的示例中，继续介绍更多的操纵符。
+
+\mySubsubsection{}{Getting ready}
+
+I/O操纵符位于 <ios>、<istream>、<ostream> 和 <iomanip> 头文件中的 std 命名空间下。这个示例中，将只讨论来自 <ios> 和 <iomanip> 的一些操纵符。
+
+\mySubsubsection{}{How to do it...}
+
+以下操纵符可用于控制流的输入或输出：
+
+\begin{itemize}
+\item
+boolalpha 和 noboolalpha 启用和禁用布尔值的文字表示形式：
+
+\begin{cpp}
+std::cout << std::boolalpha << true << '\n';    // true
+std::cout << false << '\n';                     // false
+std::cout << std::noboolalpha << false << '\n'; // 0
+\end{cpp}
+
+\item
+left、right 和 internal 影响填充字符的对齐方式；left 和 right 影响所有文本，但 internal 只影响整数、浮点数和货币输出：
+
+\begin{cpp}
+std::cout << std::right << std::setw(10) << "right\n";
+std::cout << std::setw(10) << "text\n";
+std::cout << std::left << std::setw(10) << "left\n";
+\end{cpp}
+
+\item
+fixed、scientific、hexfloat 和 defaultfloat 改变用于浮点类型（对于输入和输出流）的格式化方式。后两种自C++11起可用：
+
+\begin{cpp}
+std::cout << std::fixed << 0.25 << '\n';         // 0.250000
+std::cout << std::scientific << 0.25 << '\n';    // 2.500000e-01
+std::cout << std::hexfloat << 0.25 << '\n';      // 0x1p-2
+std::cout << std::defaultfloat << 0.25 << '\n';  // 0.25
+\end{cpp}
+
+\item
+dec、hex 和 oct 控制整数类型（对于输入和输出流）使用的基数：
+
+\begin{cpp}
+std::cout << std::oct << 42 << '\n'; // 52
+std::cout << std::hex << 42 << '\n'; // 2a
+std::cout << std::dec << 42 << '\n'; // 42
+\end{cpp}
+
+\item
+setw 改变下一个输入或输出字段的宽度。默认宽度为0。
+
+\item
+setfill 改变输出流的填充字符；这是用来填充直到达到指定宽度为止的下一个字段的字符。默认填充字符为空格：
+
+\begin{cpp}
+std::cout << std::right
+          << std::setfill('.') << std::setw(10)
+          << "right" << '\n';
+// .....right
+\end{cpp}
+
+\item
+setprecision 改变输入和输出流中浮点类型的十进制精度（生成多少位数字）。默认精度为6：
+
+\begin{cpp}
+std::cout << std::fixed << std::setprecision(2) << 12.345 << '\n';
+// 12.35
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+上述列出的所有I/O操纵符（除了 setw，仅指下一个输出字段）都会影响流，所有连续的读写操作都会使用最后一次指定的格式，直到再次使用另一个操纵符。
+
+一些操纵符是无参调用的。例如 boolalpha/noboolalpha 或 dec/hex/oct。这些操纵符是接受单个参数（即，字符串的引用），并返回相同流的引用函数：
+
+\begin{cpp}
+std::ios_base& hex(std::ios_base& str);
+\end{cpp}
+
+\verb|std::cout << std::hex| 这样的表达式之所以可能，是因为 \verb|basic_ostream::operator<<| 和 \verb|basic_istream::operator>>| 都有重载来接受这些函数的指针。
+
+其他操纵符会带有参数，这些操纵符接受一个或多个参数，并返回一个未指定类型实例的函数：
+
+\begin{cpp}
+template<class CharT>
+/*unspecified*/ setfill(CharT c);
+\end{cpp}
+
+为了更好地展示这些操纵符的使用，来看两个格式化控制台输出的例子。
+
+第一个例子中，将列出一本书的目录，有如下要求：
+
+\begin{itemize}
+\item
+章节编号右对齐并用罗马数字表示。
+
+\item
+章节标题左对齐，直到页码之间的空白用点填充。
+
+\item
+章节的页码右对齐。
+\end{itemize}
+
+例子中，将使用以下类型和辅助函数：
+
+\begin{cpp}
+struct Chapter
+{
+    int Number;
+    std::string Title;
+    int Page;
+};
+struct BookPart
+{
+    std::string Title;
+    std::vector<Chapter> Chapters;
+};
+struct Book
+{
+    std::string Title;
+    std::vector<BookPart> Parts;
+};
+std::string to_roman(unsigned int value)
+{
+    struct roman_t { unsigned int value; char const* numeral; };
+    const static roman_t rarr[13] =
+    {
+        {1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"},
+        { 100, "C"}, { 90, "XC"}, { 50, "L"}, { 40, "XL"},
+        {  10, "X"}, {  9, "IX"}, {  5, "V"}, {  4, "IV"},
+        {   1, "I"}
+    };
+    std::string result;
+    for (auto const & number : rarr)
+    {
+        while (value >= number.value)
+        {
+            result += number.numeral;
+            value -= number.value;
+        }
+    }
+    return result;
+}
+\end{cpp}
+
+如下面的代码所示，\verb|print_toc()| 函数接收一个 Book 对象作为参数，并根据指定的要求将其内容输出到控制台上：
+
+\begin{itemize}
+\item
+std::left 和 std::right 指定文本对齐方式
+
+\item
+std::setw 指定每个输出字段的宽度
+
+\item
+std::fill 指定填充字符（章节编号为空格，章节标题为点）
+\end{itemize}
+
+\verb|print_toc()|函数的实现如下：
+
+\begin{cpp}
+void print_toc(Book const & book)
+{
+    std::cout << book.Title << '\n';
+    for(auto const & part : book.Parts)
+    {
+        std::cout << std::left << std::setw(15) << std::setfill(' ')
+                  << part.Title << '\n';
+        std::cout << std::left << std::setw(15) << std::setfill('-')
+                  << '-' << '\n';
+        for(auto const & chapter : part.Chapters)
+        {
+            std::cout << std::right << std::setw(4) << std::setfill(' ')
+                      << to_roman(chapter.Number) << ' ';
+            std::cout << std::left << std::setw(35) << std::setfill('.')
+                      << chapter.Title;
+            std::cout << std::right << std::setw(3) << std::setfill('.')
+                      << chapter.Page << '\n';
+        }
+    }
+}
+\end{cpp}
+
+下面的例子使用了《魔戒同盟》目录的 Book 类型实例调用了此方法：
+
+\begin{cpp}
+auto book = Book
+{
+    "THE FELLOWSHIP OF THE RING"s,
+    {
+        {
+            "BOOK ONE"s,
+            {
+                {1, "A Long-expected Party"s, 21},
+                {2, "The Shadow of the Past"s, 42},
+                {3, "Three Is Company"s, 65},
+                {4, "A Short Cut to Mushrooms"s, 86},
+                {5, "A Conspiracy Unmasked"s, 98},
+                {6, "The Old Forest"s, 109},
+                {7, "In the House of Tom Bombadil"s, 123},
+                {8, "Fog on the Barrow-downs"s, 135},
+                {9, "At the Sign of The Prancing Pony"s, 149},
+                {10, "Strider"s, 163},
+                {11, "A Knife in the Dark"s, 176},
+                {12, "Flight to the Ford"s, 197},
+            },
+        },
+        {
+            "BOOK TWO"s,
+            {
+                {1, "Many Meetings"s, 219},
+                {2, "The Council of Elrond"s, 239},
+                {3, "The Ring Goes South"s, 272},
+                {4, "A Journey in the Dark"s, 295},
+                {5, "The Bridge of Khazad-dum"s, 321},
+                {6, "Lothlorien"s, 333},
+                {7, "The Mirror of Galadriel"s, 353},
+                {8, "Farewell to Lorien"s, 367},
+                {9, "The Great River"s, 380},
+                {10, "The Breaking of the Fellowship"s, 390},
+            },
+        },
+    }
+};
+print_toc(book);
+\end{cpp}
+
+输出如下所示：
+
+\begin{shell}
+THE FELLOWSHIP OF THE RING
+BOOK ONE
+---------------
+   I A Long-expected Party...............21
+  II The Shadow of the Past..............42
+ III Three Is Company....................65
+  IV A Short Cut to Mushrooms............86
+   V A Conspiracy Unmasked...............98
+  VI The Old Forest.....................109
+ VII In the House of Tom Bombadil.......123
+VIII Fog on the Barrow-downs............135
+  IX At the Sign of The Prancing Pony...149
+   X Strider............................163
+  XI A Knife in the Dark................176
+ XII Flight to the Ford.................197
+BOOK TWO
+---------------
+   I Many Meetings......................219
+  II The Council of Elrond..............239
+ III The Ring Goes South................272
+  IV A Journey in the Dark..............295
+   V The Bridge of Khazad-dum...........321
+  VI Lothlorien.........................333
+ VII The Mirror of Galadriel............353
+VIII Farewell to Lorien.................367
+  IX The Great River....................380
+   X The Breaking of the Fellowship.....390
+\end{shell}
+
+第二个例子中，目标是输出一个表格，列出世界上按收入最大的公司。该表将包括公司名称、行业、收入（以数十亿美元计）、收入增长的增减情况、增长率、员工人数和原籍国家等。这个例子中，将使用以下类型：
+
+\begin{cpp}
+struct Company
+{
+    std::string Name;
+    std::string Industry;
+    double      Revenue;
+    bool        RevenueIncrease;
+    double      Growth;
+    int         Employees;
+    std::string Country;
+};
+\end{cpp}
+
+下面代码中的 \verb|print_companies()| 函数使用了比上一个例子更多的操纵符：
+
+\begin{itemize}
+\item
+std::boolalpha 以 true 和 false 而非 1 和 0 显示布尔值。
+
+\item
+std::fixed 指示固定的小数点表示形式，std::defaultfloat 恢复默认小数点表示形式。
+
+\item
+std::setprecision 指定输出中显示的小数位数。与 std::fixed 结合使用，可以指示增长率字段的固定表示形式，并保留一位小数。
+\end{itemize}
+
+\verb|print_companies()| 函数的实现：
+
+\begin{cpp}
+void print_companies(std::vector<Company> const & companies)
+{
+    for(auto const & company : companies)
+    {
+        std::cout << std::left << std::setw(26) << std::setfill(' ')
+                  << company.Name;
+        std::cout << std::left << std::setw(18) << std::setfill(' ')
+                  << company.Industry;
+        std::cout << std::left << std::setw(5) << std::setfill(' ')
+                  << company.Revenue;
+        std::cout << std::left << std::setw(5) << std::setfill(' ')
+                  << std::boolalpha << company.RevenueIncrease
+                  << std::noboolalpha;
+        std::cout << std::right << std::setw(5) << std::setfill(' ')
+                  << std::fixed << std::setprecision(1) << company.Growth
+                  << std::defaultfloat << std::setprecision(6) << ' ';
+        std::cout << std::right << std::setw(8) << std::setfill(' ')
+                  << company.Employees << ' ';
+        std::cout << std::left << std::setw(2) << std::setfill(' ')
+                  << company.Country
+                  << '\n';
+    }
+}
+\end{cpp}
+
+下面是调用此方法的例子。这里显示的数据来源是维基百科（\url{https://en.wikipedia.org/wiki/List_of_largest_companies_by_revenue}，截至2016年）：
+
+\begin{cpp}
+std::vector<Company> companies
+{
+    {"Walmart"s, "Retail"s, 482, false, 0.71,
+        2300000, "US"s},
+    {"State Grid"s, "Electric utility"s, 330, false, 2.91,
+        927839, "China"s},
+    {"Saudi Aramco"s, "Oil and gas"s, 311, true, 40.11,
+        65266, "SA"s},
+    {"China National Petroleum"s, "Oil and gas"s, 299,
+        false, 30.21, 1589508, "China"s},
+    {"Sinopec Group"s, "Oil and gas"s, 294, false, 34.11,
+        810538, "China"s},
+};
+print_companies(companies);
+\end{cpp}
+
+输出具有基于表格的格式：
+
+\begin{shell}
+Walmart                   Retail            482  false  0.7  2300000 US
+State Grid                Electric utility  330  false  2.9   927839 China
+Saudi Aramco              Oil and gas       311  true  40.1    65266 SA
+China National Petroleum  Oil and gas       299  false 30.2  1589508 China
+Sinopec Group             Oil and gas       294  false 34.1   810538 China
+\end{shell}
+
+作为一个练习，可以尝试添加表头或甚至是一条网格线来前置这些行，以便更好地排列数据。
+

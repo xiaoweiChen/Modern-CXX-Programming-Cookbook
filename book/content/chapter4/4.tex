@@ -1,0 +1,182 @@
+
+模板元编程是 C++ 的一个强大特性，能够编写泛型类和函数，这些类和函数可以与任何类型一起工作。这有时会成为一个问题，因为语言本身并没有定义任何机制，来指定可以替代模板参数的类型的约束。然而，仍然可以通过使用元编程技巧和利用称为“替换失败不是错误”（Substitution Failure Is Not An Error，简称 SFINAE）的规则来实现这一点。SFINAE 规则决定了当显式指定或推导出的类型替换模板参数失败时，编译器是否会从重载集中排除某个特化版本，而不是生成错误。本示例将专注于为模板实现类型约束。
+
+\mySubsubsection{}{Getting ready}
+
+多年来，开发人员一直使用通常称为 \verb|enable_if| 的类模板结合 SFINAE 来实现对模板类型的约束。\verb|enable_if| 模板族已成为 C++11 标准的一部分，其实现方式如下：
+
+\begin{cpp}
+template<bool Test, class T = void>
+struct enable_if
+{};
+template<class T>
+struct enable_if<true, T>
+{
+    typedef T type;
+};
+\end{cpp}
+
+要使用 \verb|std::enable_if|，必须包含 \verb|<type_traits>| 头文件。
+
+\mySubsubsection{}{How to do it...}
+
+\verb|std::enable_if| 可以在多个作用域中使用以达到不同的目的，请看以下示例：
+
+\begin{itemize}
+\item
+在类型模板参数上使用，以便只为满足指定条件的类型启用类模板：
+
+\begin{cpp}
+template <typename T,
+          typename = typename
+          std::enable_if_t<std::is_standard_layout_v<T>, T>>
+class pod_wrapper
+{
+    T value;
+};
+struct point
+{
+    int x;
+    int y;
+};
+struct foo
+{
+    virtual int f() const
+    {
+        return 42;
+    }
+};
+pod_wrapper<int>         w1; // OK
+pod_wrapper<point>       w2; // OK
+pod_wrapper<std::string> w3; // OK with Clang and GCC
+                             // error with MSVC
+                             // too few template arguments
+pod_wrapper<foo>         w4; // error
+\end{cpp}
+
+\item
+在一个函数模板参数、函数参数或函数返回类型上使用，以便只为满足指定条件的类型启用函数模板：
+
+\begin{cpp}
+template<typename T,
+         typename = typename std::enable_if_t<std::is_integral_v<T>, T>>
+auto mul(T const a, T const b)
+{
+    return a * b;
+}
+auto v1 = mul(1, 2);     // OK
+auto v2 = mul(1.0, 2.0); // error: no matching overloaded function found
+\end{cpp}
+\end{itemize}
+
+为了简化使用 \verb|std::enable_if| 编写的冗长代码，可以利用别名模板并定义两个别名，分别称为 \verb|EnableIf| 和 \verb|DisableIf|：
+
+\begin{cpp}
+template <typename Test, typename T = void>
+using EnableIf = typename std::enable_if_t<Test::value, T>;
+template <typename Test, typename T = void>
+using DisableIf = typename std::enable_if_t<!Test::value, T>;
+\end{cpp}
+
+基于这些别名模板，以下定义与前面的定义相同：
+
+\begin{cpp}
+template <typename T, typename = EnableIf<std::is_standard_layout<T>>>
+class pod_wrapper
+{
+    T value;
+};
+template<typename T, typename = EnableIf<std::is_integral<T>>>
+auto mul(T const a, T const b)
+{
+    return a * b;
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+\verb|std::enable_if| 能够工作是因为编译器在进行重载解析时应用了 SFINAE 规则。在解释 \verb|std::enable_if| 的工作原理之前，应该简要了解一下什么是 SFINAE。
+
+当编译器遇到函数调用时，需要构建一个可能的重载集合，并根据函数调用的参数选择最佳匹配。构建此重载集时，编译器也会评估函数模板，并且必须对模板参数中指定或推导出的类型进行替换。根据 SFINAE，当替换失败时，编译器不应该产生错误，而是应该从重载集中移除该函数模板并继续进行。
+
+\begin{myTip}
+标准指定了一个类型和表达式错误列表，这些也是 SFINAE 错误。这些包括尝试创建 void 类型的数组或零长度的数组、尝试创建指向 void 的引用、尝试创建带有 void 类型参数的函数类型，以及在模板参数表达式或函数声明中使用的表达式中尝试进行无效的转换。有关异常的完整列表，请查阅 C++ 标准或其他资源。
+\end{myTip}
+
+来看看以下两个名为 func() 的函数重载。第一个重载是一个函数模板，有一个类型为 \verb|T::value_type| 的单一参数，所以只能与具有内部类型 \verb|value_type| 的类型实例化。第二个重载是一个只有一个 int 类型参数的函数：
+
+\begin{cpp}
+template <typename T>
+void func(typename T::value_type const a)
+{ std::cout << "func<>" << '\n'; }
+void func(int const a)
+{ std::cout << "func" << '\n'; }
+template <typename T>
+struct some_type
+{
+    using value_type = T;
+};
+\end{cpp}
+
+如果编译器遇到像 func(42) 这样的调用，则必须找到一个可以接受 int 参数的重载。当构建重载集并用提供的模板参数替换模板参数时，结果 \verb|void func(int::value_type const)| 无效，int 没有 \verb|value_type| 成员。由于 SFINAE，编译器不会生成错误并停止，而是简单地忽略该重载并继续。然后，它找到了 \verb|void func(int const)|，这将是唯一也是最佳的匹配。
+
+如果编译器遇到像 \verb|func<some_type<int>>(42)| 这样的调用，将构建一个包含 \verb|void func(some_type<int>::value_type const)| 和 \verb|void func(int const)| 的重载集。这时，最佳匹配是第一个重载，这次不涉及 SFINAE。
+
+另一方面，如果编译器遇到像 \verb|func("string"s)| 这样的调用，同样依赖于 SFINAE 来忽略函数模板，因为 \verb|std::basic_string| 也没有 \verb|value_type| 成员。然而，这一次重载集中没有匹配字符串参数的选项，所以程序认为为非法，编译器将报错并停止编译。
+
+\verb|enable_if<bool, T>| 类模板没有任何成员，但它的偏特化 \verb|enable_if<true, T >| 有一个内部类型叫 type，这是 T 的同义词。当编译时常量表达式作为 \verb|enable_if| 的第一个参数求值为真时，内部成员类型可用；否则，不可用。
+
+回想一下 “How to do it...” 部分中 mul() 函数的最后一个定义，当编译器遇到像 mul(1, 2) 这样的调用时，试图用 int 替换模板参数 T；由于 int 是整型，\verb|std::is_integral<T>| 求值为真，因此会实例化一个定义了内部类型 type 的 \verb|enable_if| 特化版本。结果是别名模板 EnableIf 成为了这个类型（从表达式 \verb|typename T = void| 来看，这是 void 类型）的同义词。最终结果是可以使用提供参数调用的函数模板 \verb|int mul<int, void>(int a, int b)|。
+
+另一方面，当编译器遇到像 mul(1.0, 2.0) 这样的调用时，其试图用 double 替换模板参数 T。但double 不是整型，所以\verb|std::enable_if| 中的条件求值为假，类模板不定义内部成员类型。这导致了一个替换错误，但根据 SFINAE，编译器不会生成错误而是继续进行。由于没有找到其他重载，将没有可以调用的 mul() 函数。因此，程序认定为非法，编译器会报错并停止编译。
+
+类似的情况也出现在类模板 \verb|pod_wrapper| 上。它有两个模板类型参数：第一个是 POD 类型，而第二个是 \verb|enable_if| 和 \verb|is_standard_layout| 替换的结果。如果类型是 POD 类型（如 \verb|pod_wrapper<int>|），则 \verb|enable_if| 内部成员类型存在，并替换第二个模板类型参数。然而，若内部成员类型不是 POD 类型（如 \verb|pod_wrapperstd::string|），则内部成员类型未定义，替换失败，产生类似“模板参数不足”的错误。
+
+\mySubsubsection{}{There's more...}
+
+\verb|static_assert| 和 \verb|std::enable_if| 可以用来实现相同的目标。之前的示例中，定义了相同的类模板 \verb|pod_wrapper| 和函数模板 mul()。对于这些例子，\verb|static_assert| 看起来是一个更好的解决方案，因为编译器生成的错误信息更好（前提是在 \verb|static_assert| 声明中指定了相关的消息）。这两者的工作方式相当不同，并非互为替代方案。
+
+\verb|static_assert| 不依赖于 SFINAE，而是在重载解析之后应用。断言失败的结果是编译器错误。另一方面，\verb|std::enable_if| 用于从重载集中移除候选者，并不触发编译器错误（前提是未发生标准为 SFINAE 规定的异常）。SFINAE 后可能发生的实际错误是一个空的重载集，这使得程序非法。这是因为特定的函数调用无法执行。
+
+为了理解 \verb|static_assert| 和带有 SFINAE 的 \verb|std::enable_if| 之间的区别。看一个案例，即希望有两个函数重载：一个用于整型参数，另一个用于除整型以外的类型参数。使用 \verb|static_assert|，可以这样写（注意第二个重载中的第二个类型参数的必要性，以定义两个不同的重载；否则，将只是重复定义同一个函数两次）：
+
+\begin{cpp}
+template <typename T>
+auto compute(T const a, T const b)
+{
+    static_assert(std::is_integral_v<T>, "An integral type expected");
+    return a + b;
+}
+template <typename T, typename = void>
+auto compute(T const a, T const b)
+{
+    static_assert(!std::is_integral_v<T>, "A non-integral type expected");
+    return a * b;
+}
+auto v1 = compute(1, 2);
+// error: ambiguous call to overloaded function
+auto v2 = compute(1.0, 2.0);
+// error: ambiguous call to overloaded function
+\end{cpp}
+
+无论如何尝试调用这个函数，最终都会出现错误，因为编译器找到了两个可能调用的重载版本。这是因为 \verb|static_assert| 只在重载解析已经解决后才会考虑。这种情况下，构建了一个包含两个可能候选者的集合。
+
+这个问题的解决方案是 \verb|std::enable_if| 和 SFINAE。通过之前定义的别名模板 \verb|EnableIf| 和 \verb|DisableIf| 使用 \verb|std::enable_if| 在模板参数上（尽管第二个重载中仍然使用虚拟模板参数来引入两个不同的定义），下面的例子展示了重写的两个重载版本。第一个重载仅对整型启用，而第二个对整型禁用：
+
+\begin{cpp}
+template <typename T, typename = EnableIf<std::is_integral<T>>>
+auto compute(T const a, T const b)
+{
+    return a * b;
+}
+template <typename T, typename = DisableIf<std::is_integral<T>>,
+typename = void>
+auto compute(T const a, T const b)
+{
+    return a + b;
+}
+auto v1 = compute(1, 2);     // OK; v1 = 2
+auto v2 = compute(1.0, 2.0); // OK; v2 = 3.0
+\end{cpp}
+
+借助 SFINAE 的作用，当编译器为 \verb|compute(1, 2)| 或 \verb|compute(1.0, 2.0)| 构建重载集时，会简单地丢弃产生替换失败的重载并继续处理，最终都会得到一个只包含一个候选者的重载集。

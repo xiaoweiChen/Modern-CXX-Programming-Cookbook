@@ -1,0 +1,131 @@
+
+
+第3章中，介绍了函数模板以及lambda表达式，包括泛型lambda和模板lambda。泛型lambda是一种使用 auto 关键字指定其一个参数的lambda表达式，其结果是一个具有模板调用操作符的函数对象。同样的结果也来自于定义了一个lambda模板，相对于泛型lambda，这种方法的优势在于可以更好地控制参数类型。C++20这个对参数类型使用 auto 关键字的想法推广到了所有函数。
+
+这引入了一种简化定义函数模板的语法，这样定义的函数被称为简化的函数模板。本示例中，将介绍如何使用它们。
+
+\mySubsubsection{}{How to do it...}
+
+C++20 可以定义以下类别的简化函数模板：
+
+\begin{itemize}
+\item
+无约束的简化函数模板，使用 auto 关键字定义参数：
+
+\begin{cpp}
+auto sum(auto a, auto b)
+{
+    return a + b;
+}
+auto a = sum(40, 2);    // 42
+auto b = sum(42.0, 2);  // 44.0
+\end{cpp}
+
+\item
+有约束的简化函数模板，使用概念，在 auto 关键字前指定，以限制函数模板的参数：
+
+\begin{cpp}
+auto sum(std::integral auto a, std::integral auto b)
+{
+    return a + b;
+}
+auto a = sum(40, 2);    // 42
+auto b = sum(42.0, 2);  // error
+\end{cpp}
+
+\item
+有约束的变参简化函数模板，使用上述语法，但带有一个参数包：
+
+\begin{cpp}
+auto sum(std::integral auto ... args)
+{
+    return (args + ...);
+}
+auto a = sum(10, 30, 2);   // 42
+\end{cpp}
+
+\item
+有约束的简化lambda表达式，使用上述语法，但使用lambda表达式：
+
+\begin{cpp}
+int main()
+{
+    auto lsum = [](std::integral auto a, std::integral auto b)
+    {
+        return a + b;
+    };
+    auto a = lsum(40, 2);    // 42
+    auto b = lsum(42.0, 2);  // error
+}
+\end{cpp}
+
+\item
+可以像使用常规模板语法定义的函数模板一样定义简化函数模板的特化：
+
+\begin{cpp}
+auto sum(auto a, auto b)
+{
+    return a + b;
+}
+template <>
+auto sum(char const* a, char const* b)
+{
+    return std::string(a) + std::string(b);
+}
+auto a = sum(40, 2);       // 42
+auto b = sum("40", "2");   // "402"
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+许多人认为模板语法相当繁琐。简化函数模板旨在简化某些类别的函数模板的编写。通过使用 auto 关键字作为参数类型的占位符，而不是传统的模板语法来实现。以下两个定义是等价的：
+
+\begin{cpp}
+auto sum(auto a, auto b)
+{
+    return a + b;
+}
+template <typename T, typename U>
+auto sum(T a, U b)
+{
+    return a + b;
+}
+\end{cpp}
+
+如果目的是定义一个两个参数都是相同类型的函数模板，这种形式的简化函数模板就不够用了。这样的简化函数模板称为无约束，因为没有对函数的参数施加约束。
+
+这样的约束可以通过使用概念来定义：
+
+\begin{cpp}
+auto sum(std::integral auto a, std::integral auto b)
+{
+    return a + b;
+}
+\end{cpp}
+
+这类简化函数模板称为有约束。上面的函数等同于以下标准函数模板：
+
+\begin{cpp}
+template <typename T>
+T sum(T a, T b);
+template<>
+int sum(int a, int b)
+{
+    return a + b;
+}
+\end{cpp}
+
+由于简化函数模板本质上是函数模板，也可以像用标准模板语法声明的函数那样进行特化：
+
+\begin{cpp}
+template <>
+auto sum(char const* a, char const* b)
+{
+    return std::string(a) + std::string(b);
+}
+\end{cpp}
+
+有约束的简化函数模板也可以变参，其具有可变数量的参数。除了在第5章中介绍的内容外，并没有什么特别之处。此外，这种语法还可以用来定义lambda模板。
+
+

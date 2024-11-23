@@ -1,0 +1,123 @@
+
+
+正则表达式库还支持基于正则表达式的文本替换。本示例中，将介绍如何使用 \verb|std::regex_replace()| 进行文本替换。
+
+\mySubsubsection{}{How to do it...}
+
+为了使用正则表达式进行文本替换，应该按照以下步骤操作：
+
+\begin{itemize}
+\item
+包含头文件 <regex> 和 <string> 以及 C++14 标准的字符串用户定义字面量命名空间 \verb|std::string_literals|：
+
+\begin{cpp}
+#include <regex>
+#include <string>
+using namespace std::string_literals;
+\end{cpp}
+
+\item
+使用带有替换字符串作为第三个参数的 \verb|std::regex_replace()| 算法。以下示例中，将所有由 a, b 或 c 组成的三个字符组成的单词替换为三个减号：
+
+\begin{cpp}
+auto text{"abc aa bca ca bbbb"s};
+auto rx = std::regex{ R"(\b[a|b|c]{3}\b)"s };
+auto newtext = std::regex_replace(text, rx, "---"s);
+\end{cpp}
+
+\item
+使用以 \verb|$| 前缀的匹配标识符作为第三个参数的 \verb|std::regex_replace()| 算法。例如，将格式为“lastname, firstname”的名字替换为“firstname lastname”格式的名字：
+
+\begin{cpp}
+auto text{ "bancila, marius"s };
+auto rx = std::regex{ R"((\w+),\s*(\w+))"s };
+auto newtext = std::regex_replace(text, rx, "$2 $1"s);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+\verb|std::regex_replace()| 算法有几个具有不同类型参数的重载版本，其参数的意义为：
+
+\begin{itemize}
+\item
+需要替换的输入字符串
+
+\item
+用于识别待替换字符串部分的正则表达式 \verb|std::basic_regex|类型实例
+
+\item
+用于替换的字符串格式
+
+\item
+可选的匹配标志
+\end{itemize}
+
+根据使用的版本，返回值可以是字符串或作为参数提供的输出迭代器的副本。用于替换的字符串格式可以是简单的字符串，也可以由 \verb|$| 前缀指示的匹配标识符：
+
+\begin{itemize}
+\item
+\verb|$&| 表示整个匹配。
+
+\item
+\verb|$1, $2, $3|表示第一个、第二个、第三个子匹配。
+
+\item
+\verb|$`| 表示第一个匹配之前的字符串部分。
+
+\item
+\verb|$'| 表示最后一个匹配之后的字符串部分。
+\end{itemize}
+
+“How to do it...”显示的第一个示例中，初始文本包含两个恰好由 \verb|a|, \verb|b|, 和 \verb|c| 字符组成的三个字符的单词：\verb|abc| 和 \verb|bca|。正则表达式指定了一个在单词边界之间恰好有三个字符的表达式，所以像 \verb|bbbb| 这样的子串不会匹配该表达式。替换的结果是字符串 text 变成了 \verb|--- aa --- ca bbbb|。
+
+可为 \verb|std::regex_replace()| 算法指定匹配标志。默认情况下，匹配标志是 \verb|std::regex_constants::match_default|，这指定了构建正则表达式时使用的语法是 ECMAScript。如果只想替换第一次出现的情况，可以指定 \verb|std::regex_constants::format_first_only|。下面的示例中，因为替换在找到第一个匹配后就停止了，所以结果为 \verb|--- aa bca ca bbbb|：
+
+\begin{cpp}
+auto text{ "abc aa bca ca bbbb"s };
+auto rx = std::regex{ R"(\b[a|b|c]{3}\b)"s };
+auto newtext = std::regex_replace(text, rx, "---"s,
+                 std::regex_constants::format_first_only);
+\end{cpp}
+
+替换字符串可以包含整个匹配、特定子匹配或未匹配部分的特殊指示符，如前所述。“How to do it...”显示的第二个示例中，正则表达式识别一个至少有一个字符的单词，后跟一个逗号和可能的空格，然后再跟另一个至少有一个字符的单词。第一个单词可认为是姓氏，而第二个单词可认为是名字。替换字符串采用 \verb|$2 $1| 格式。这是一个指令，用于将匹配的表达式（此示例中为整个原字符串）替换为另一个字符串，该字符串由第二个子匹配项后，跟一个空格和第一个子匹配项组成。
+
+整个字符串都是一个匹配。下面的示例中，字符串内将有多个匹配，都将用指示字符串替换。这个示例中，当不定冠词 a 出现在以元音开头的单词之前时（并不涵盖以元音发音开头的单词），将其替换为不定冠词 an：
+
+\begin{cpp}
+auto text{"this is a example with a error"s};
+auto rx = std::regex{R"(\ba ((a|e|i|u|o)\w+))"s};
+auto newtext = std::regex_replace(text, rx, "an $1");
+\end{cpp}
+
+正则表达式识别单个字母 a 作为一个单词（\verb|\b| 表示单词边界，\verb|\ba| 代表一个只有一个字母 a 的单词），后跟一个空格和一个以元音开头且至少有两个字符的单词。当识别到这样的匹配时，它会替换为一个字符串，该字符串由固定的字符串 an 后跟一个空格和匹配的第一个子表达式（即单词本身）组成。这个示例中，\verb|newtext| 字符串将是 \verb|this is an example with an error|。
+
+除了子表达式的标识符（\verb|$1|, \verb|$2| 等）之外，还有其他标识符用于整个匹配（\verb|&|）、第一个匹配之前的字符串部分（\verb|`|）和最后一个匹配之后的字符串部分（\verb|$'|）。最后一个示例中，将日期的格式从 \verb|dd.mm.yyyy| 更改为 \verb|yyyy.mm.dd|：
+
+\begin{cpp}
+auto text{"today is 1.06.2023!!"s};
+auto rx = std::regex{R"((\d{1,2})(\.|-|/)(\d{1,2})(\.|-|/)(\d{4}))"s};
+// today is 2023.06.1!!
+auto newtext1 = std::regex_replace(text, rx, R"($5$4$3$2$1)");
+// today is [today is ][1.06.2023][!!]!!
+auto newtext2 = std::regex_replace(text, rx, R"([$`][$&][$'])");
+\end{cpp}
+
+正则表达式匹配一个一或两位数，后跟一个点、连字符或斜杠；再后跟另一个一或两位数；然后是一个点、连字符或斜杠；最后是一个四位数。请记住这只是个例子，解析日期有更好的表达式。
+
+对于 \verb|newtext1|，替换字符串是 \verb|$5$4$3$2$1|;这表示年份，后跟第二个分隔符，然后月份，第一个分隔符，最后是日期。对于输入字符串 \verb|today is 1.06.2023!!|，结果是 \verb|today is 2023.06.1!!|。
+
+对于 \verb|newtext2|，替换字符串是 \verb|[$`][$&][$']|；所以第一个匹配之前的部分，后跟整个匹配，最后是最后一个匹配之后的部分，都用方括号括起来，但结果不是 \verb|[!!][1.06.2023][today is ]|，而是 \verb|today is [today is ][1.06.2023][!!]!!|。这是因为替换的是匹配的表达式，只有日期（\verb|1.06.2023|）替换成了另一个由初始字符串所有部分组成的字符串。
+
+
+
+
+
+
+
+
+
+
+
+
+

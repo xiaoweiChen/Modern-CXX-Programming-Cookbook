@@ -1,0 +1,106 @@
+
+标准库提供了几种互斥锁类型来保护对共享资源的访问。\verb|std::recursive_mutex| 和 \verb|std::recursive_timed_mutex| 是两种允许在同一线程中进行多重锁定的实现。递归互斥锁的典型用途是从递归函数中保护对共享资源的访问。一个 \verb|std::recursive_mutex| 可以从一个线程中通过调用 \verb|lock()| 或 \verb|try_lock()| 多次锁定。当一个线程锁定一个可用的递归互斥锁时，获得了该互斥锁的所有权；因此，从同一个线程连续尝试锁定互斥锁不会阻塞线程的执行，从而避免了死锁，并且递归互斥锁只有在进行了相等数量的 \verb|unlock()| 调用后才会释放。递归互斥锁也可能比非递归互斥锁有更大的开销。由于这些原因，应避免使用递归互斥锁。本示例，将介绍如何将递归互斥锁转换为使用非递归互斥锁。
+
+
+\mySubsubsection{}{Getting ready}
+
+
+对于本示例，将使用以下类型：
+
+\begin{cpp}
+class foo_rec
+{
+    std::recursive_mutex m;
+    int data;
+public:
+    foo_rec(int const d = 0) : data(d) {}
+    void update(int const d)
+    {
+        std::lock_guard<std::recursive_mutex> lock(m);
+        data = d;
+    }
+    int update_with_return(int const d)
+    {
+        std::lock_guard<std::recursive_mutex> lock(m);
+        auto temp = data;
+        update(d);
+        return temp;
+    }
+};
+\end{cpp}
+
+本示例的目的是将 \verb|foo_rec| 转换为不使用 \verb|std::recursive_mutex| 的形式。
+
+\mySubsubsection{}{How to do it...}
+
+要将上述实现转换为使用非递归互斥锁的线程安全类型，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+将 \verb|std::recursive_mutex| 替换为 \verb|std::mutex|：
+
+\begin{cpp}
+class foo
+{
+    std::mutex m;
+    int        data;
+    // continued at 2.
+};
+\end{cpp}
+
+\item
+定义私有非线程安全的公共方法或辅助函数，以便在线程安全的公共方法中使用：
+
+\begin{cpp}
+void internal_update(int const d) { data = d; }
+// continued at 3.
+\end{cpp}
+
+\item
+重写公共方法以使用新定义的非线程安全的私有方法：
+
+\begin{cpp}
+public:
+    foo(int const d = 0) : data(d) {}
+    void update(int const d)
+    {
+        std::lock_guard<std::mutex> lock(m);
+        internal_update(d);
+    }
+    int update_with_return(int const d)
+    {
+        std::lock_guard<std::mutex> lock(m);
+        auto temp = data;
+        internal_update(d);
+        return temp;
+    }
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+刚才讨论的 \verb|foo_rec| 使用递归互斥锁来保护对共享数据的访问，它会从两个线程安全共函数访问的整型成员变量：
+
+\begin{itemize}
+\item
+\verb|update()|在私有变量中设置一个新值。
+
+\item
+\verb|update_and_return()| 在私有变量中设置一个新值，并将之前的值返回给调用函数。此函数调用 \verb|update()| 来设置新值。
+\end{itemize}
+
+\verb|foo_rec| 的实现可能是为了避免代码重复，但这种方法实际上是一个设计错误，可以通过“How to do it...”部分的方式来改进。与其重新使用公共线程安全函数，可以提供私有的非线程安全函数，然后从公共接口调用这些函数。
+
+同样的解决方案也可以应用于其他类似的问题：定义一个非线程安全版本的代码，然后提供可能是轻量级、线程安全的包装器。
+
+
+
+
+
+
+
+
+
+
+
+

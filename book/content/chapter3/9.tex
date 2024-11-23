@@ -1,0 +1,123 @@
+
+上一个示例中，实现了两个高阶函数，map 和 fold，并看到了使用它们的各种示例。最后，了解了如何管道化，以在原始数据经过多次转换后产生最终值。管道化是一种组合形式，可从两个或更多给定的函数创建一个新函数。提到的例子中，并没有组合函数；只是用另一个函数产生的结果来调用一个函数，但在本示例中，将介绍如何真正地将函数组合成一个新的函数。为了简化，只考虑一元函数（只接受一个参数的函数）。
+
+\mySubsubsection{}{Getting ready}
+
+继续之前，建议阅读前一个示例。虽然与理解本示例不强相关，但本示例会引用在那里实现的 map 和 fold 函数。
+
+\mySubsubsection{}{How to do it...}
+
+要将一元函数组合成一个高阶函数：
+
+\begin{itemize}
+\item
+为了组合两个函数，提供一个函数，该函数接受两个函数 f 和 g 作为参数，并返回一个新函数（一个 lambda），该函数返回 f(g(x))，其中 x 是组合函数的参数：
+
+\begin{cpp}
+template <typename F, typename G>
+auto compose(F&& f, G&& g)
+{
+    return [=](auto x) { return f(g(x)); };
+}
+auto v = compose(
+    [](int const n) {return std::to_string(n); },
+    [](int const n) {return n * n; })(-3); // v = "9"
+\end{cpp}
+
+\item
+为了组合可变数量的函数，提供上述函数的一个可变参数模板重载版本：
+
+\begin{cpp}
+template <typename F, typename... R>
+auto compose(F&& f, R&&... r)
+{
+    return [=](auto x) { return f(compose(r...)(x)); };
+}
+auto n = compose(
+    [](int const n) {return std::to_string(n); },
+    [](int const n) {return n * n; },
+    [](int const n) {return n + n; },
+    [](int const n) {return std::abs(n); })(-3); // n = "36"
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+将两个一元函数组合成一个新函数相对简单。创建一个模板函数，就像前面例子中的 compose()，有两个参数——f 和 g，代表函数，并返回一个接受一个参数 x 的函数，该函数返回 f(g(x))。重要的是，g 函数返回的值的类型应该与 f 函数的参数类型相同。compose 函数的返回值是一个闭包，也就是一个 lambda 表达式的实例。
+
+实际上，能够组合多个函数非常有用，可以通过编写 compose() 函数的可变参数模板版本来实现。
+
+可变参数模板通过展开参数包来隐含编译时递归。这个实现与 compose() 的第一个版本非常相似，除了以下几点：
+
+\begin{itemize}
+\item
+接受可变数量的函数作为参数。
+
+\item
+返回的闭包通过展开参数包递归地调用 compose()；只剩下两个函数时，递归结束，调用先前实现的重载函数。
+\end{itemize}
+
+即使代码看起来像是发生了递归，但这并不是真正的递归，这可以称为编译时递归。但每次展开都会调用另一个具有相同名称但参数数量不同的方法，这并不构成递归。
+
+实现了这些可变参数模板重载，就可以重写前一示例中的最后一个例子：
+
+\begin{cpp}
+auto s = compose(
+    [](std::vector<int> const & v) {
+        return fold_left(std::plus<>(), v, 0); },
+    [](std::vector<int> const & v) {
+        return mapf([](int const i) {return i + i; }, v); },
+    [](std::vector<int> const & v) {
+        return mapf([](int const i) {return std::abs(i); }, v); })(vnums);
+\end{cpp}
+
+有了一个初始的整数vector，可通过将 std::abs() 应用于每个元素将其映射到一个只有正值的vector。然后，通过将每个元素的值加倍，将结果映射到新的vector。最后，将结果vector中的值加到初始值 0 上，将这些值折叠在一起。
+
+\mySubsubsection{}{There's more...}
+
+组合通常由点（.）或星号（*）表示，如 f . g 或 f * g。实际上，可以在 C++ 中做类似的事情，通过重载操作符 *（尝试重载点操作符是没有意义的）。类似于 compose() 函数，操作符 * 应该能够处理任何数量的参数；因此，将有两个重载，就像 compose() 情况下的一样：
+
+\begin{itemize}
+\item
+第一个重载接受两个参数，并调用 compose() 返回一个新的函数。
+
+\item
+第二个重载是可变参数模板函数，再次通过展开参数包调用操作符 *。
+\end{itemize}
+
+根据这些考虑，可以如下实现操作符 *：
+
+\begin{cpp}
+template <typename F, typename G>
+auto operator*(F&& f, G&& g)
+{
+    return compose(std::forward<F>(f), std::forward<G>(g));
+}
+template <typename F, typename... R>
+auto operator*(F&& f, R&&... r)
+{
+    return operator*(std::forward<F>(f), r...);
+}
+\end{cpp}
+
+现在可以通过应用操作符 * 来简化函数的实际组合：
+
+\begin{cpp}
+auto n =
+    ([](int const n) {return std::to_string(n); } *
+    [](int const n) {return n * n; } *
+    [](int const n) {return n + n; } *
+    [](int const n) {return std::abs(n); })(-3); // n = "36"
+auto c =
+    [](std::vector<int> const & v) {
+        return fold_left(std::plus<>(), v, 0); } *
+    [](std::vector<int> const & v) {
+        return mapf([](int const i) {return i + i; }, v); } *
+    [](std::vector<int> const & v) {
+        return mapf([](int const i) {return std::abs(i); }, v); };
+auto vnums = std::vector<int>{ 2, -3, 5 };
+auto s = c(vnums); // s = 20
+\end{cpp}
+
+一开始可能不直观，但函数是以相反的顺序而不是文本中显示的顺序应用的。第一个例子中，保留了参数的绝对值。然后，结果翻倍，再将该操作的结果乘以自身。最后，结果转换为字符串。对于提供的参数 -3，最终结果是字符串 "36"。
+

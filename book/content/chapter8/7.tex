@@ -1,0 +1,155 @@
+线程能够同时运行多个函数，可在多处理器或多核系统中充分利用硬件。而线程需要显式的、较低层的操作。线程的一个替代方案是任务，在特定线程中运行的工作单元。C++ 标准没有提供完整的任务库，但允许开发者在不同的线程上异步执行函数，并通过promise-future通道回传结果。本示例中，将介绍如何使用 std::async() 和 std::future 来实现。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例中的代码，将使用以下函数：
+
+\begin{cpp}
+void do_something()
+{
+    // 模拟长时间运行的操作
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(2s);
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    std::cout << "operation 1 done" << '\n';
+}
+void do_something_else()
+{
+    // 模拟长时间运行的操作
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(1s);
+    }
+    std::lock_guard<std::mutex> lock(g_mutex);
+    std::cout << "operation 2 done" << '\n';
+}
+int compute_something()
+{
+    // 模拟长时间运行的操作
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(2s);
+    }
+    return 42;
+}
+int compute_something_else()
+{
+    // 模拟长时间运行的操作
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(1s);
+    }
+    return 24;
+}
+\end{cpp}
+
+本示例中，将使用future。async() 和 future 都在 <future> 头文件的 std 命名空间中可用。
+
+\mySubsubsection{}{How to do it...}
+
+要在另一个线程上异步执行函数，而当前线程继续执行不需要结果的情况下，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+std::async() 启动一个新的线程来执行指定的函数，将创建一个异步提供者并返回一个与之关联的未来。使用 std::launch::async 策略作为 std::async() 函数的第一个参数，以确保函数将异步运行：
+
+\begin{cpp}
+auto f = std::async(std::launch::async, do_something);
+\end{cpp}
+
+\item
+继续当前线程的执行：
+
+\begin{cpp}
+do_something_else();
+\end{cpp}
+
+\item
+需要确保异步操作已完成时，在 std::async() 返回的future实例上调用 wait() 方法：
+
+\begin{cpp}
+f.wait();
+\end{cpp}
+
+需要在当前线程继续其执行的同时，在工作线程上异步执行函数，直到当前线程需要异步函数的结果时，请按照以下步骤操作：
+
+\item
+使用 std::async() 启动一个新的线程来执行指定的函数，创建一个异步提供者，并返回一个与之关联的future。使用函数的第一个参数 std::launch::async 策略以确保函数确实异步运行：
+
+\begin{cpp}
+auto f = std::async(std::launch::async, compute_something);
+\end{cpp}
+
+\item
+继续当前线程的执行：
+
+\begin{cpp}
+auto value = compute_something_else();
+\end{cpp}
+
+\item
+需要异步执行函数的结果时，在 std::async() 返回的future实例上调用 get() 方法：
+
+\begin{cpp}
+value += f.get();
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+std::async() 是一个可变参数模板函数，有两种重载形式：一种是指定启动策略作为第一个参数，另一种则不指定。传递给 std::async() 的其他参数是要执行的函数及其任何参数。启动策略由 <future> 头文件中提供的一个作用域枚举 std::launch 定义：
+
+\begin{cpp}
+enum class launch : /* unspecified */
+{
+    async = /* unspecified */,
+    deferred = /* unspecified */,
+    /* implementation-defined */
+};
+\end{cpp}
+
+两个可用的启动策略指定了以下内容：
+
+\begin{itemize}
+\item
+使用 async，将启动一个新线程来异步执行任务。
+
+\item
+使用 deferred，当第一次请求任务的结果时，任务将在调用线程上执行。
+\end{itemize}
+
+当两个标志都指定（\verb|std::launch::async| | \verb|std::launch::deferred|）时，是在一个新线程上异步运行任务，还是在当前线程上同步运行任务由实现决定。这是没有指定启动策略的 std::async() 另一个重载的行为，这种行为不确定。
+
+\begin{myTip}
+不要使用非确定性的 std::async() 重载来异步运行任务。始终使用需要启动策略的重载，并且只使用 std::launch::async。
+\end{myTip}
+
+std::async() 的两种重载都返回一个future实例，该实例引用 std::async() 内部为建立的promise-future通道创建的共享状态。需要异步操作的结果时，调用future的 get() 方法。这会阻塞当前线程，直到结果值或异常可用。如果future不传输任何值或者你实际上对那个值不感兴趣，但想确保异步操作最终会完成，可以使用 wait() 方法；会阻塞当前线程，直到通过future使共享状态可用。
+
+future还有两个等待方法：\verb|wait_for()| 指定了一个持续时间，即使通过未来共享状态尚未可用，调用也会结束并返回；而 \verb|wait_until()| 指定了一个时间点，即使通过未来共享状态尚未可用，调用也会返回。这些方法可用于创建轮询例程并向用户显示状态消息：
+
+\begin{cpp}
+auto f = std::async(std::launch::async, do_something);
+while(true)
+{
+    std::cout << "waiting...\n";
+    using namespace std::chrono_literals;
+    auto status = f.wait_for(500ms);
+    if(status == std::future_status::ready)
+        break;
+}
+std::cout << "done!\n";
+\end{cpp}
+
+运行此程序的结果：
+
+\begin{shell}
+waiting...
+waiting...
+waiting...
+operation 1 done
+done!
+\end{shell}
+

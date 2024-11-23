@@ -1,0 +1,102 @@
+
+
+constexpr函数允许在编译时计算函数，前提是所有输入（如果有）也在编译时可用。但这不是一个保证，constexpr函数也可能在运行时执行。C++20引入了一种新的函数类别：立即函数。这些函数保证总是编译时计算；否则，会产生错误。立即函数作为宏的替代品很有用，并且可能在语言未来的发展中与反射和元类相关的重要特性中发挥作用。
+
+\mySubsubsection{}{How to do it...}
+
+需要时使用consteval关键字：
+
+\begin{itemize}
+\item
+定义必须在编译时评估的非成员函数或函数模板：
+
+\begin{cpp}
+consteval unsigned int factorial(unsigned int const n)
+{
+    return n > 1 ? n * factorial(n-1) : 1;
+}
+\end{cpp}
+
+\item
+定义必须在编译时执行以初始化constexpr对象的构造函数，以及只能在编译时调用的成员函数：
+
+\begin{cpp}
+class point3d
+{
+    double x_;
+    double y_;
+    double z_;
+public:
+    consteval point3d(double const x = 0,
+    double const y = 0,
+    double const z = 0)
+    :x_{x}, y_{y}, z_{z}
+    {}
+    consteval double get_x() const {return x_;}
+    consteval double get_y() const {return y_;}
+    consteval double get_z() const {return z_;}
+};
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+consteval修饰符是在C++20中引入的。只能应用于函数和函数模板，并将其定义为立即函数。所以函数调用都必须在编译时进行计算，因此产生一个编译时常量表达式。如果函数不能在编译时计算，程序就是非法的，编译器会报错。
+
+以下规则适用于立即函数：
+
+\begin{itemize}
+\item
+析构函数、分配和释放函数不能是立即函数。
+
+\item
+如果函数的声明包含consteval修饰符，则该函数的所有声明也必须包含它。
+
+\item
+consteval修饰符不能与constexpr或constinit一起使用。
+
+\item
+立即函数是一个内联constexpr函数，立即函数和函数模板必须满足适用于constexpr函数的要求。
+\end{itemize}
+
+以下是如何使用上一节中定义的factorial()函数和point3d类的方法：
+
+\begin{cpp}
+constexpr unsigned int f = factorial(6);
+std::cout << f << '\n';
+constexpr point3d p {0, 1, 2};
+std::cout << p.get_x() << ' ' << p.get_y() << ' ' << p.get_z() << '\n';
+\end{cpp}
+
+以下示例会产生编译器错误，立即函数factorial()和point3d的构造函数不能在编译时计算：
+
+\begin{cpp}
+unsigned int n;
+std::cin >> n;
+const unsigned int f2 = factorial(n); // error
+double x = 0, y = 1, z = 2;
+constexpr point3d p2 {x, y, z};       // error
+\end{cpp}
+
+除非立即函数也在一个常量表达式中，否则不能获取其地址：
+
+\begin{cpp}
+using pfact = unsigned int(unsigned int);
+pfact* pf = factorial;
+constexpr unsigned int f3 = pf(42);   // error
+consteval auto addr_factorial()
+{
+    return &factorial;
+}
+consteval unsigned int invoke_factorial(unsigned int const n)
+{
+    return addr_factorial()(n);
+}
+constexpr auto ptr = addr_factorial();
+// ERROR: cannot take the pointer of an immediate function
+constexpr unsigned int f2 = invoke_factorial(5);
+// OK
+\end{cpp}
+
+立即函数在运行时不可见，所以不会为生成符号，调试器也无法显示。
+

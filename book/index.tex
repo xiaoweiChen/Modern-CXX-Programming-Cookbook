@@ -1,0 +1,236 @@
+
+
+\begin{center}
+\thispagestyle{empty}
+%\includegraphics[width=\textwidth,height=\textheight,keepaspectratio]{cover.png}
+\begin{tikzpicture}[remember picture, overlay, inner sep=0pt]
+\node at (current page.center)
+{\includegraphics[width=\paperwidth, keepaspectratio=false]{cover.png}};
+\end{tikzpicture}
+\newpage
+\thispagestyle{empty}
+\huge
+\textbf{Modern C++ Programming Cookbook \\ 第三版}
+\\[9pt]
+{\Large 精通现代C++与掌握C++23最新特性的实用技巧}
+\\[9pt]
+\normalsize
+作者: Marius Bancila
+\\[8pt]
+\normalsize
+译者：\href{https://github.com/xiaoweiChen/Modern-CXX-Programming-Cookbook}{陈晓伟}
+\\[8pt]
+\end{center}
+
+\newpage
+
+\pagestyle{empty}
+\tableofcontents
+\newpage
+
+\begin{comment}
+\end{comment}
+
+\setsecnumdepth{section}
+
+\myChapter{}{关于作者}{content/author.tex}
+\newpage
+
+\myChapter{}{关于评审}{content/Reviewers.tex}
+\newpage
+
+\myChapter{}{前言}{content/Preface.tex}
+\newpage
+
+\myChapter{第1章}{现代语言的核心特性}{content/chapter1/0.tex}
+\mySubsection{1.1.}{尽可能使用auto}{content/chapter1/1.tex}
+\mySubsection{1.2.}{创建类型和模板的别名}{content/chapter1/2.tex}
+\mySubsection{1.3.}{统一初始化}{content/chapter1/3.tex}
+\mySubsection{1.4.}{非静态成员的初始化}{content/chapter1/4.tex}
+\mySubsection{1.5.}{控制和查询对象的对齐状态}{content/chapter1/5.tex}
+\mySubsection{1.6.}{作用域枚举}{content/chapter1/6.tex}
+\mySubsection{1.7.}{对虚函数使用override和final}{content/chapter1/7.tex}
+\mySubsection{1.8.}{基于范围的for循环}{content/chapter1/8.tex}
+\mySubsection{1.9.}{为自定义类型启用基于范围的for循环}{content/chapter1/9.tex}
+\mySubsection{1.10.}{避免隐式转换——显式构造函数和转换操作符}{content/chapter1/10.tex}
+\mySubsection{1.11.}{使用匿名命名空间}{content/chapter1/11.tex}
+\mySubsection{1.12.}{使用内联命名空间进行API版本控制}{content/chapter1/12.tex}
+\mySubsection{1.13.}{使用结构化绑定处理多个返回值}{content/chapter1/13.tex}
+\mySubsection{1.14.}{使用类模板参数推导简化代码}{content/chapter1/14.tex}
+\mySubsection{1.15.}{使用下标操作符访问集合中的元素}{content/chapter1/15.tex}
+\newpage
+
+\myChapter{第2章}{数字与字符串}{content/chapter2/0.tex}
+\mySubsection{2.1.}{数值类型}{content/chapter2/1.tex}
+\mySubsection{2.2.}{数值类型的极值和属性}{content/chapter2/2.tex}
+\mySubsection{2.3.}{数值类型和字符串类型互相转换}{content/chapter2/3.tex}
+\mySubsection{2.4.}{字符和字符串类型}{content/chapter2/4.tex}
+\mySubsection{2.5.}{将Unicode字符输出到控制台}{content/chapter2/5.tex}
+\mySubsection{2.6.}{生成伪随机数}{content/chapter2/6.tex}
+\mySubsection{2.7.}{初始化伪随机数生成器}{content/chapter2/7.tex}
+\mySubsection{2.8.}{创建预处理自定义字面量}{content/chapter2/8.tex}
+\mySubsection{2.9.}{创建原自定义字面量}{content/chapter2/9.tex}
+\mySubsection{2.10.}{原字符串字面量可避免转义}{content/chapter2/10.tex}
+\mySubsection{2.11.}{创建字符串辅助库}{content/chapter2/11.tex}
+\mySubsection{2.12.}{正则表达式验证字符串格式}{content/chapter2/12.tex}
+\mySubsection{2.13.}{正则表达式解析字符串内容}{content/chapter2/13.tex}
+\mySubsection{2.14.}{正则表达式替换字符串内容}{content/chapter2/14.tex}
+\mySubsection{2.15.}{使用 std::string\_view 而非常量字符串引用}{content/chapter2/15.tex}
+\mySubsection{2.16.}{使用 std::format 和 std::print 格式化和输出文本}{content/chapter2/16.tex}
+\mySubsection{2.17.}{使用 std::format 处理自定义的类型}{content/chapter2/17.tex}
+\newpage
+
+\myChapter{第3章}{探索函数}{content/chapter3/0.tex}
+\mySubsection{3.1.}{默认和删除函数}{content/chapter3/1.tex}
+\mySubsection{3.2.}{lambda与标准算法}{content/chapter3/2.tex}
+\mySubsection{3.3.}{泛型和模板lambda}{content/chapter3/3.tex}
+\mySubsection{3.4.}{递归lambda}{content/chapter3/4.tex}
+\mySubsection{3.5.}{函数模板}{content/chapter3/5.tex}
+\mySubsection{3.6.}{可变参数数量的函数模板}{content/chapter3/6.tex}
+\mySubsection{3.7.}{用折叠表达式简化可变参数函数模板}{content/chapter3/7.tex}
+\mySubsection{3.8.}{实现高阶函数map和fold}{content/chapter3/8.tex}
+\mySubsection{3.9.}{将函数组合成高阶函数}{content/chapter3/9.tex}
+\mySubsection{3.10.}{统一调用可调用类型实例}{content/chapter3/10.tex}
+\newpage
+
+\myChapter{第4章}{预处理与编译}{content/chapter4/0.tex}
+\mySubsection{4.1.}{有条件地编译源代码}{content/chapter4/1.tex}
+\mySubsection{4.2.}{使用间接模式进行预处理字符串化和连接}{content/chapter4/2.tex}
+\mySubsection{4.3.}{使用 static\_assert 进行编译时断言检查}{content/chapter4/3.tex}
+\mySubsection{4.4.}{使用 enable\_if 条件性地编译类和函数}{content/chapter4/4.tex}
+\mySubsection{4.5.}{使用 constexpr if 在编译时选择分支}{content/chapter4/5.tex}
+\mySubsection{4.6.}{使用属性向编译器提供元数据}{content/chapter4/6.tex}
+\newpage
+
+\myChapter{第5章}{标准库容器、算法与迭代器}{content/chapter5/0.tex}
+\mySubsection{5.1.}{使用 vector 作为默认容器}{content/chapter5/1.tex}
+\mySubsection{5.2.}{使用 bitset 处理固定大小的位序列}{content/chapter5/2.tex}
+\mySubsection{5.3.}{使用 vector<bool> 处理可变大小的位序列}{content/chapter5/3.tex}
+\mySubsection{5.4.}{使用位操作工具}{content/chapter5/4.tex}
+\mySubsection{5.5.}{范围内查找元素}{content/chapter5/5.tex}
+\mySubsection{5.6.}{范围排序}{content/chapter5/6.tex}
+\mySubsection{5.7.}{初始化范围}{content/chapter5/7.tex}
+\mySubsection{5.8.}{范围的集合操作}{content/chapter5/8.tex}
+\mySubsection{5.9.}{使用迭代器向容器中插入新元素}{content/chapter5/9.tex}
+\mySubsection{5.10.}{编写随机访问迭代器}{content/chapter5/10.tex}
+\mySubsection{5.11.}{使用非成员函数访问容器}{content/chapter5/11.tex}
+\mySubsection{5.12.}{选择合适的标准容器}{content/chapter5/12.tex}
+\newpage
+
+\myChapter{第6章}{通用工具}{content/chapter6/0.tex}
+\mySubsection{6.1.}{chrono::duration表示时间段}{content/chapter6/1.tex}
+\mySubsection{6.2.}{使用日历}{content/chapter6/2.tex}
+\mySubsection{6.3.}{时区转换}{content/chapter6/3.tex}
+\mySubsection{6.4.}{标准时钟测量函数执行时间}{content/chapter6/4.tex}
+\mySubsection{6.5.}{自定义类型生成哈希值}{content/chapter6/5.tex}
+\mySubsection{6.6.}{使用std::any存储值}{content/chapter6/6.tex}
+\mySubsection{6.7.}{使用std::optional存储值}{content/chapter6/7.tex}
+\mySubsection{6.8.}{链接可能生成值的计算}{content/chapter6/8.tex}
+\mySubsection{6.9.}{std::variant——类型安全的联合体}{content/chapter6/9.tex}
+\mySubsection{6.10.}{访问std::variant}{content/chapter6/10.tex}
+\mySubsection{6.11.}{std::expected返回值或错误}{content/chapter6/11.tex}
+\mySubsection{6.12.}{std::span处理对象的连续序列}{content/chapter6/12.tex}
+\mySubsection{6.13.}{std::mdspan处理对象的多维视图}{content/chapter6/13.tex}
+\mySubsection{6.14.}{注册一个函数，在程序正常退出时调用}{content/chapter6/14.tex}
+\mySubsection{6.15.}{使用类型特征查询类型的属性}{content/chapter6/15.tex}
+\mySubsection{6.16.}{编写自定义的类型特征}{content/chapter6/16.tex}
+\mySubsection{6.17.}{使用std::conditional在类型之间进行选择}{content/chapter6/17.tex}
+\mySubsection{6.18.}{使用source\_location为日志记录提供细节}{content/chapter6/18.tex}
+\mySubsection{6.19.}{使用堆栈跟踪库输出调用序列}{content/chapter6/19.tex}
+\newpage
+
+\myChapter{第7章}{文件与流}{content/chapter7/0.tex}
+\mySubsection{7.1.}{从/向二进制文件读取和写入原始数据}{content/chapter7/1.tex}
+\mySubsection{7.2.}{从/向二进制文件读取和写入对象}{content/chapter7/2.tex}
+\mySubsection{7.3.}{在固定大小的外部缓冲区上使用流}{content/chapter7/3.tex}
+\mySubsection{7.4.}{使用流的本地化设置}{content/chapter7/4.tex}
+\mySubsection{7.5.}{使用I/O操纵符控制流的输出}{content/chapter7/5.tex}
+\mySubsection{7.6.}{使用货币I/O操纵符}{content/chapter7/6.tex}
+\mySubsection{7.7.}{使用时间I/O操纵符}{content/chapter7/7.tex}
+\mySubsection{7.8.}{操作文件系统路径}{content/chapter7/8.tex}
+\mySubsection{7.9.}{创建、复制和删除文件及目录}{content/chapter7/9.tex}
+\mySubsection{7.10.}{从文件中移除内容}{content/chapter7/10.tex}
+\mySubsection{7.11.}{检查现有文件或目录的属性}{content/chapter7/11.tex}
+\mySubsection{7.12.}{枚举目录内容}{content/chapter7/12.tex}
+\mySubsection{7.13.}{查找文件}{content/chapter7/13.tex}
+\newpage
+
+\myChapter{第8章}{线程与并发}{content/chapter8/0.tex}
+\mySubsection{8.1.}{使用线程}{content/chapter8/1.tex}
+\mySubsection{8.2.}{使用互斥锁和锁同步访问共享数据}{content/chapter8/2.tex}
+\mySubsection{8.3.}{寻找递归互斥锁的替代方案}{content/chapter8/3.tex}
+\mySubsection{8.4.}{处理来自线程函数的异常}{content/chapter8/4.tex}
+\mySubsection{8.5.}{线程间发送通知}{content/chapter8/5.tex}
+\mySubsection{8.6.}{使用promise和future从线程返回值}{content/chapter8/6.tex}
+\mySubsection{8.7.}{异步执行函数}{content/chapter8/7.tex}
+\mySubsection{8.8.}{使用原子类型}{content/chapter8/8.tex}
+\mySubsection{8.9.}{使用线程实现并行映射和折叠}{content/chapter8/9.tex}
+\mySubsection{8.10.}{使用任务实现并行映射和折叠}{content/chapter8/10.tex}
+\mySubsection{8.11.}{使用标准并行算法实现并行映射和折叠}{content/chapter8/11.tex}
+\mySubsection{8.12.}{使用可汇入的线程和取消机制}{content/chapter8/12.tex}
+\mySubsection{8.13.}{使用门闩、栅栏和信号量同步线程}{content/chapter8/13.tex}
+\mySubsection{8.14.}{同步从多个线程写入输出流}{content/chapter8/14.tex}
+\newpage
+
+\myChapter{第9章}{健壮性与性能}{content/chapter9/0.tex}
+\mySubsection{9.1.}{使用异常进行错误处理}{content/chapter9/1.tex}
+\mySubsection{9.2.}{不抛出异常的函数使用 noexcept}{content/chapter9/2.tex}
+\mySubsection{9.3.}{确保程序的常量正确性}{content/chapter9/3.tex}
+\mySubsection{9.4.}{创建编译时常量表达式}{content/chapter9/4.tex}
+\mySubsection{9.5.}{创建立即函数}{content/chapter9/5.tex}
+\mySubsection{9.6.}{在常量求值上下文中优化代码}{content/chapter9/6.tex}
+\mySubsection{9.7.}{在常量表达式中使用虚函数调用}{content/chapter9/7.tex}
+\mySubsection{9.8.}{执行正确的类型转换}{content/chapter9/8.tex}
+\mySubsection{9.9.}{实现移动语义}{content/chapter9/9.tex}
+\mySubsection{9.10.}{使用 unique\_ptr 独占拥有内存资源}{content/chapter9/10.tex}
+\mySubsection{9.11.}{使用 shared\_ptr 共享内存资源}{content/chapter9/11.tex}
+\mySubsection{9.12.}{使用操作符 <=> 进行一致性的比较}{content/chapter9/12.tex}
+\mySubsection{9.13.}{安全地比较带符号整数和无符号整数}{content/chapter9/13.tex}
+\newpage
+
+\myChapter{第10章}{实现模式与惯用法}{content/chapter10/0.tex}
+\mySubsection{10.1.}{工厂模式中避免重复的if-else语句}{content/chapter10/1.tex}
+\mySubsection{10.2.}{实现pimpl惯用法}{content/chapter10/2.tex}
+\mySubsection{10.3.}{实现命名参数惯用法}{content/chapter10/3.tex}
+\mySubsection{10.4.}{使用非虚接口惯用法分离接口和实现}{content/chapter10/4.tex}
+\mySubsection{10.5.}{使用律师-客户惯用法处理友元关系}{content/chapter10/5.tex}
+\mySubsection{10.6.}{使用奇异递归模板模式实现静态多态}{content/chapter10/6.tex}
+\mySubsection{10.7.}{使用混入（mixins）为类型添加功能}{content/chapter10/7.tex}
+\mySubsection{10.8.}{使用类型擦除惯用法以泛型方式处理不相关类型}{content/chapter10/8.tex}
+\mySubsection{10.9.}{实现线程安全的单例模式}{content/chapter10/9.tex}
+\newpage
+
+\myChapter{第11章}{探索测试框架}{content/chapter11/0.tex}
+\mySubsection{11.1.}{开始使用 Boost.Test}{content/chapter11/1.tex}
+\mySubsection{11.2.}{使用 Boost.Test 编写和调用测试}{content/chapter11/2.tex}
+\mySubsection{11.3.}{使用 Boost.Test 断言}{content/chapter11/3.tex}
+\mySubsection{11.4.}{使用 Boost.Test 的测试固件}{content/chapter11/4.tex}
+\mySubsection{11.5.}{使用 Boost.Test 控制输出}{content/chapter11/5.tex}
+\mySubsection{11.6.}{开始使用 Google Test}{content/chapter11/6.tex}
+\mySubsection{11.7.}{使用 Google Test 编写和调用测试}{content/chapter11/7.tex}
+\mySubsection{11.8.}{使用 Google Test 断言}{content/chapter11/8.tex}
+\mySubsection{11.9.}{使用 Google Test 的测试固件}{content/chapter11/9.tex}
+\mySubsection{11.10.}{使用 Google Test 控制输出}{content/chapter11/10.tex}
+\mySubsection{11.11.}{开始使用 Catch2}{content/chapter11/11.tex}
+\mySubsection{11.12.}{使用 Catch2 编写和调用测试}{content/chapter11/12.tex}
+\mySubsection{11.13.}{使用 Catch2 断言}{content/chapter11/13.tex}
+\mySubsection{11.14.}{使用 Catch2 控制输出}{content/chapter11/14.tex}
+\newpage
+
+\myChapter{第12章}{C++20的核心特性}{content/chapter12/0.tex}
+\mySubsection{12.1.}{使用模块}{content/chapter12/1.tex}
+\mySubsection{12.2.}{理解模块分区}{content/chapter12/2.tex}
+\mySubsection{12.3.}{用概念指定模板参数的要求}{content/chapter12/3.tex}
+\mySubsection{12.4.}{使用 requires 表达式和子句}{content/chapter12/4.tex}
+\mySubsection{12.5.}{探索简化的函数模板}{content/chapter12/5.tex}
+\mySubsection{12.6.}{使用范围库遍历集合}{content/chapter12/6.tex}
+\mySubsection{12.7.}{探索标准范围适配器}{content/chapter12/7.tex}
+\mySubsection{12.8.}{将范围转换为容器}{content/chapter12/8.tex}
+\mySubsection{12.9.}{创建范围视图}{content/chapter12/9.tex}
+\mySubsection{12.10.}{使用受约束的算法}{content/chapter12/10.tex}
+\mySubsection{12.11.}{为异步计算创建协程任务类型}{content/chapter12/11.tex}
+\mySubsection{12.12.}{为值序列创建协程生成器类型}{content/chapter12/12.tex}
+\mySubsection{12.13.}{使用 std::generator 类型生成值序列}{content/chapter12/13.tex}
+\newpage
+\begin{comment}
+\end{comment}

@@ -1,0 +1,213 @@
+
+C++20 格式化库是对使用类似 printf 的函数或 I/O 流库的一种现代替代方案，实际上是补充了这些传统方法。标准为基本类型提供了默认格式化，如整型和浮点类型、布尔类型、字符类型、字符串和时间类型，也可以为自定义类型创建特定的格式化规则。本示例中，将介绍如何为自定义类型创建格式化规则。
+
+\mySubsubsection{}{Getting ready}
+
+阅读上一节的示例，以熟悉格式化库。接下来的例子中，将使用以下类型：
+
+\begin{cpp}
+struct employee
+{
+    int         id;
+    std::string firstName;
+    std::string lastName;
+};
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+为了使用户定义的类型能够使用新格式化库进行格式化，必须执行以下步骤：
+
+\begin{itemize}
+\item
+std 命名空间中定义 \verb|std::formatter<T, CharT>| 类型的特化。
+
+\item
+实现 \verb|parse()| 方法来解析格式字符串中对应当前参数的部分。如果类型继承自另一个格式化器，则此方法可以省略。
+
+\item
+实现 \verb|format()| 方法来格式化参数并通过 \verb|format_context| 写入输出。
+\end{itemize}
+
+对于上述的 employee 类型，将 employee 格式化为  \verb|[42]| \verb|John Doe| 形式的格式化器（即 \verb|[id] firstName lastName|） 可以有如下实现：
+
+\begin{cpp}
+template <>
+struct std::formatter<employee>
+{
+    constexpr auto parse(format_parse_context& ctx)
+    {
+        return ctx.begin();
+    }
+    auto format(employee const & e, format_context& ctx) const
+    {
+        return std::format_to(ctx.out(),
+        "[{}] {} {}",
+        e.id, e.firstName, e.lastName);
+    }
+};
+\end{cpp}
+
+\mySubsubsection{}{How it work...}
+
+格式化库使用 \verb|std::formatter<T, CharT>| 类型模板定义给定类型的格式化规则。内置类型、字符串类型和时间类型都由库提供格式化器，这些格式化器为 \verb|std::formatter<T, CharT>| 类型模板的特化实现。
+
+此类型有两个方法：
+
+\begin{itemize}
+\item
+\verb|parse()|，接受一个 \verb|std::basic_format_parse_context<CharT>| 类型的参数，并解析由解析上下文提供的类型 T 的格式规范，解析结果应该存储在类型的成员中。如果解析成功，此函数应返回表示格式规范结束的 \verb|std::basic_format_parse_context<CharT>::iterator| 类型值。如果解析失败，函数应抛出一个 \verb|std::format_error| 类型的异常来提供错误详情。
+
+\item
+\verb|format()|，接受两个参数，第一个是要格式化的类型 T 的对象，第二个是一个类型为 \verb|std::basic_format_context<OutputIt, CharT>| 的格式化上下文类型实例。此函数应该根据所需的规范（隐式的或解析格式规范的结果）将输出写入 \verb|ctx.out()|。函数必须返回一个类型为 \verb|std::basic_format_context<OutputIt, CharT>::iterator| 的值，表示输出的结束。
+\end{itemize}
+
+前一节的实现中，\verb|parse()| 函数除了返回一个表示格式规范开始的迭代器之外不做其他事情。格式化总是通过在方括号内打印员工标识符，后面跟着名字和姓氏来进行，例如 \verb|[42] John Doe|。会尝试使用格式规范会导致编译时错误：
+
+\begin{cpp}
+employee e{ 42, "John", "Doe" };
+auto s1 = std::format("{}", e);   // [42] John Doe
+auto s2 = std::format("{:L}", e); // error
+\end{cpp}
+
+如果想让自定义类型支持格式规范，则必须正确地实现 \verb|parse()| 方法。为了展示如何做到这一点，将支持 employee 类型的多个规范符：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{规范符} & \textbf{字典序} & \textbf{示例}   \\ \hline
+\endfirsthead
+%
+\endhead
+%
+L                  & 字典序  & {[}42{]} Doe, John \\ \hline
+l                  & 小写            & {[}42{]} john doe  \\ \hline
+u                  & 大写            & {[}42{]} JOHN DOE  \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.18: 支持自定义 employee 类的规范符
+\end{center}
+
+使用 L 规范符时，employee 格式化为方括号内的标识符，后面跟着姓氏、逗号，然后是名字，比如 \verb|[42] Doe, John|。这些规范符的组合也是可能的，\verb|{:Ll}| 会产生 \verb|[42] doe, john|n，而 \verb|{:uL}| 则会产生 \verb|[42] DOE, JOHN|。
+
+std::formatter 类针对 employee 类的特化实现：
+
+\begin{cpp}
+template<>
+struct std::formatter<employee>
+{
+    constexpr auto parse(std::format_parse_context& ctx)
+    {
+        auto iter = begin(ctx);
+        while(iter != ctx.end() && *iter != '}')
+    {
+        switch (*iter)
+        {
+            case 'L': lexicographic_order = true; break;
+            case 'u': uppercase = true; break;
+            case 'l': lowercase = true; break;
+        }
+        ++iter;
+    }
+    return iter;
+}
+auto format(employee const& e, std::format_context& ctx) const
+{
+    if (lexicographic_order)
+    return std::format_to(ctx.out(),
+                          "[{}] {}, {}",
+                          e.id,
+                          text_format(e.lastName),
+                          text_format(e.firstName));
+    return std::format_to(ctx.out(),
+                          "[{}] {} {}",
+                          e.id,
+                          text_format(e.firstName),
+                          text_format(e.lastName));
+}
+private:
+bool lexicographic_order = false;
+bool uppercase = false;
+bool lowercase = false;
+
+constexpr std::string text_format(std::string text) const
+{
+    if(lowercase)
+        std::transform(text.begin(), text.end(), text.begin(),                         ::tolower);
+    else if(uppercase)
+        std::transform(text.begin(), text.end(), text.begin(),                         ::toupper);
+    return text;
+}
+};
+\end{cpp}
+
+\verb|parse()| 函数接收包括格式字符串的解析上下文。\verb|begin()| 迭代器指向格式分隔符（:）后的格式字符串的第一个元素。下表提供了一些示例：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{格式     } & \textbf{begin() 迭代器} & \textbf{范围  } \\ \hline
+\endfirsthead
+%
+\endhead
+%
+"\{\}"          & 等于end()            & 空          \\ \hline
+"\{0\}"         & 等于end()            & 空          \\ \hline
+"\{0:L\}"       & 指向'L'             & L\}            \\ \hline
+"\{:L\}"        & 指向'L'             & L\}            \\ \hline
+"\{:Lul\}"      & 指向'L'             & Lul\}          \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.19: 解析上下文内容示例
+\end{center}
+
+有了这些，前面的示例代码（使用 \verb|{:L}| 格式参数）就可以正常工作了，还可以使用 L、u 和 l 规范符的各种组合：
+
+\begin{cpp}
+auto s1 = std::format("{}", e);     // [42] John Doe
+auto s2 = std::format("{:L}", e);   // [42] Doe, John
+auto s3 = std::format("{:u}", e);   // [42] JOHN DOE
+auto s4 = std::format("{:lL}", e);  // [42] doe, john
+// uppercase ignored when lowercase also specified
+auto s5 = std::format("{:ulL}", e); // [42] doe, john
+\end{cpp}
+
+也可以多次使用同一个参数：
+
+\begin{cpp}
+auto s6 = std::format("{0} = {0:L}", e);
+// [42] John Doe = [42] Doe, John
+\end{cpp}
+
+使用其他格式规范符（如 A）将不起作用；会忽略规范符，使用默认格式化：
+
+\begin{cpp}
+auto s7 = std::format("{:A}", e);   // [42] John Doe
+\end{cpp}
+
+如果不需要解析格式规范符以支持各种选项，可以完全省略 \verb|parse()| 方法，但为此 \verb|std::formatter| 特化必须从另一个 \verb|std::formatter| 类型进行派生：
+
+\begin{cpp}
+template<>
+struct std::formatter<employee> : std::formatter<char const*>
+{
+    auto format(employee const& e, std::format_context& ctx) const
+    {
+        return std::format_to(ctx.out(), "[{}] {} {}",
+        e.id, e.firstName, e.lastName);
+    }
+};
+\end{cpp}
+
+这个针对 employee 类型的特化与“How to do it...”展示的第一个实现等价。
+
+\mySubsubsection{}{There's more...}
+
+C++23 标准引入了一个新的概念，称为 std::formattable（位于 <format> 头文件中），该概念规定了一个类型是可格式化的。所以存在一个类型 T 的 std::formatter 特化，并且定义了 parse() 和 format() 成员函数。
+

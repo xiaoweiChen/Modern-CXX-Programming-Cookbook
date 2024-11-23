@@ -1,0 +1,139 @@
+
+框架提供了支持，可以将固件（fixture）用作测试套件中所有测试的可重用组件。还提供了支持来设置测试运行的全局环境。本示例中，将逐步指导，了解如何定义和使用测试固件，以及如何设置测试环境。
+
+\mySubsubsection{}{How to do it...}
+
+要创建和使用测试固件，请按照以下步骤操作：
+
+\begin{enumerate}
+创建一个派生自 \verb|testing::Test|的类型：
+
+\begin{cpp}
+class TestFixture : public testing::Test
+{
+};
+\end{cpp}
+
+\item
+使用构造函数初始化装置，使用析构函数清理装置：
+
+\begin{cpp}
+protected:
+    TestFixture()
+    {
+        std::cout << "constructing fixture\n";
+        data.resize(10);
+        std::iota(std::begin(data), std::end(data), 1);
+    }
+    ~TestFixture()
+    {
+        std::cout << "destroying fixture\n";
+    }
+\end{cpp}
+
+\item
+或者，重写虚方法 \verb|SetUp()| 和 \verb|TearDown()|。
+
+\item
+向类型中添加成员数据和函数，以便在测试中使用：
+
+\begin{cpp}
+protected:
+    std::vector<int> data;
+\end{cpp}
+
+\item
+使用 \verb|TEST_F| 宏定义使用固件的测试，并将固件类名指定为测试套件名：
+
+\begin{cpp}
+TEST_F(TestFixture, TestData)
+{
+    ASSERT_EQ(data.size(), 10);
+    ASSERT_EQ(data[0], 1);
+    ASSERT_EQ(data[data.size()-1], data.size());
+}
+\end{cpp}
+\end{enumerate}
+
+为了自定义测试运行环境的设置，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+创建一个派生自 \verb|testing::Environment| 的类型：
+
+\begin{cpp}
+class TestEnvironment : public testing::Environment
+{
+};
+\end{cpp}
+
+\item
+重写虚方法 \verb|SetUp()| 和 \verb|TearDown()| 来执行设置和清理操作：
+
+\begin{cpp}
+public:
+    virtual void SetUp() override
+    {
+        std::cout << "environment setup\n";
+    }
+    virtual void TearDown() override
+    {
+        std::cout << "environment cleanup\n";
+    }
+    int n{ 42 };
+\end{cpp}
+
+\item
+调用 \verb|RUN_ALL_TESTS()| 之前，通过调用 \verb|testing::AddGlobalTestEnvironment()| 将环境注册到框架中：
+
+\begin{cpp}
+int main(int argc, char **argv)
+{
+    testing::InitGoogleTest(&argc, argv);
+    testing::AddGlobalTestEnvironment(new TestEnvironment{});
+    return RUN_ALL_TESTS();
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+测试固件使得用户能够在多个测试之间共享数据配置，固件实例不是在测试之间共享。每个关联于文本函数的测试都会创建一个新的固件实例。框架为每个来自固件的测试执行以下操作：
+
+\begin{enumerate}
+\item
+创建一个新的固件实例。
+
+\item
+调用其 \verb|SetUp()| 虚方法。
+
+\item
+运行测试。
+
+\item
+调用装置的 \verb|TearDown()| 虚方法。
+
+\item
+销毁固件实例。
+\end{enumerate}
+
+可以使用两种方式来设置和清理固件实例：使用构造函数和析构函数，或者使用 \verb|SetUp()| 和 \verb|TearDown()| 虚方法。大多数情况下推荐前者，但使用虚方法在某些情况下也合适：
+
+\begin{itemize}
+\item
+当清理操作抛出异常时，不允许异常从析构函数中传出。
+
+\item
+如果需要在清理过程中使用断言宏并且使用了 \verb|--gtest_throw_on_failure| 标志，该标志决定在发生失败时抛出哪些宏。
+
+\item
+如果需要调用可能会在派生类中被覆写的虚方法，不应该从构造函数或析构函数中调用虚方法。
+\end{itemize}
+
+使用固件的测试必须使用 \verb|TEST_F| 宏定义（其中 \verb|_F| 表示固件）。尝试使用 \verb|TEST| 宏声明将导致编译器错误。
+
+测试运行的环境也可以自定义。机制类似于测试固件：从基础类 \verb|testing::Environment| 派生，并重写 \verb|SetUp()| 和 \verb|TearDown()| 虚函数。这些派生环境类的实例必须通过 \verb|testing::AddGlobalTestEnvironment()| 注册到框架中，但这必须在运行测试之前完成。可以注册任意数量的实例，此时 \verb|SetUp()| 方法会按注册顺序为实例调用，而 \verb|TearDown()| 方法则按相反顺序调用。必须传递动态实例化的实例给这个函数。框架接管这些实例的所有权，并在程序终止前删除它们；因此，不要自己删除它们。
+
+环境实例不可供测试访问，也不打算向测试提供数据。其目的是定制运行测试的全局环境。
+
+

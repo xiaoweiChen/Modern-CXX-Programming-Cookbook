@@ -1,0 +1,296 @@
+C++11 的线程支持库包含了互斥锁和条件变量，使线程能够同步访问共享资源。互斥锁允许多个进程中的一个线程执行，而其他想要访问共享资源的线程则会阻塞。某些场景下使用互斥锁可能会代价高昂，C++20 标准引入了几种新的、更简单的同步机制：门闩（latche）、栅栏（barrier）和信号量（semaphore）。虽然这些机制没有提供新的使用用例，但可能依赖于无锁机制，所以使用起来更简单且性能更高。
+
+\mySubsubsection{}{Getting ready}
+
+新的 C++20 同步机制定义在新的头文件中。对于 std::latch，需要包含 <latch>；对于 std::barrier，需要包含 <barrier>；而对于 \verb|std::counting_semaphore| 和 \verb|std::binary_semaphore|，则需要包含 <semaphore>。
+
+本示例中的代码将使用以下两个函数：
+
+\begin{cpp}
+void process(std::vector<int> const& data) noexcept
+{
+    for (auto const e : data)
+        std::cout << e << ' ';
+    std::cout << '\n';
+}
+int create(int const i, int const factor) noexcept
+{
+    return i * factor;
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+按照以下方式使用 C++20 同步机制：
+
+\begin{itemize}
+\item
+当需要线程等待一个由其他线程递减的计数器到达零时，使用 std::latch。门闩必须用非零值初始化，多个线程可以递减，而其他线程则等待计数器达到零。当这种情况发生时，所有等待的线程都会唤醒，而且门闩不能再可用。如果门闩计数器没有递减到零（即没有足够的线程递减它），等待的线程将永远阻塞。下面的例子中，四个线程正在创建数据（存储在整数vector中），主线程使用一个 std::latch 等待它们全部完成，每个线程在完成工作后递减门闩：:
+
+\begin{cpp}
+int const jobs = 4;
+std::latch work_done(jobs);
+std::vector<int> data(jobs);
+std::vector<std::jthread> threads;
+for(int i = 1; i <= jobs; ++i)
+{
+    threads.push_back(std::jthread([&data, i, &work_done]{
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(1s); // simulate work
+        data[i-1] = create(i, 1);        // create data
+
+        work_done.count_down();          // decrement counter
+    }));
+}
+work_done.wait();             // wait for all jobs to finish
+process(data);                // process data from all jobs
+\end{cpp}
+
+\item
+当需要在并行任务之间执行循环同步时，使用 std::barrier。可以用一个计数器构建栅栏，并且可以选择性地提供一个完成函数。线程到达栅栏，递减内部计数器并阻塞。当计数器达到零时，调用完成函数，所有阻塞的线程都唤醒，一个新的周期开始。下面的例子中，四个线程正在创建它们存储在整数vector中的数据。当所有线程完成一个周期后，主线程通过一个完成函数处理数据。每个线程在一个周期完成后都会被 std::barrier 对象阻塞，该实例也存储了完成函数。这个过程重复十次：
+
+\begin{cpp}
+int const jobs = 4;
+std::vector<int> data(jobs);
+int cycle = 1;
+std::stop_source st;
+// completion function
+auto on_completion = [&data, &cycle, &st]() noexcept {
+    process(data);          // process data from all jobs
+    cycle++;
+    if (cycle == 10)        // stop after ten cycles
+        st.request_stop();
+};
+std::barrier work_done(jobs, on_completion);
+std::vector<std::jthread> threads;
+for (int i = 1; i <= jobs; ++i)
+{
+    threads.push_back(std::jthread(
+        [&data, &cycle, &work_done](std::stop_token st,
+                                    int const i)
+    {
+        while (!st.stop_requested())
+        {
+            using namespace std::chrono_literals;
+            // simulate work
+            std::this_thread::sleep_for(200ms);
+            data[i-1] = create(i, cycle); // create data
+            work_done.arrive_and_wait();  // decrement counter
+        }
+    },
+    st.get_token(),
+    i));
+}
+for (auto& t : threads) t.join();
+\end{cpp}
+
+\item
+当想限制 N 个线程（在 \verb|binary_semaphore| 的情况下是一个线程）访问共享资源，或者想在不同线程间传递通知时，使用 \verb|std::counting_semaphore<N>| 或 \verb|std::binary_semaphore|。下面的例子中，四个线程正在创建添加到整数向量末尾的数据。为了避免竞态条件，使用了一个 \verb|binary_semaphore| 实例来限制只有一个线程可访问vector：
+
+\begin{cpp}
+int const jobs = 4;
+std::vector<int> data;
+std::binary_semaphore sem(1);
+std::vector<std::jthread> threads;
+for (int i = 1; i <= jobs; ++i)
+{
+    threads.push_back(std::jthread([&data, i, &sem] {
+        for (int k = 1; k < 5; ++k)
+        {
+            // simulate work
+            using namespace std::chrono_literals;
+            std::this_thread::sleep_for(200ms);
+            // create data
+            int value = create(i, k);
+            // acquire the semaphore
+            sem.acquire();
+            // write to the shared resource
+            data.push_back(value);
+            // release the semaphore
+            sem.release();
+        }
+    }));
+}
+for (auto& t : threads) t.join();
+process(data); // process data from all jobs
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::latch 实现了可以用于同步线程的计数器，是一个无竞争的类型，工作原理如下：
+
+\begin{itemize}
+\item
+计数器在创建门闩时初始化，并且只能减少。
+
+\item
+一个线程可以减少门闩的值，并且可以多次这样做。
+
+\item
+一个线程可以通过等待直到门闩计数器达到零来进行阻塞。
+
+\item
+当计数器达到零时，门闩变为永久信号状态，会唤醒所有在门闩上阻塞的线程。
+\end{itemize}
+
+std::latch 类型有以下方法：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{方法} &
+\textbf{描述} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+count\_down() &
+\begin{tabular}[c]{@{}l@{}}
+以 N（默认为 1）递减内部计数器而不阻塞调用者。此操作以原子方式\\执行。N 必须是一个不大于内部计数器值的正数；否则，行为未定义
+\end{tabular}
+\\ \hline
+try\_wait() &
+\begin{tabular}[c]{@{}l@{}}
+指示内部计数器是否达到零，如果是则返回 true。尽管计数器已达到\\零，该函数仍有可能返回 false，概率非常低。
+\end{tabular}
+\\ \hline
+wait() &
+\begin{tabular}[c]{@{}l@{}}
+阻塞调用线程，直到内部计数器达到零。如果内部计数器已经是零，函\\数将立即返回而不会阻塞。
+\end{tabular}
+\\ \hline
+arrive\_and\_wait() &
+\begin{tabular}[c]{@{}l@{}}
+此函数等同于调用 count\_down()，然后调用 wait()。它以 N（默\\认为 1）递减内部计数器，然后阻塞调用线程，直到内部计数器达到零。
+\end{tabular}
+\\ \hline
+\end{longtable}
+
+\begin{center}
+表 8.3: 描述原子操作内存访问排序的 std::memory\_order 成员
+\end{center}
+
+前一节的第一个例子中，有一个名为 \verb|work_done| 的 std::latch，用线程数（或任务数）初始化。每个线程产生数据，然后写入共享资源，即一个整数vector。尽管这是共享的，但由于每个线程写入不同的位置，不存在竞态条件，不需要同步机制。每个线程完成工作后都会递减门闩的计数器。主线程等待直到门闩的计数器达到零，之后处理线程的数据。
+
+由于 std::latch 的内部计数器不能增加或重置，这种同步机制只能使用一次。一个类似但可重用的同步机制是 std::barrier。栅栏允许线程阻塞，直到某个操作完成，对于管理多个线程执行的重复任务很有用。
+
+栅栏的工作原理如下：
+
+\begin{itemize}
+\item
+栅栏包含一个在创建时初始化的计数器，可以到达栅栏的线程递减。当计数器达到零时，会重置为其初始值，栅栏可以重新使用。
+
+\item
+栅栏还包含一个完成函数，当计数器达到零时调用。如果使用默认完成函数，在调用 \verb|arrive_and_wait()| 或 \verb|arrive_and_drop()| 时调用。否则，完成函数将在参与完成阶段的某个线程上调用。
+
+\item
+栅栏从开始到重置的过程称为完成阶段。这从所谓的同步点开始，并以完成步骤结束。
+
+\item
+栅栏构建后的第一个到达同步点的 N 个线程称为参与线程集。只有这些线程会在随后的每个周期到达栅栏。
+
+\item
+到达同步点的线程可以通过调用 \verb|arrive_and_wait()| 参与完成阶段，但线程也可以通过调用 \verb|arrive_and_drop()| 将自己从参与集合中移除。这时，另一个线程必须在参与集合中取代它的位置。
+
+\item
+当参与集合中的所有线程都到达同步点时，将进入完成阶段。完成阶段开始于最后一个到达的线程调用 \verb|arrive_and_wait()| 或 \verb|arrive_and_drop()|，并以调用完成函数结束。
+\end{itemize}
+
+std::barrier 类型具有以下方法：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{方法} &
+\textbf{描述} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+arrive() &
+\begin{tabular}[c]{@{}l@{}}
+到达栅栏的同步点，并将预期计数减去一个值 n。如果 n 的值大于\\预期计数，或者等于或小于零，则行为未定义。此函数以原子方式执\\行。
+\end{tabular}
+ \\ \hline
+wait() &
+在同步点处阻塞，直到完成步骤被执行。 \\ \hline
+arrive\_and\_wait() &
+\begin{tabular}[c]{@{}l@{}}
+到达栅栏的同步点并阻塞。调用线程必须在参与集合中；否则，行为\\未定义。此函数仅在完成阶段结束后返回。
+\end{tabular}
+\\ \hline
+arrive\_and\_drop() &
+\begin{tabular}[c]{@{}l@{}}
+到达栅栏的同步点并从参与集合中移除线程。函数是否阻塞直至完成\\阶段结束是一个实现细节。调用线程必须在参与集合中；否则，行为\\未定义。
+\end{tabular}
+\\ \hline
+\end{longtable}
+
+\begin{center}
+表 8.4: std::barrier 类型的成员函数
+\end{center}
+
+“How to do it...”第二段代码中看到了一个 std::barrier 的例子。这个例子中，创建并初始化了一个 std::barrier，其中计数器表示线程的数量，还有一个完成函数。这个函数处理所有线程产生的数据，然后增加一个循环计数器，并在循环达到10次后请求线程停止。所以在线程完成工作之前，栅栏将执行10个周期。每个线程循环运行，直到接收到停止请求，在每次迭代中，它们生成一些数据，写入共享的整数vector中。在循环结束时，每个线程到达栅栏的同步点，递减计数器，并等待计数器归零以及完成函数执行。这是通过调用 std::barrier 类型的 \verb|arrive_and_wait()| 方法完成的。
+
+C++20 线程支持库中提供的最后一种同步机制是信号量。信号量包含一个内部计数器，该计数器可以由多个线程递增和递减。当计数器达到零时，进一步尝试递减它会导致线程阻塞，直到另一个线程增加了计数器。
+
+有两种信号量类：\verb|std::counting_semaphore<N>| 和 \verb|std::binary_semaphore|。后者实际上是 \verb|std::counting_semaphore<1>| 的别名。
+
+\verb|counting_semaphore| 允许 N 个线程访问共享资源，而互斥锁只允许一个线程访问。所以，\verb|binary_semaphore| 类似于互斥锁，因为只有一个线程可以访问共享资源。另一方面，互斥锁绑定到一个线程：锁定互斥锁的线程必须解锁。然而，对于信号量来说并非如此。信号量可以由未获取的线程释放，获取了信号量的线程也不必释放。
+
+\verb|std::counting_semaphore| 类具有以下方法：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{方法} &
+\textbf{描述} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+acquire() &
+\begin{tabular}[c]{@{}l@{}}
+如果计数器大于 0，则将其递减 1。否则，会阻塞，直到计数\\器大于 0。
+\end{tabular}
+\\ \hline
+try\_acquire() &
+\begin{tabular}[c]{@{}l@{}}
+尝试将计数器递减 1，前提是计数器大于 0。如果成功，返回\\ true；否则返回 false。此方法不会阻塞。
+\end{tabular}
+\\ \hline
+try\_acquire\_for() &
+\begin{tabular}[c]{@{}l@{}}
+尝试将计数器递减 1，前提是计数器大于 0。否则，会阻塞直\\到计数器大于 0 或指定超时时间到达。如果成功减少计数器，\\函数返回 true。
+\end{tabular}
+\\ \hline
+try\_acquire\_until() &
+\begin{tabular}[c]{@{}l@{}}
+尝试将计数器递减 1，前提是计数器大于 0。否则，会阻塞直\\到计数器大于 0 或指定的时间点过去。如果成功减少计数器，\\函数返回 true。
+\end{tabular}
+\\ \hline
+release() &
+\begin{tabular}[c]{@{}l@{}}
+将内部计数器递增指定值（默认为 1）。任何因等待计数器大于\\ 0 而阻塞的线程都会被唤醒。
+\end{tabular}
+\\ \hline
+\end{longtable}
+
+\begin{center}
+表 8.5: \verb|std::counting_semaphore| 类型的成员函数
+\end{center}
+
+这里列出的方法对计数器进行的所有递增和递减操作，都以原子方式执行。
+
+“How to do it...”的最后一个例子展示了如何使用 \verb|binary_semaphore|。这个例子中，一定数量的线程（这个例子中是四个）在一个循环中生成工作并写入共享资源。与之前的例子不同，只是将数据添加到整数vector的末尾。因此，线程之间的vector访问必须同步，这就是二进制信号量发挥作用的地方。每次循环中，线程函数创建一个新值（这可能需要一些时间）。然后，这个值添加到vector的末尾。但线程必须调用信号量的 \verb|acquire()| 方法，以确保其是唯一可以继续执行并访问共享资源的线程。写操作完成后，线程调用信号量的 \verb|release()| 方法以增加内部计数器，允许另一个线程访问共享资源。
+
+信号量可以用于多种目的：阻止对共享资源的访问（类似于互斥锁）、在线程之间发送或传递通知（类似于条件变量），或者实现栅栏，通常比类似的机制性能更好。
+
+

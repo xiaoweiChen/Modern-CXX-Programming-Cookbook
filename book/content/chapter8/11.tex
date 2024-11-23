@@ -1,0 +1,168 @@
+前两个示例中，使用线程和任务实现了map和fold函数（标准库中称为std::transform()和std::accumulate()）的并行版本。然而，这些实现需要手动处理并行化的细节，比如：将数据分割成块以并行处理，创建线程或任务，同步执行，并合并结果。
+
+从C++17开始，许多标准通用算法已经并行化，相同的算法可以根据提供的执行策略以串行方式或并行方式执行。本示例中，将介绍如何使用标准算法实现map和fold的并行化。
+
+
+\mySubsubsection{}{How to do it...}
+
+为了使用带有并行执行的标准算法，应该做以下几点：
+
+\begin{itemize}
+\item
+找到一个适合并行化的算法的好候选者。不是每个算法都能在并行下运行得更快，确保正确识别程序中可以并行化改进的部分。为此目的使用性能分析器，并通常查看具有O(n)或更差复杂度的操作。
+
+\item
+包含用于执行策略的头文件<execution>。
+
+\item
+作为重载算法的第一个参数提供并行执行策略（std::execution::par）。
+\end{itemize}
+
+使用std::transform()的并行重载实现map函数的并行版本：
+
+\begin{cpp}
+template <typename Iter, typename F>
+void parallel_map(Iter begin, Iter end, F&& f)
+{
+    std::transform(std::execution::par,
+                   begin, end,
+                   begin,
+                   std::forward<F>(f));
+}
+\end{cpp}
+
+使用std::reduce()的并行重载实现fold函数的并行版本：
+
+\begin{cpp}
+template <typename Iter, typename R, typename F>
+auto parallel_fold(Iter begin, Iter end, R init, F&& op)
+{
+    return std::reduce(std::execution::par,
+                       begin, end,
+                       init,
+                       std::forward<F>(op));
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+C++17中，有69个标准通用算法被重载以支持并行执行。这些重载接受一个执行策略作为第一个参数。来自头文件<execution>的可用执行策略如下表所示：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|}
+\hline
+\textbf{策略}                     & \textbf{标准} & \textbf{描述}                                          & \textbf{全局对象} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\begin{tabular}[c]{@{}l@{}}std::execution::\\sequenced\_policy\end{tabular}   & C++17          & 表示该算法可能不会并行执行。     & std::execution::seq    \\ \hline
+\begin{tabular}[c]{@{}l@{}}std::execution::\\parallel\_policy\end{tabular}    & C++17          & \begin{tabular}[c]{@{}l@{}}表示该算法的执行可能是并行\\化的。\end{tabular} & std::execution::par    \\ \hline
+\begin{tabular}[c]{@{}l@{}}std::execution::\\parallel\_unseque\\nced\_policy\end{tabular} & C++17 & \begin{tabular}[c]{@{}l@{}}表示该算法的执行可能是并行\\化并且向量化的。\end{tabular} & std::execution::par\_unseq \\ \hline
+\begin{tabular}[c]{@{}l@{}}std::execution::\\unsequenced\_poli\\cy\end{tabular} & C++20          & \begin{tabular}[c]{@{}l@{}}表示该算法的执行可能是向量\\化的。\end{tabular}    & std::execution::unseq  \\ \hline
+\end{longtable}
+
+\begin{center}
+表8.2: <execution>头文件的执行策略
+\end{center}
+
+\begin{myNotic}
+向量化是指将算法转换为一次处理多个值（向量）而非一次处理单个值的过程。现代处理器通过SIMD（单指令多数据）单元在硬件级别提供了这种操作。
+\end{myNotic}
+
+除了已经重载的现有算法外，还添加了七个新算法：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{算法}              & \textbf{描述}                                                                                                                \\ \hline
+\endfirsthead
+%
+\endhead
+%
+std::for\_each\_n               &
+\begin{tabular}[c]{@{}l@{}}
+根据指定的执行策略对指定范围内的前N个元素应用\\给定的函数。
+\end{tabular}
+\\ \hline
+std::exclusive\_scan &
+\begin{tabular}[c]{@{}l@{}}
+计算一系列元素的部分和（使用std::plus<>()\\或二元操作符），但不包括第i个元素在第i个和\\中。如果二元运算是结合的，则结果与使用std::\\partial\_sum()相同。
+\end{tabular}
+\\ \hline
+std::inclusive\_scan &
+\begin{tabular}[c]{@{}l@{}}
+计算一系列元素的部分和（使用std::plus<>()\\或二元操作符），但包括第i个元素在第i个和中。
+\end{tabular}
+\\ \hline
+std::transform\_exclusive\_scan &
+\begin{tabular}[c]{@{}l@{}}
+对一系列元素中的每个元素应用一元函数，然后对结\\果范围计算排他扫描。
+\end{tabular}
+\\ \hline
+std::transform\_inclusive\_scan &
+\begin{tabular}[c]{@{}l@{}}
+对一系列元素中的每个元素应用一元函数，然后对结\\果范围计算包含扫描。
+\end{tabular}
+\\ \hline
+std::reduce                     & std::accumulate()的一个乱序版本。                                                                                       \\ \hline
+std::transform\_reduce          &
+\begin{tabular}[c]{@{}l@{}}
+对一系列元素应用函数，然后乱序累积结果范围中的\\元素（即减少）。
+\end{tabular}
+\\ \hline
+\end{longtable}
+
+\begin{center}
+表8.2: 来自<algorithm>和<numeric>头文件的C++17新增算法
+\end{center}
+
+上述例子中，使用了带有执行策略的std::transform()和std::reduce()——例子中，使用的是std::execution::par。std::reduce()类似于std::accumulate()，以乱序处理元素。std::accumulate()没有指定执行策略的重载，只能串行执行。
+
+\begin{myNotic}
+仅仅因为一个算法支持并行化，并不意味会比串行版本运行得更快。执行取决于实际的硬件、数据集和算法特性。事实上，有些算法在并行化后可能永远不会或很少比顺序执行更快。例如，微软对几个排列、复制或移动元素的算法的实现并不执行并行化，而是回退到所有情况下的串行执行。这些算法包括copy()、copy\_n()、fill()、fill\_n()、move()、reverse()、reverse\_copy()、rotate()、rotate\_copy()和swap\_ranges()。此外，标准并没有保证特定的执行；指定策略实际上是请求一种执行策略，但没有隐含的保证。
+\end{myNotic}
+
+另一方面，标准库允许并行算法分配内存。当无法这样做时，算法会抛出\verb|std::bad_alloc|异常。但微软的实现不同，它不会抛出异常，而是回退到算法的串行版本。
+
+另一个方面，标准算法可以与不同类型的迭代器一起工作。一些算法要求前向迭代器，一些要求输入迭代器。然而，所有允许指定执行策略的重载限制了算法与前向迭代器的使用。
+
+请看下面的表格：
+
+\myGraphic{0.7}{content/chapter8/images/4.png}{图8.4: map和reduce函数顺序和并行实现的执行时间对比}
+
+可以看到map和reduce函数顺序和并行实现的执行时间对比。突出显示的是本示例中实现的函数版本。这些时间可能随每次执行而略有变化。这些值是在Intel Xeon CPU四核机器上使用Visual C++ 2019 16.4.x编译的64位发布版本运行获得的。尽管对于这些数据集，并行版本的表现优于串行版本，但哪一个实际上更好取决于数据集的大小。这就是为什么在优化工作中，性能分析至关重要。
+
+\mySubsubsection{}{There's more...}
+
+例子中，看到了map和fold（也称为reduce）的单独实现。C++17中，有一个名为\verb|std::transform_reduce()|的标准算法，将这两个操作组合成一个函数调用。这个算法有顺序执行的重载，也有基于策略的执行重载用于并行化和向量化。因此，可以利用这个算法，而不是前三个示例中手工实现的版本。
+
+以下是用于计算一个范围内所有元素的两倍之和算法的串行和并行版本：
+
+\begin{cpp}
+std::vector<int> v(size);
+std::iota(std::begin(v), std::end(v), 1);
+// sequential
+auto sums = std::transform_reduce(
+    std::begin(v), std::end(v),
+    0LL,
+    std::plus<>(),
+    [](int const i) {return i + i; } );
+// parallel
+auto sump = std::transform_reduce(
+    std::execution::par,
+    std::begin(v), std::end(v),
+    0LL,
+    std::plus<>(),
+    [](int const i) {return i + i; });
+\end{cpp}
+
+
+如果比较这两个调用的执行时间，如下表最后两列所示，与分别调用map和reduce的总时间（如其他实现中所见）进行比较，可以看出\verb|std::transform_reduce()|，尤其是其并行版本，大多数情况下执行得更好：
+
+\myGraphic{0.7}{content/chapter8/images/5.png}{图8.5: transform/reduce模式的执行时间对比，特别标注了来自C++17的std::transform\_reduce()标准算法的时间}
+

@@ -1,0 +1,131 @@
+
+
+Google Test 框架提供了一整套致命和非致命的断言宏，这些宏看起来像是函数调用，用于验证测试代码。当这些断言失败时，框架会显示源文件、行号和相关的错误信息（包括自定义错误信息），以帮助开发人员快速识别失败的代码。已经看到了如何使用 \verb|ASSERT_TRUE| 宏的一些简单示例；本示例中，将介绍其他可用的宏。
+
+
+\mySubsubsection{}{How to do it...}
+
+使用以下宏来验证测试代码：
+
+\begin{itemize}
+\item
+使用 \verb|ASSERT_TRUE(condition)| 或 \verb|EXPECT_TRUE(condition)| 来检查条件是否为真，使用 \verb|ASSERT_FALSE(condition)| 或 \verb|EXPECT_FALSE(condition)| 来检查条件是否为假：
+
+\begin{cpp}
+EXPECT_TRUE(2 + 2 == 2 * 2);
+EXPECT_FALSE(1 == 2);
+ASSERT_TRUE(2 + 2 == 2 * 2);
+ASSERT_FALSE(1 == 2);
+\end{cpp}
+
+\item
+使用 \verb|ASSERT_XX(val1, val2)| 或 \verb|EXPECT_XX(val1, val2)| 来比较两个值，其中 \verb|XX| 是以下：\verb|EQ(val1 == val2)|, \verb|NE(val1 != val2)|, \verb|LT(val1 < val2)|, \verb|LE(val1 <= val2)|, \verb|GT(val1 > val2)| 或 \verb|GE(val1 >= val2)|：
+
+\begin{cpp}
+auto a = 42, b = 10;
+EXPECT_EQ(a, 42);
+EXPECT_NE(a, b);
+EXPECT_LT(b, a);
+EXPECT_LE(b, 11);
+EXPECT_GT(a, b);
+EXPECT_GE(b, 10);
+\end{cpp}
+
+\item
+使用 \verb|ASSERT_STRXX(str1, str2)| 或 \verb|EXPECT_STRXX(str1, str2)| 来比较两个以空字符终止的字符串，其中 \verb|XX| 是以下之一：\verb|EQ|（字符串内容相同）、\verb|NE|（字符串内容不同）、\verb|CASEEQ|（忽略大小写时字符串内容相同）、\verb|CASENE|（忽略大小写时字符串内容不同）：
+
+\begin{cpp}
+auto str = "sample";
+EXPECT_STREQ(str, "sample");
+EXPECT_STRNE(str, "simple");
+ASSERT_STRCASEEQ(str, "SAMPLE");
+ASSERT_STRCASENE(str, "SIMPLE");
+\end{cpp}
+
+\item
+使用 \verb|ASSERT_FLOAT_EQ(val1, val2)| 或 \verb|EXPECT_FLOAT_EQ(val1, val2)| 来检查两个浮点数是否相等，使用 \verb|ASSERT_DOUBLE_EQ(val1, val2)| 或 \verb|EXPECT_DOUBLE_EQ(val1, val2)| 来检查两个双精度数是否相等，差异不应超过4个ULP（最后一位的单位）。使用 \verb|ASSERT_NEAR(val1, val2, abserr)| 来检查两个值之间的差异是否不超过指定的绝对值：
+
+\begin{cpp}
+EXPECT_FLOAT_EQ(1.9999999f, 1.9999998f);
+ASSERT_FLOAT_EQ(1.9999999f, 1.9999998f);
+\end{cpp}
+
+\item
+使用 \verb|ASSERT_THROW(statement, exception_type)| 或 \verb|EXPECT_THROW(statement, exception_type)| 来检查语句是否抛出指定类型的异常，使用 \verb|ASSERT_ANY_THROW(statement)| 或 \verb|EXPECT_ANY_THROW(statement)| 来检查语句是否抛出的异常，使用 \verb|ASSERT_NO_THROW(statement)| 或 \verb|EXPECT_NO_THROW(statement)| 来检查语句是否抛出异常：
+
+\begin{cpp}
+void function_that_throws()
+{
+    throw std::runtime_error("error");
+}
+void function_no_throw()
+{
+}
+TEST(TestAssertions, Exceptions)
+{
+    EXPECT_THROW(function_that_throws(), std::runtime_error);
+    EXPECT_ANY_THROW(function_that_throws());
+    EXPECT_NO_THROW(function_no_throw());
+
+    ASSERT_THROW(function_that_throws(), std::runtime_error);
+    ASSERT_ANY_THROW(function_that_throws());
+    ASSERT_NO_THROW(function_no_throw());
+}
+\end{cpp}
+
+\item
+使用 \verb|ASSERT_PRED1(pred, val)| 或 \verb|EXPECT_PRED1(pred, val)| 来检查 pred(val) 是否返回 true，使用 \verb|ASSERT_PRED2(pred, val1, val2)| 或 \verb|EXPECT_PRED2(pred, val1, val2)| 来检查 pred(val1, val2) 是否返回 true，以此类推；用于 n 元谓词函数或仿函数：
+
+\begin{cpp}
+bool is_positive(int const val)
+{
+    return val != 0;
+}
+bool is_double(int const val1, int const val2)
+{
+    return val2 + val2 == val1;
+}
+TEST(TestAssertions, Predicates)
+{
+    EXPECT_PRED1(is_positive, 42);
+    EXPECT_PRED2(is_double, 42, 21);
+
+    ASSERT_PRED1(is_positive, 42);
+    ASSERT_PRED2(is_double, 42, 21);
+}
+\end{cpp}
+
+\item
+使用 \verb|ASSERT_HRESULT_SUCCEEDED(expr)| 或 \verb|EXPECT_HRESULT_SUCCEEDED(expr)| 来检查 expr 是否是一个成功的 HRESULT，使用 \verb|ASSERT_HRESULT_FAILED(expr)| 或 \verb|EXPECT_HRESULT_FAILED(expr)| 来检查 expr 是否是一个失败的 HRESULT。这些断言用于 Windows。
+
+\item
+使用 \verb|FAIL()| 生成致命失败，使用 \verb|ADD_FAILURE()| 或 \verb|ADD_FAILURE_AT(filename, line)| 生成非致命失败：
+
+\begin{cpp}
+ADD_FAILURE();
+ADD_FAILURE_AT(__FILE__, __LINE__);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+这些断言都有两个版本：
+
+\begin{itemize}
+\item
+\verb|ASSERT_*|: 产生致命失败，阻止当前测试函数的进一步执行。
+
+\item
+\verb|EXPECT_*|: 产生非致命失败，这意味着即使断言失败，测试函数的执行也会继续。
+\end{itemize}
+
+如果条件不满足不是严重错误，或者希望测试函数继续执行，以便尽可能多地获取错误信息，可以使用 \verb|EXPECT_| 断言。其他情况下，使用 \verb|ASSERT_| 版本的测试断言。
+
+可以在框架的在线文档中找到有关这里介绍的断言的详细信息，这些文档位于 GitHub 上的 \url{https://github.com/google/googletest}，这也是项目所在的位置。然而，有必要特别指出关于浮点数比较的问题。由于舍入误差（分数部分不能表示为二的逆幂的有限和），浮点数值不会完全匹配，比较应在相对误差范围内进行。\verb|ASSERT_EQ/EXPECT_EQ| 宏不适合比较浮点数，框架提供了另一组断言。\verb|ASSERT_FLOAT_EQ/ASSERT_DOUBLE_EQ| 和 \verb|EXPECT_FLOAT_EQ/EXPECT_DOUBLE_EQ| 在默认4 ULP的误差范围内执行比较。
+
+\begin{myTip}
+ULP 是衡量浮点数之间间隔的单位，也就是最低有效位代表的值如果它是1的话。有关这方面的更多信息，请阅读 Bruce Dawson 的文章《2012版比较浮点数》：\url{https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/}。
+\end{myTip}
+
+
+

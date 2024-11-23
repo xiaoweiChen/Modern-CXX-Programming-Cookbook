@@ -1,0 +1,281 @@
+
+C++ 标准库提供了三个重要的支柱——容器、迭代器和算法——能够处理集合。因为这些算法是为了通用目的设计，并且旨在与定义了范围的迭代器一起工作，所以通常需要编写显式且有时复杂的代码来完成简单的任务。C++20 范围库就为了解决这个问题而设计，提供了处理元素范围的组件。这些组件包括范围适配器（或视图）和适用于范围而非迭代器的受约束算法。本示例中，将介绍其中的一些视图和算法，并了解其如何简化编码。
+
+\mySubsubsection{}{Getting ready}
+
+接下来的代码中，将引用一个名为 \verb|is_prime()| 的函数，该函数接受一个整数并返回一个布尔值，指示该数字是否为素数。这里展示了一个简单的实现：
+
+\begin{cpp}
+bool is_prime(int const number)
+{
+    if (number != 2)
+    {
+        if (number < 2 || number % 2 == 0) return false;
+        auto root = std::sqrt(number);
+        for (int i = 3; i <= root; i += 2)
+        if (number % i == 0) return false;
+    }
+    return true;
+}
+\end{cpp}
+
+\begin{myNotic}
+对于高效的算法，虽然超出了本示例的范畴，但我推荐使用 Miller–Rabin 素性测试。
+\end{myNotic}
+
+范围库可以在新的 <ranges> 头文件中找到，位于 std::ranges 命名空间中。为了简便起见，本实例中将使用以下命名空间别名：
+
+\begin{cpp}
+namespace rv = std::ranges::views;
+namespace rg = std::ranges;
+\end{cpp}
+
+接下来的部分中，将探讨范围库的各种用途。
+
+\mySubsubsection{}{How to do it...}
+
+范围库可以用于通过以下操作遍历范围：
+
+\begin{itemize}
+\item
+使用 \verb|iota_view| / \verb|views::iota| 视图生成连续整数序列。以下代码输出从 1 到 9 的所有整数：
+
+\begin{cpp}
+for (auto i : rv::iota(1, 10))
+    std::cout << i << ' ';
+\end{cpp}
+
+\item
+使用 \verb|filter_view| / \verb|views::filter| 过滤范围中的元素，只保留满足谓词的元素。第一个代码输出从 1 到 99 的所有素数。然而，第二个代码段保留并打印来自整数vector的所有素数：
+
+\begin{cpp}
+// prints 2 3 5 7 11 13 ... 79 83 89 97
+for (auto i : rv::iota(1, 100) | rv::filter(is_prime))
+    std::cout << i << ' ';
+// prints 2 3 5 13
+std::vector<int> nums{ 1, 1, 2, 3, 5, 8, 13, 21 };
+for (auto i : nums | rv::filter(is_prime))
+    std::cout << i << ' ';
+\end{cpp}
+
+\item
+使用 \verb|transform_view| / \verb|views::transform| 应用一元函数转换范围中的每个元素。以下代码输出从 1 到 99 的所有素数的后继数：
+
+\begin{cpp}
+// prints 3 4 6 8 12 14 ... 80 84 90 98
+for (auto i : rv::iota(1, 100) |
+              rv::filter(is_prime) |
+              rv::transform([](int const n) {return n + 1; }))
+    std::cout << i << ' ';
+\end{cpp}
+
+\item
+使用 \verb|take_view| / \verb|views::take| 保留视图的前 N 个元素。以下代码仅输出从 1 到 99 的前 10 个素数：
+
+\begin{cpp}
+// prints 2 3 5 7 11 13 17 19 23 29
+for (auto i : rv::iota(1, 100) |
+              rv::filter(is_prime) |
+              rv::take(10))
+    std::cout << i << ' ';
+\end{cpp}
+
+\item
+使用 \verb|reverse_view| / \verb|views::reverse| 反向遍历范围。第一个代码输出从 99 到 1 的前 10 个素数（降序），而第二个代码输出从 1 到 99 的最后 10 个素数（升序）：
+
+\begin{cpp}
+// prints 97 89 83 79 73 71 67 61 59 53
+for (auto i : rv::iota(1, 100) |
+              rv::reverse |
+              rv::filter(is_prime) |
+              rv::take(10))
+    std::cout << i << ' ';
+// prints 53 59 61 67 71 73 79 83 89 97
+for (auto i : rv::iota(1, 100) |
+              rv::reverse |
+              rv::filter(is_prime) |
+              rv::take(10) |
+              rv::reverse)
+    std::cout << i << ' ';
+\end{cpp}
+
+\item
+使用 \verb|drop_view| / \verb|views::drop| 跳过范围的前 N 个元素。以下代码按升序输出从 1 到 99 的素数，但跳过了序列中的前 10 个和最后 10 个素数：
+
+\begin{cpp}
+// prints 31 37 41 43 47
+for (auto i : rv::iota(1, 100) |
+              rv::filter(is_prime) |
+              rv::drop(10) |
+              rv::reverse |
+              rv::drop(10) |
+              rv::reverse)
+    std::cout << i << ' ';
+\end{cpp}
+\end{itemize}
+
+范围库还可以用于使用范围而非迭代器调用算法，大多数算法都有为此目的的重载版本。以下是一些示例：
+
+\begin{itemize}
+\item
+确定范围的最大元素：
+
+\begin{cpp}
+std::vector<int> v{ 5, 2, 7, 1, 4, 2, 9, 5 };
+auto m = rg::max(v); // 5
+\end{cpp}
+
+\item
+排序范围：
+
+\begin{cpp}
+rg::sort(v); // 1 2 2 4 5 5 7 9
+\end{cpp}
+
+\item
+复制范围。以下代码将范围的元素复制到标准输出流：
+
+\begin{cpp}
+rg::copy(v, std::ostream_iterator<int>(std::cout, " "));
+\end{cpp}
+
+\item
+反转范围中的元素：
+
+\begin{cpp}
+rg::reverse(v);
+\end{cpp}
+
+\item
+计算范围中的元素（满足谓词的元素）：
+
+\begin{cpp}
+auto primes = rg::count_if(v, is_prime);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+C++20 范围库提供了处理元素范围的各种组件。包括：
+
+\begin{itemize}
+\item
+范围概念，如 range 和 view。
+
+\item
+范围访问函数，如 begin()、end()、size()、empty() 和 data()。
+
+\item
+创建元素序列的范围工厂，如 \verb|empty_view|、\verb|single_view| 和 \verb|iota_view|。
+
+\item
+创建范围的惰性求值视图的范围适配器，如 \verb|filter_view|、\verb|transform_view|、\verb|take_view| 和 \verb|drop_view|。
+\end{itemize}
+
+范围定义为可以通过迭代器和结束哨兵遍历的一系列元素。根据定义范围的迭代器的能力，范围有不同的类型。以下概念定义了范围的类型：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{概念}     & \textbf{概念}  & \textbf{能力}                       \\ \hline
+\endfirsthead
+%
+\endhead
+%
+input\_range         & input\_iterator         & 至少可以一次读取地遍历。  \\ \hline
+output\_range        & output\_iterator        & 可以写入地遍历。                \\ \hline
+forward\_range       & forward\_iterator       & 可以多次遍历。             \\ \hline
+bidirectional\_range & bidirectional\_iterator & 也可以反向遍历。      \\ \hline
+random\_access\_range & random\_access\_iterator & 元素可以常数时间内随机访问。 \\ \hline
+contiguous\_range    & contiguous\_iterator    & 元素在内存中连续存储。 \\ \hline
+\end{longtable}
+
+\begin{center}
+表 12.1: 定义范围类型的概念列表
+\end{center}
+
+\verb|forward_iterator| 满足 \verb|input_iterator| 要求，\verb|bidirectional_iterator| 满足 \verb|forward_iterator| 要求，依此类推（从前向后看上表），所以范围也是如此。\verb|forward_range| 满足 \verb|input_range| 要求，\verb|bidirectional_range| 满足 \verb|forward_range| 要求，依此类推。除了上表列出的范围概念之外，还有其他范围概念。值得一提的是 \verb|sized_range|，要求范围必须能在常数时间内知道其大小。
+
+标准容器满足不同范围概念的要求。最重要的几个列在下表中：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|l|l|}
+\hline
+\textbf{} & \textbf{输入范围} & \textbf{前向范围} & \textbf{双向范围} & \textbf{随机访问范围} & \textbf{连续范围} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+forward\_list       & √ & √ &   &   &   \\ \hline
+list                & √ & √ & √ &   &   \\ \hline
+dequeue             & √ & √ & √ & √ &   \\ \hline
+array               & √ & √ & √ & √ & √ \\ \hline
+vector              & √ & √ & √ & √ & √ \\ \hline
+set                 & √ & √ & √ &   &   \\ \hline
+map                 & √ & √ & √ &   &   \\ \hline
+multiset            & √ & √ & √ &   &   \\ \hline
+multimap            & √ & √ & √ &   &   \\ \hline
+unordered\_set      & √ & √ &   &   &   \\ \hline
+unordered\_map      & √ & √ &   &   &   \\ \hline
+unordered\_multiset & √ & √ &   &   &   \\ \hline
+unordered\_multimap & √ & √ &   &   &   \\ \hline
+\end{longtable}
+
+\begin{center}
+表 12.2: 标准容器及其满足的要求列表
+\end{center}
+
+范围库的一个核心概念是范围适配器，也称为视图。视图是对元素范围的非拥有包装，要求常数时间内复制、移动或赋值元素。视图是范围的可组合适应，而这些适应只有在视图迭代时才会惰性发生。
+
+上一节中，介绍了使用各种视图的例子：过滤、转换、获取、跳过和反转。库中共有16种视图可用。所有视图都在 std::ranges 命名空间中，名称如 \verb|filter_view|、\verb|transform_view|、\verb|take_view|、\verb|drop_view| 和 \verb|reverse_view|。但为了使用的简便性，这些视图可以用 \verb|views::filter|、\verb|views::take|、\verb|views::reverse| 等形式的表达式来使用。注意，这些表达式的类型和值未指定，属于编译器实现细节。
+
+要理解视图是如何工作的，来看下面的例子：
+
+\begin{cpp}
+std::vector<int> nums{ 1, 1, 2, 3, 5, 8, 13, 21 };
+auto v = nums | rv::filter(is_prime) | rv::take(3) | rv::reverse;
+for (auto i : v) std::cout << i << ' '; // prints 5 3 2
+\end{cpp}
+
+这段代码中，v 表示一个视图。它不会计算所适应的范围，直到开始迭代元素为止。这个例子中，这是通过 for 语句完成的。视图是惰性的，管道操作符（|）重载以简化视图的组合。
+
+视图的组合等同于以下代码：
+
+\begin{cpp}
+auto v = rv::reverse(rv::take(rv::filter(nums, is_prime), 3));
+\end{cpp}
+
+一般来说，适用以下规则：
+
+\begin{itemize}
+\item
+如果适配器 A 只接受一个参数，即一个范围 R，则 A(R) 和 R|A 等价。
+
+\item
+如果适配器 A 接受多个参数，即一个范围 R 和 args...，则以下三种情况等价：A(R, args...)、A(args...)(R) 和 R|A(args...)。
+\end{itemize}
+
+除了范围和范围适配器（或视图）之外，C++20 在同一个 std::ranges 命名空间中还提供了通用算法的重载版本。这些重载版本称为受约束的算法。可以提供一个单独的范围作为参数（如本配方中的例子所示），或者提供一个迭代器-哨兵对。此外，对于这些重载版本，返回类型已更改，以便提供在算法执行期间计算出额外的信息。
+
+\mySubsubsection{}{There's more...}
+
+标准范围库的设计基于 Eric Niebler 创建的 range-v3 库，该库可在 GitHub 上获得，网址为 \url{https://github.com/ericniebler/range-v3}。这个库提供了一组更大的范围适配器（视图），以及提供修改操作的动作（如排序、删除、洗牌等）。从 range-v3 库过渡到 C++20 范围库可以非常平滑。实际上，本示例提供的所有示例都可以在这两个库中工作。所需要做的就是包含适当的头文件，并使用特定于 range-v3 的命名空间：
+
+\begin{cpp}
+#include "range/v3/view.hpp"
+#include "range/v3/algorithm/sort.hpp"
+#include "range/v3/algorithm/copy.hpp"
+#include "range/v3/algorithm/reverse.hpp"
+#include "range/v3/algorithm/count_if.hpp"
+#include "range/v3/algorithm/max.hpp"
+namespace rv = ranges::views;
+namespace rg = ranges;
+\end{cpp}
+
+有了这些替换，"How to do it..."部分中的所有代码可以使用支持 C++17 标准的编译器。
+
+

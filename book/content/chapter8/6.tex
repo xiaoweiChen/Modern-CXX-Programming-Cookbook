@@ -1,0 +1,131 @@
+本章的第一个示例中，介绍了如何使用线程。还了解到线程函数不能返回值，线程应该使用其他手段(比如:共享数据)来实现，因此需要同步。除了使用共享数据外，另一种在线程间通信返回值或异常的方法是使用 std::promise。本示例将介绍这一机制的工作原理。
+
+\mySubsubsection{}{Getting ready}
+
+本示例使用的 promise 和 future 类型在 <future> 头文件的 std 命名空间中可用。
+
+\mySubsubsection{}{How to do it...}
+
+要通过promise 和 future从一个线程向另一个线程传递值，可以这样做：
+
+\begin{enumerate}
+\item
+通过参数将promise提供给线程函数：
+
+\begin{cpp}
+void produce_value(std::promise<int>& p)
+{
+    // simulate long running operation
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(2s);
+    }
+    // continued at 2.
+}
+\end{cpp}
+
+\item
+调用promise上的 \verb|set_value()| 方法设置结果以表示一个值，或调用 \verb|set_exception()| 设置结果以表示异常:
+
+\begin{cpp}
+// continued from 1.
+p.set_value(42);
+\end{cpp}
+
+\item
+参数将与promise关联的future提供给另一个线程函数：
+
+\begin{cpp}
+void consume_value(std::future<int>& f)
+{
+    // continued at 4.
+}
+\end{cpp}
+
+\item
+调用future的 get() 方法以获取设置给promise的结果：
+
+\begin{cpp}
+// continued from 3.
+auto value = f.get();
+\end{cpp}
+
+\item
+调用线程中，使用promise上的 \verb|get_future()| 方法获取与promise关联的future：
+
+\begin{cpp}
+std::promise<int> p;
+std::thread t1(produce_value, std::ref(p));
+std::future<int> f = p.get_future();
+std::thread t2(consume_value, std::ref(f));
+t1.join();
+t2.join();
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+promise-future对是一个通信渠道，允许一个线程通过共享状态向另一个线程通信值或异常。promise 是异步结果的提供者，具有一个关联的 future，后者代表异步返回对象。为了建立这一通道，首先需要创建一个promise。这会创建一个共享状态，稍后可以通过与promise关联的future读取。
+
+要为promise设置结果，可以使用以下任一方法：
+
+\begin{itemize}
+\item
+使用 \verb|set_value()| 或 \verb|set_value_at_thread_exit()| 方法设置返回值；后者函数将值存储在共享状态中，但只有在线程退出时才能通过关联的future获取。
+
+\item
+使用 \verb|set_exception()| 或 \verb|set_exception_at_thread_exit()| 方法设置异常作为返回值。异常会包装在一个 \verb|std::exception_ptr| 实例中。后者函数将异常存储在共享状态中，但只有在线程退出时才能获取。
+\end{itemize}
+
+要检索与 promise 关联的future实例，可使用 \verb|get_future()|。要从future中获取值，使用 get() 方法。这会阻塞调用线程，直到共享状态中的值可用。future类型有几个方法可以阻塞线程，直到共享状态中的结果可用：
+
+\begin{itemize}
+\item
+\verb|wait()| 只有在结果可用时才返回。
+
+\item
+\verb|wait_for()| 在结果可用或指定的超时到期时返回。
+
+\item
+\verb|wait_until()| 在结果可用或达到指定的时间点时返回。
+\end{itemize}
+
+如果异常设置为 promise 的值，则在future实例上调用 get() 方法时将抛出该异常。上一节中的示例已重写如下，以便抛出异常而不是设置结果：
+
+\begin{cpp}
+void produce_value(std::promise<int>& p)
+{
+    // simulate long running operation
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(2s);
+    }
+    try
+    {
+        throw std::runtime_error("an error has occurred!");
+    }
+    catch(...)
+    {
+        p.set_exception(std::current_exception());
+    }
+}
+void consume_value(std::future<int>& f)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+    try
+    {
+        std::cout << f.get() << '\n';
+    }
+    catch(std::exception const & e)
+    {
+        std::cout << e.what() << '\n';
+    }
+}
+\end{cpp}
+
+\verb|consume_value()| 函数中，对 get() 的调用会放在了一个 \verb|try...catch| 块中。如果捕获到了异常——在特定的实现中确实如此——消息就会输出到控制台。
+
+\mySubsubsection{}{There's more...}
+
+以这种方式建立promise-future通道是一种相当明确的操作，可以使用 std::async() 函数来避免；这是一个高级工具，可异步运行一个函数，创建一个内部承诺和共享状态，并返回一个与共享状态关联的future。
+

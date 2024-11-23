@@ -1,0 +1,114 @@
+
+前一个示例中，简要了解了使用 Google Test 框架编写简单测试所需的内容。多个测试可以分组为一个测试套件，一个或多个测试套件可以组合成一个测试程序。这个示例中，将看到如何创建和运行测试。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例中的示例代码，将使用之前章节中讨论过的 point3d 类型。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下宏来创建测试：
+
+\begin{itemize}
+\item
+\verb|TEST(TestSuiteName, TestName)| 定义了一个名为 TestName 的测试，作为名为 TestSuiteName 的测试套件的一部分：
+
+\begin{cpp}
+TEST(TestConstruction, TestConstructor)
+{
+    auto p = point3d{ 1,2,3 };
+    ASSERT_EQ(p.x(), 1);
+    ASSERT_EQ(p.x(), 2);
+    ASSERT_EQ(p.x(), 3);
+}
+TEST(TestConstruction, TestOrigin)
+{
+    auto p = point3d::origin();
+    ASSERT_EQ(p.x(), 0);
+    ASSERT_EQ(p.x(), 0);
+    ASSERT_EQ(p.x(), 0);
+}
+\end{cpp}
+
+\item
+\verb|TEST_F(TestSuiteWithFixture, TestName)| 定义了一个名为 TestName 的测试，作为使用名为 TestSuiteWithFixture 的装置的测试套件的一部分。
+\end{itemize}
+
+要执行测试，请按以下步骤操作：
+
+\begin{enumerate}
+\item
+使用 \verb|RUN_ALL_TESTS()| 宏运行测试程序中定义的所有测试。这必须只在初始化框架后从 main() 函数中调用一次。
+
+\item
+使用 \verb|--gtest_filter=<filter>| 命令行选项来过滤要运行的测试。
+
+\item
+使用 \verb|--gtest_repeat=<count>| 命令行选项来重复选定测试指定次数。
+
+\item
+使用 \verb|--gtest_break_on_failure| 命令行选项，在第一次测试失败时附加调试器以调试测试程序。
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+有几个宏可用于定义测试（作为测试用例的一部分），最常用的是 \verb|TEST| 和 \verb|TEST_F|。其他用于定义测试的宏包括用于编写类型化测试的 \verb|TYPED_TEST| 和用于编写类型参数化测试的 \verb|TYPED_TEST_P|。然而，这些都是更高级的主题，超出了本书的范围。\verb|TEST| 和 \verb|TEST_F| 宏接受两个参数：第一个是测试套件的名称，第二个是测试的名称。这两个参数形成了测试的完整名称，必须是有效的 C++ 标识符，不应该包含下划线。不同的测试套件可以包含同名的测试（因为完整名称仍然是唯一的），这两个宏会自动将测试注册到框架中，用户无需显式输入信息来完成此操作。
+
+测试要么失败，要么成功。如果断言失败或发生未捕获的异常，则测试失败。除了这两种情况外，测试总是成功的。
+
+调用测试，请调用 \verb|RUN_ALL_TESTS()|。但这只能在一个测试程序中调用一次，并且只能在调用 \verb|testing::InitGoogleTest()| 初始化框架之后调用。这个宏会运行测试程序中的所有测试。不过，也可能只选择一些测试来运行。可以通过设置名为 \verb|GTEST_FILTER| 的环境变量来实现这一点，或者通过传递带有 \verb|--gtest_filter| 标志的过滤器作为命令行参数。如果存在这两者中的任何一个，框架只会运行其完整名称与过滤器匹配的测试。过滤器可能包括通配符：* 匹配任何字符串，? 符号匹配任何字符。负模式（应该省略的部分）以前缀 - 引入。以下是过滤器的例子：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{过滤器}                             & \textbf{描述}                                                                                 \\ \hline
+\endfirsthead
+%
+\endhead
+%
+--gtest\_filter=*                           & 运行所有测试                                                                                     \\ \hline
+--gtest\_filter=TestConstruction.*          & \begin{tabular}[c]{@{}l@{}}运行名为 TestConstruction 的测试套件\\中的所有测试\end{tabular}                                        \\ \hline
+\begin{tabular}[c]{@{}l@{}}--gtest\_filter=TestOperations.\\*-TestOperations.TestLess\end{tabular} & \begin{tabular}[c]{@{}l@{}}运行名为 TestOperations 的测试套件中\\的所有测试，但不包括名为 TestLess 的测试\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}--gtest\_filter=*Operations*:\\*Construction*\end{tabular} & \begin{tabular}[c]{@{}l@{}}运行完整名称中包含 Operations 或 \\Construction 的所有测试\end{tabular}                         \\ \hline
+--gtest\_filter=Test?                       & \begin{tabular}[c]{@{}l@{}}运行名称为 5 个字符且以 Test 开头的测试，\\例如 TestA, Test0, 或 Test\_。\end{tabular}     \\ \hline
+--gtest\_filter=Test??                      & \begin{tabular}[c]{@{}l@{}}运行名称为 6 个字符且以 Test 开头的测试，\\例如 TestAB, Test00, 或 Test\_Z。\end{tabular}\\ \hline
+\end{longtable}
+
+\begin{center}
+表 11.4: 过滤器示例
+\end{center}
+
+以下列表是使用命令行参数 \verb|--gtest_filter=TestConstruction.*-TestConstruction.|\\\verb|TestConstructor| 调用包含上述测试的测试程序时的输出：
+
+\begin{shell}
+Note: Google Test filter = TestConstruction.*-TestConstruction.TestConstructor
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from TestConstruction
+[ RUN      ] TestConstruction.TestOrigin
+[       OK ] TestConstruction.TestOrigin (0 ms)
+[----------] 1 test from TestConstruction (0 ms total)
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (2 ms total)
+[  PASSED  ] 1 test.
+\end{shell}
+
+可以通过在测试的名称前加上 \verb|DISABLED_| ，或在测试套件的名称前加上相同的标识符来禁用某些测试，这样该测试套件中的所有测试都将禁用：
+
+\begin{cpp}
+TEST(TestConstruction, DISABLED_TestConversionConstructor)
+{ /* ... */ }
+TEST(DISABLED_TestComparisons, TestEquality)
+{ /* ... */ }
+TEST(DISABLED_TestComparisons, TestInequality)
+{ /* ... */ }
+\end{cpp}
+
+这些测试都不会执行。但会在输出中收到报告，指出有一些已禁用的测试。
+
+请记住，这个功能仅用于临时禁用测试(该功能应该谨慎使用)。当需要进行一些会导致测试失败的代码更改，但又没有时间立即修复时，这很有用。
+
+
+

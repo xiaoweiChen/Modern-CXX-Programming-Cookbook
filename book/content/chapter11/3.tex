@@ -1,0 +1,141 @@
+
+测试用例包含一个或多个测试，Boost.Test 库提供了一系列形式为宏的 API 来编写测试。上一个示例中，已经了解了一些关于 \verb|BOOST_TEST| 宏的知识，这是库中最重要且广泛使用的宏。本示例中，将介绍何进一步使用 \verb|BOOST_TEST| 宏。
+
+\mySubsubsection{}{Getting ready}
+
+现在熟悉了编写测试套件和测试用例，这是上一个示例中讨论的主题。
+
+\mySubsubsection{}{How to do it...}
+
+以下列表展示了一些测试常用的API：
+
+\begin{itemize}
+\item
+\verb|BOOST_TEST|基本形式，用于大多数测试：
+
+\begin{cpp}
+int a = 2, b = 4;
+BOOST_TEST(a == b);
+BOOST_TEST(4.201 == 4.200);
+std::string s1{ "sample" };
+std::string s2{ "text" };
+BOOST_TEST(s1 == s2, "not equal");
+\end{cpp}
+
+\item
+\verb|BOOST_TEST|结合 \verb|tolerance()| 操纵符，用于指示浮点数比较的容差：
+
+\begin{cpp}
+BOOST_TEST(4.201 == 4.200, boost::test_tools::tolerance(0.001));
+\end{cpp}
+
+\item
+\verb|BOOST_TEST|结合 \verb|per_element()| 操纵符，用于对容器（即使是不同类型）进行逐元素比较：
+
+\begin{cpp}
+std::vector<int> v{ 1,2,3 };
+std::list<short> l{ 1,2,3 };
+BOOST_TEST(v == l, boost::test_tools::per_element());
+\end{cpp}
+
+\item
+\verb|BOOST_TEST|结合三元操作符和逻辑操作符 || 或 \verb|&&| 的复合语句，需要括号：
+
+\begin{cpp}
+BOOST_TEST((a > 0 ? true : false));
+BOOST_TEST((a > 2 && b < 5));
+\end{cpp}
+
+\item
+\verb|BOOST_ERROR| 用于无条件地使测试失败并在报告中生成一条消息，相当于 \verb|BOOST_TEST(false, message)|：
+
+\begin{cpp}
+BOOST_ERROR("this test will fail");
+\end{cpp}
+
+\item
+\verb|BOOST_TEST_WARN| 用于在测试失败时在报告中生成警告，而不会增加遇到的错误数量，并停止测试用例的执行：
+
+\begin{cpp}
+BOOST_TEST_WARN(a == 4, "something is not right");
+\end{cpp}
+
+\item
+\verb|BOOST_TEST_REQUIRE| 用于确保满足测试用例的前提条件；否则，测试用例的执行将停止：
+
+\begin{cpp}
+BOOST_TEST_REQUIRE(a == 4, "this is critical");
+\end{cpp}
+
+\item
+\verb|BOOST_FAIL| 用于无条件地停止测试用例的执行，增加遇到的错误数量，并在报告中生成一条消息。这相当于 \verb|BOOST_TEST_REQUIRE(false, message)|：
+
+\begin{cpp}
+BOOST_FAIL("must be implemented");
+\end{cpp}
+
+\item
+\verb|BOOST_IS_DEFINED| 用于检查特定的预处理器符号是否在运行时定义。通常与 \verb|BOOST_TEST| 结合使用，来进行验证和记录：
+
+\begin{cpp}
+BOOST_TEST(BOOST_IS_DEFINED(UNICODE));
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+库定义了多种用于执行测试断言的宏和操纵符，最常用的是 \verb|BOOST_TEST|。这个宏可简单地计算为一个表达式；如果计算失败，会增加错误计数但继续执行测试用例。实际上它有三种版本：
+
+\begin{itemize}
+\item
+\verb|BOOST_TEST_CHECK| 与 \verb|BOOST_TEST| 相同，用于执行检查，如上一节所述。
+
+\item
+\verb|BOOST_TEST_WARN| 用于提供信息的断言，不会增加错误计数也不会停止测试用例的执行。
+
+\item
+\verb|BOOST_TEST_REQUIRE| 确保满足测试用例继续执行所需的前提条件。如果失败，此宏会增加错误计数并停止测试用例的执行。
+\end{itemize}
+
+测试宏的一般形式是 \verb|BOOST_TEST(statement)|，这个宏提供了丰富灵活的报告功能。默认情况下，不仅显示语句，还显示操作数的值，以便快速识别失败的原因。
+
+但用户可以提供替代的失败描述；这时，消息会记录在测试报告中：
+
+\begin{cpp}
+BOOST_TEST(a == b);
+// error: in "regular_tests": check a == b has failed [2 != 4]
+BOOST_TEST(a == b, "not equal");
+// error: in "regular_tests": not equal
+\end{cpp}
+
+这个宏还支持特殊的比较过程：
+
+\begin{itemize}
+\item
+首先是浮点数比较，其中可以定义容差来测试相等性。
+
+\item
+其次，支持使用几种方法比较容器：默认比较（使用重载的操作符 ==）、逐元素比较和字典顺序比较（使用字典顺序）。逐元素比较使得可以按容器提供的前向迭代器顺序比较不同类型容器（如 vector 和 list）的元素，还需要考虑容器的大小（意味着首先测试大小，只有当大小相等时，才继续比较元素）。
+
+\item
+最后，支持操作数的位级比较。如果比较失败，框架会报告比较失败的比特位索引。
+\end{itemize}
+
+\verb|BOOST_TEST| 宏确实有一些限制，不能用于使用逗号的复合语句，这样的语句会被预处理器或三元操作符拦截和处理，也不能用于使用逻辑操作符 \verb||| 和 \verb|&&| 的复合语句。后一种情况有一个解决办法：再加一对括号，如 \verb|BOOST_TEST((statement))|。
+
+有几个宏可用于测试在表达式求值期间是否引发了特定的异常。<level> 可以是 CHECK、WARN 或 REQUIRE：
+
+\begin{itemize}
+\item
+\verb|BOOST_<level>_NO_THROW(expr)| 检查表达式 \verb|expr| 是否引发异常。求值 \verb|expr| 期间引发异常，这些异常将捕获并且不会传播。如果有异常发生，断言将失败。
+
+\item
+\verb|BOOST_<level>_THROW(expr, exception_type)| 检查表达式 \verb|expr| 是否引发 \verb|exception_type| 类型的异常。如果表达式 \verb|expr| 没有引发异常，则断言失败。不是 \verb|exception_type| 类型的异常不会捕获并可能传播。测试用例中的未捕获异常将由执行监视器捕获，但会导致测试用例失败。
+
+\item
+\verb|BOOST_<level>EXCEPTION(expr, exception_type, predicate)| 检查表达式 \verb|expr| 是否引发 \verb|exception_type| 类型的异常。如果是这样，将传递表达式给谓词进行进一步检查。如果没有引发异常或者引发了不同于 \verb|exception_type| 类型的异常，则断言行为如同 \verb|BOOST<level>_THROW|。
+\end{itemize}
+
+本示例只讨论了最常见的测试 API 及其典型用法，而库提供了许多其他 API。如需进一步了解，请查阅在线文档。对于 1.83 版本，请参阅 \url{https://www.boost.org/doc/libs/1_83_0/libs/test/doc/html/index.html}。
+
+

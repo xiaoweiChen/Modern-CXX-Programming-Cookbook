@@ -1,0 +1,189 @@
+
+C++11之前，单个参数的构造函数会视为转换构造函数（接收另一种类型的值，并创建该类的新实例）。从C++11开始，没有使用explicit关键字指定的每个构造函数都视为转换构造函数。这很重要，这样的构造函数定义了从其参数类型到类类型的隐式转换。类型中也可以定义转换操作符，将类类型转换为另一种指定的类型。所有这些在某些情况下是有用的，但在其他情况下可能会有问题。这个示例中，将介绍如何使用显式构造函数和转换操作符。
+
+\mySubsubsection{}{Getting ready}
+
+为了完成这个示例，需要熟悉转换构造函数和转换操作符。此示例中，将学习如何编写显式构造函数和转换操作符，以避免类型之间的隐式转换。使用显式构造函数和转换操作符（称为自定义的转换函数）可以使编译器产生错误——这些会是编码错误——开发人员可快速发现这些问题并修复。
+
+\mySubsubsection{}{How to do it...}
+
+要声明显式的构造函数和转换操作符（无论是函数还是函数模板），请在声明中使用explicit关键字。
+
+以下是一个同时使用显式构造函数和显式转换操作符的例子：
+
+\begin{cpp}
+struct handle_t
+{
+    explicit handle_t(int const h) : handle(h) {}
+    explicit operator bool() const { return handle != 0; };
+private:
+    int handle;
+};
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+为了理解为什么需要显式构造函数以及其工作原理，可以先来看看转换构造函数。下面的类foo有三个构造函数：一个是无参的默认构造函数，另一个接受一个int参数，还有一个接受两个参数，分别是int和double。这些构造函数除了打印一条消息外不做其他事情。从C++11起，所有这些都是转换构造函数。该类型还定义了一个将foo类型的值转换为bool值的转换操作符：
+
+\begin{cpp}
+struct foo
+{
+    foo()
+    { std::cout << "foo" << '\n'; }
+    foo(int const a)
+    { std::cout << "foo(a)" << '\n'; }
+    foo(int const a, double const b)
+    { std::cout << "foo(a, b)" << '\n'; }
+    operator bool() const { return true; }
+};
+\end{cpp}
+
+以下是对象定义的几种可能性（注释表示控制台的输出）：
+
+\begin{cpp}
+foo f1;              // foo()
+foo f2 {};           // foo()
+foo f3(1);           // foo(a)
+foo f4 = 1;          // foo(a)
+foo f5 { 1 };        // foo(a)
+foo f6 = { 1 };      // foo(a)
+foo f7(1, 2.0);      // foo(a, b)
+foo f8 { 1, 2.0 };   // foo(a, b)
+foo f9 = { 1, 2.0 }; // foo(a, b)
+\end{cpp}
+
+变量f1和f2调用了默认构造函数，f3、f4、f5和f6调用了接受int参数的构造函数。这些对象的定义看起来不同（f3使用函数形式初始化，f4和f6是复制初始化，而f5直接使用大括号初始化列表初始化），但都是等价的。同样，f7、f8和f9调用了带有两个参数的构造函数。
+
+f5和f6会打印foo(l)，初始化列表中的所有元素都应该是整数，f8和f9会产生编译器错误（编译器可能有一些选项忽略某些警告，例如GCC的-Wno-narrowing）。
+
+如果foo定义了一个接受std::initializer\_list的构造函数，则所有使用大括号\{\}初始化的情况都会调用该构造函数：
+
+\begin{cpp}
+foo(std::initializer_list<int> l)
+{ std::cout << "foo(l)" << '\n'; }
+\end{cpp}
+
+这些看起来很合理，但隐式转换构造函数的隐式转换可能不是开发者所期望的。首先，看一些正确的例子：
+
+\begin{cpp}
+void bar(foo const f)
+{
+}
+bar({});             // foo()
+bar(1);              // foo(a)
+bar({ 1, 2.0 });     // foo(a, b)
+\end{cpp}
+
+从foo类到bool的转换操作符，在需要布尔值的地方使用foo对象。以下是一个例子：
+
+\begin{cpp}
+bool flag = f1;                // 正确，期望布尔值转换
+if(f2) { /* do something */ }  // 正确，期望布尔值转换
+std::cout << f3 + f4 << '\n';  // 错误，期望 foo 对象相加
+if(f5 == f6) { /* do more */ } // 错误，期望比较 foo 对象 foos
+\end{cpp}
+
+前两行代码正确，foo类型的对象转换成布尔值。最后两行代码很可能错误，这里可能期望的是对foo对象进行加法运算和比较foo对象。
+
+一个更现实的例子来理解可能出现问题的地方是字符串缓冲区的实现，这是一个包含内部字符缓冲区的类型。
+
+这个类提供了几个转换构造函数：一个默认构造函数，一个接受size\_t参数的构造函数，该参数代表预先分配的缓冲区大小，以及接受指向char的指针的构造函数，用于分配和初始化内部缓冲区：
+
+\begin{cpp}
+class string_buffer
+{
+public:
+    string_buffer() {}
+    string_buffer(size_t const size) { data.resize(size); }
+    string_buffer(char const * const ptr) : data(ptr) {}
+    size_t size() const { return data.size(); }
+    operator bool() const { return !data.empty(); }
+    operator char const * () const { return data.c_str(); }
+private:
+    std::string data;
+};
+\end{cpp}
+
+根据这个定义，可以构建以下对象：
+
+\begin{cpp}
+std::shared_ptr<char> str;
+string_buffer b1;            // calls string_buffer()
+string_buffer b2(20);        // calls string_buffer(size_t const)
+string_buffer b3(str.get()); // calls string_buffer(char const*)
+\end{cpp}
+
+对象b1使用默认构造函数创建，缓冲区为空；b2使用带有单个参数的构造函数初始化，其中参数值代表内部缓冲区的字符数量；而b3使用现有缓冲区初始化，该缓冲区用于定义内部缓冲区的大小，并将其值复制到内部缓冲区，相同的定义也可以定义以下对象：
+
+\begin{cpp}
+enum ItemSizes {DefaultHeight, Large, MaxSize};
+string_buffer b4 = 'a';
+string_buffer b5 = MaxSize;
+\end{cpp}
+
+b4使用char初始化。由于存在从char到size\_t的隐式转换，所以将调用带有单个参数的构造函数。这里的意图可能并不明确；应该使用"a"而非'a'，这样会调用第三个构造函数。
+
+但b5很可能是一个错误，因为MaxSize是一个枚举值，代表ItemSizes，与字符串缓冲区的大小无关，编译器不会标记这些错误情况。未限定作用域的枚举（enum）隐式转换为int是推荐使用带作用域的枚举（通过enum class声明），后者不具备这种隐式转换。如果ItemSizes是一个带作用域的枚举，则上述描述的情况就不会出现。
+
+构造函数声明中使用explicit关键字时，该构造函数就变成了显式构造函数，不允许隐式构造类类型的对象。为了说明这一点，现在稍微修改string\_buffer类，使其所有构造函数都声明为显式：
+
+\begin{cpp}
+class string_buffer
+{
+public:
+    explicit string_buffer() {}
+    explicit string_buffer(size_t const size) { data.resize(size); }
+    explicit string_buffer(char const * const ptr) :data(ptr) {}
+    size_t size() const { return data.size(); }
+    explicit operator bool() const { return !data.empty(); }
+    explicit operator char const * () const { return data.c_str(); }
+private:
+    std::string data;
+};
+\end{cpp}
+
+改动很小，但是在前面的例子中，b4和b5的定义不再有效。重载解析过程中，从char或int到size\_t的隐式转换不可用，无法确定应调用哪个构造函数。结果是b4和b5都会导致编译错误。即使构造函数是显式的，b1、b2和b3仍然是有效的定义。
+
+唯一解决问题的方法是提供char或int到string\_buffer的显式转换:
+
+\begin{cpp}
+string_buffer b4 = string_buffer('a');
+string_buffer b5 = static_cast<string_buffer>(MaxSize);
+string_buffer b6 = string_buffer{ "a" };
+\end{cpp}
+
+有了显式构造函数，编译器能够立即标记出错误情况，开发人员可以根据情况进行修正，要么用正确的值初始化，要么提供显式转换。
+
+\begin{myTip}
+这只适用于使用复制初始化的情况。
+\end{myTip}
+
+以下定义仍然（但错误）使用显式构造函数：
+
+\begin{cpp}
+string_buffer b7{ 'a' };
+string_buffer b8('a');
+\end{cpp}
+
+类似于构造函数，转换操作符也可以声明为显式（如上所述）。对类型实例的隐式转换不再支持，需要显式转换。考虑到先前定义的b1和b2这两个string\_buffer对象，并需要使用显式operator bool进行转换：
+
+\begin{cpp}
+std::cout << b4 + b5 << '\n'; // error
+if(b4 == b5) {}               // error
+\end{cpp}
+
+\begin{cpp}
+std::cout << static_cast<bool>(b4) + static_cast<bool>(b5); // work
+if(static_cast<bool>(b4) == static_cast<bool>(b5)) {} // work
+\end{cpp}
+
+两个bool值的相加没有多大意义。前面的例子只是为了说明，没有显式静态转换的情况下，编译器发出的错误可帮助开发者意识到表达式本身的错误。
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,203 @@
+
+数据经常需要从一种类型转换为另一种类型。有些转换在编译时是必要的（如从双精度浮点数转为整型），有些则在运行时是必要的（如向上或向下转换指向继承体系中类的指针）。语言支持与C风格的类型转换兼容，既可以采用(type)expression的形式，也可以采用type(expression)的形式，但这种类型的转换会破坏C++的类型安全性。
+
+语言还提供了几种转换：\verb|static_cast|、\verb|dynamic_cast|、\verb|const_cast| 和 \verb|reinterpret_cast|，用来更好地表明意图并编写更安全的代码。本示例中，将介绍这些转换如何使用。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下转换执行类型转换：
+
+\begin{itemize}
+\item
+使用 \verb|static_cast| 对非多态类型进行类型转换，包括整数到枚举的转换、从浮点数到整数的转换，或者从一个指针类型到另一个指针类型的转换，如从基类到派生类（向下转换）或从派生类到基类（向上转换），但不进行运行时检查：
+
+\begin{cpp}
+enum options {one = 1, two, three};
+int value = 1;
+options op = static_cast<options>(value);
+int x = 42, y = 13;
+double d = static_cast<double>(x) / y;
+int n = static_cast<int>(d);
+\end{cpp}
+
+\item
+使用 \verb|dynamic_cast| 对多态类型的指针或引用进行类型转换，从基类到派生类或反之亦然。这些检查是在运行时完成的，并且可能需要启用运行时类型信息（RTTI）：
+
+\begin{cpp}
+struct base
+{
+    virtual void run() {}
+    virtual ~base() {}
+};
+struct derived : public base
+{
+};
+derived d;
+base b;
+base* pb = dynamic_cast<base*>(&d);         // OK
+derived* pd = dynamic_cast<derived*>(&b);   // fail
+try
+{
+    base& rb = dynamic_cast<base&>(d);       // OK
+    derived& rd = dynamic_cast<derived&>(b); // fail
+}
+catch (std::bad_cast const & e)
+{
+    std::cout << e.what() << '\n';
+}
+\end{cpp}
+
+\item
+使用 \verb|const_cast| 进行不同const和volatile限定符的类型之间的转换，如从非const对象去除const限定符：
+
+\begin{cpp}
+void old_api(char* str, unsigned int size)
+{
+    // do something without changing the string
+}
+std::string str{"sample"};
+old_api(const_cast<char*>(str.c_str()),
+        static_cast<unsigned int>(str.size()));
+\end{cpp}
+
+\item
+使用 \verb|reinterpret_cast| 进行位级重新解释，如整数与指针类型之间的转换、从指针类型到整数的转换，或者从一个指针类型到任何其他指针类型的转换，而不涉及运行时检查：
+
+\begin{cpp}
+class widget
+{
+public:
+    typedef size_t data_type;
+    void set_data(data_type d) { data = d; }
+    data_type get_data() const { return data; }
+private:
+    data_type data;
+};
+widget w;
+user_data* ud = new user_data();
+// write
+w.set_data(reinterpret_cast<widget::data_type>(ud));
+// read
+user_data* ud2 = reinterpret_cast<user_data*>(w.get_data());
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+显式类型转换，有时也称为C风格的类型转换或静态转换，是C++与C语言兼容性的遗留特性。可以执行各种转换，包括但不限于：
+
+\begin{itemize}
+\item
+算术类型之间
+
+\item
+指针类型之间
+
+\item
+整型与指针类型之间
+
+\item
+const或volatile限定和非限定类型之间
+\end{itemize}
+
+这种类型的转换对于多态类型或模板来说效果不佳，C++提供了前面示例中看到的四种转换。使用这些转换带来了几个重要的好处：
+
+\begin{itemize}
+\item
+更好地表达了用户的意图，既对编译器也对阅读代码的人。
+
+\item
+允许在不同类型之间进行更安全的转换（除了 \verb|reinterpret_cast| 外）。
+
+\item
+可以在源代码中轻松搜索。
+\end{itemize}
+
+尽管名称可能暗示如此，但 \verb|static_cast| 并不是显式类型转换或静态转换的等价。此转换在编译时完成，可用于执行隐式转换、隐式转换的逆向转换，以及从继承层次结构中的类的指针到类型的转换。但不能用于触发不相关指针类型之间的转换，所以在以下示例中，使用 \verb|static_cast| 将 int* 转换为 double* 会产生编译器错误：
+
+\begin{cpp}
+int* pi = new int{ 42 };
+double* pd = static_cast<double*>(pi);   // compiler error
+\end{cpp}
+
+然而，从 base* 转换为 derived*（其中 base 和 derived 是“How to do it...”部分中显示的类）不会产生编译器错误，但在尝试使用新获得的指针时会产生运行时错误：
+
+\begin{cpp}
+base b;
+derived* pd = static_cast<derived*>(&b); // compilers OK, runtime error
+base* pb1 = static_cast<base*>(pd);      // OK
+\end{cpp}
+
+另一方面，\verb|static_cast| 不能用于去除 const 和 volatile 限定符。下面的代码说明了这一点：
+
+\begin{cpp}
+int const c = 42;
+int* pc = static_cast<int*>(&c);         // compiler error
+\end{cpp}
+
+沿继承层次结构向上、向下或横向安全地类型转换表达式可以使用 \verb|dynamic_cast| 完成。这种转换在运行时完成并且要求启用 RTTI，所以会带来运行时开销。动态转换只能用于指针和引用。
+
+当使用 \verb|dynamic_cast| 将表达式转换为指针类型且操作失败时，结果是指针为空；将表达式转换为引用类型且操作失败时，则抛出 \verb|std::bad_cast| 异常。因此，总是应该将 \verb|dynamic_cast| 转换为引用类型放在 try...catch 块中。
+
+\begin{myNotic}
+RTTI 是一种机制，运行时公开有关对象数据类型的信息。这仅适用于多态类型（具有至少一个虚拟方法的类型，包括虚拟析构函数，所有基类都应该有）。RTTI 通常是可选的编译器特性（或根本不支持），所以使用此功能可能需要使用编译器开关。
+\end{myNotic}
+
+尽管动态转换是在运行时进行的，如果试图在非多态类型之间进行转换，会得到一个编译器错误：
+
+\begin{cpp}
+struct struct1 {};
+struct struct2 {};
+struct1 s1;
+struct2* ps2 = dynamic_cast<struct2*>(&s1); // compiler error
+\end{cpp}
+
+\verb|reinterpret_cast| 更像是一个编译器指令，不会转换为CPU指令；只是指示编译器将表达式的二进制表示解释为另一种指定的类型。这是一个类型不安全的转换，应谨慎使用。它可以用于整型类型和指针、指针类型和函数指针类型之间的转换，不做任何检查，所以 \verb|reinterpret_cast| 可以成功用于不相关类型之间的转换，如从 int* 到 double*，这会产生未定义行为：
+
+\begin{cpp}
+int* pi = new int{ 42 };
+double* pd = reinterpret_cast<double*>(pi);
+\end{cpp}
+
+使用 \verb|reinterpret_cast| 的典型情况是在使用操作系统或供应商特定API的代码中转换类型之间的表达式。许多API以指针或整型的形式存储用户数据。如果需要将用户定义类型的地址传递给这样的API，就需要将不相关的指针类型值或指针类型值转换为整型类型值。在前一部分提供的类似例子中，widget 是一个类，在数据成员中存储用户定义的数据，并提供了访问它的方法：\verb|set_data()| 和 \verb|get_data()|。如果需要在 widget 中存储一个对象的指针，则使用 \verb|reinterpret_cast|，如本例所示。
+
+\verb|const_cast| 类似于 \verb|reinterpret_cast|，它是一个编译器指令，并不转换为CPU指令。用于去除 const 或 volatile 限定符，这是其他三种转换所不能做的操作。
+
+\begin{myTip}
+\verb|const_cast| 应仅用于去除非 const 或非 volatile 对象的 const 或 volatile 限定符。其他情况下会导致未定义行为：
+
+\begin{cpp}
+int const a = 42;
+int const * p = &a;
+int* q = const_cast<int*>(p);
+*q = 0; // undefined behavior
+\end{cpp}
+
+变量 p 指向了一个声明为常量的对象（变量 a）。通过去除 const 限定符，尝试修改指向的对象引入了未定义行为。
+\end{myTip}
+
+\mySubsubsection{}{There's more...}
+
+当使用形如 (type)expression 的显式类型转换时，会选择满足特定转换要求的第一个选项：
+
+\begin{enumerate}
+\item
+\verb|const_cast<type>(expression)|
+
+\item
+\verb|static_cast<type>(expression)|
+
+\item
+\verb|static_cast<type>(expression)| + \verb|const_cast<type>(expression)|
+
+\item
+\verb|reinterpret_cast<type>(expression)|
+
+\item
+\verb|reinterpret_cast<type>(expression)| + \verb|const_cast<type>(expression)|
+\end{enumerate}
+
+此外，与特定的 C++ 转换不同，静态转换可以用于不完整类类型之间的转换。如果类型和表达式都是指向不完整类型的指针，那么选择 \verb|static_cast| 或 \verb|reinterpret_cast|都可以。
+
+
+

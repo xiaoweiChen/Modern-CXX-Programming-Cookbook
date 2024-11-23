@@ -1,0 +1,136 @@
+
+授予函数和类通过友元声明访问一个类的非公共部分，通常会视为设计不佳的标志，因为友元关系会破坏了封装，并且将类和函数绑定在一起。无论是作为类还是函数的友元，都可以访问该类的所有私有成员，即使它们可能只需要访问其中的一部分。
+
+律师-客户惯用法（Attorney-Client Idiom）提供了一种简单的机制，以限制友元对类中仅指定的私有成员的访问。
+
+\mySubsubsection{}{Getting ready}
+
+为了演示如何实现这一惯用法，使用以下类：Client，有一些私有成员数据和函数（此处公共接口不重要），以及 Friend，只访问私有细节的一部分，例如 data1 和 action1()，但却可以访问所有内容：
+
+\begin{cpp}
+class Client
+{
+    int data_1;
+    int data_2;
+    void action1() {}
+    void action2() {}
+    friend class Friend;
+public:
+    // public interface
+};
+class Friend
+{
+public:
+    void access_client_data(Client& c)
+    {
+        c.action1();
+        c.action2();
+        auto d1 = c.data_1;
+        auto d2 = c.data_1;
+    }
+};
+\end{cpp}
+
+要理解这一惯用法，必须熟悉 C++ 语言中友元是如何声明的以及是如何工作的。
+
+\mySubsubsection{}{How to do it...}
+
+按照以下步骤限制友元对类型中，仅需访问的私有成员进行访问：
+
+\begin{enumerate}
+\item
+Client 类型中，向友元提供了对所有私有成员的访问权限，声明对一个中间类型的友元关系，这个中间类型称为 Attorney 类型：
+
+\begin{cpp}
+class Client
+{
+    int data_1;
+    int data_2;
+    void action1() {}
+    void action2() {}
+    friend class Attorney;
+public:
+    // public interface
+};
+\end{cpp}
+
+\item
+创建一个只包含访问用户私有成员的私有（内联）函数的类型。这个中间类型允许实际的友元访问其私有成员：
+
+\begin{cpp}
+class Attorney
+{
+    static inline void run_action1(Client& c)
+    {
+        c.action1();
+    }
+    static inline int get_data1(Client& c)
+    {
+        return c.data_1;
+    }
+    friend class Friend;
+};
+\end{cpp}
+
+\item
+Friend 类型中，通过 Attorney 类型间接访问 Client 类型的私有成员：
+
+\begin{cpp}
+class Friend
+{
+public:
+    void access_client_data(Client& c)
+    {
+        Attorney::run_action1(c);
+        auto d1 = Attorney::get_data1(c);
+    }
+};
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+律师-客户惯用法通过引入一个中介——律师，来布置一个简单的机制，以限制对客户私有成员的访问。客户类型不是直接向使用其内部状态的实例提供友元关系，而是向律师提供友元关系，律师反过来提供对客户私有数据或函数的受限集的访问。律师通过定义私有静态函数来实现这一点，这些也是内联函数，可以避免由于律师类引入的间接层导致的运行时开销。客户的友元通过实际使用律师的私有成员来访问客户的私有成员。这一惯用法称为律师-客户，其类似于律师-客户关系的工作方式，即律师知道客户的所有秘密，但只向其他方透露其中的一些。
+
+实际上，如果不同的友元类或函数需要访问不同的私有成员，可能有必要为客户创建不止一个律师。
+
+另一方面，友元关系不是可继承的，所以与类 B 成为友元的类或函数并不是与从 B 派生的类 D 成为友元。然而，D 中重写的虚函数，仍然可以通过指向 B 的指针或引用从友元类中多态地访问。下面的例子展示了这种情况，从 F 调用 run() 方法会打印出 base 和 derived：
+
+\begin{cpp}
+class B
+{
+    virtual void execute() { std::cout << "base" << '\n'; }
+    friend class BAttorney;
+};
+class D : public B
+{
+    virtual void execute() override
+    { std::cout << "derived" << '\n'; }
+};
+class BAttorney
+{
+    static inline void execute(B& b)
+    {
+        b.execute();
+    }
+    friend class F;
+};
+class F
+{
+public:
+    void run()
+    {
+        B b;
+        BAttorney::execute(b); // prints 'base'
+        D d;
+        BAttorney::execute(d); // prints 'derived'
+    }
+};
+F;
+f.run();
+\end{cpp}
+
+使用设计模式总是存在权衡，这一模式也不例外。某些情况下，使用该模式可能导致开发、测试和维护方面的开销过多。然而，对于某些类型的软件，如可扩展框架，该模式可能极具价值。
+
+
+

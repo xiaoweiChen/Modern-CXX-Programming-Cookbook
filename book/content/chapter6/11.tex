@@ -1,0 +1,313 @@
+
+有时需要编写一个函数，该函数既返回一些数据，又返回成功或失败的指示（最简单的情况下作为布尔值，复杂情况下作为错误码）。通常，这个问题可以通过返回状态码，并使用按引用传递的参数来返回数据，或者在失败时返回实际数据但抛出异常来解决。随着 std::optional 和 std::variant 的可用性，出现了新的解决方案。C++23 标准提供了一种新的方法，即 std::expected 类型，这是之前提到的两种类型的某种结合体。这种类型存在于其他编程语言中，如 Rust 中的 Result 和 Haskell 中的 Either。本示例中，将介绍如何使用新的 std::expected 类型。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中所示的例子，将使用这里定义的数据类型：
+
+\begin{cpp}
+enum class Status
+{
+    Success, InvalidFormat, InvalidLength, FilterError,
+};
+enum class Filter
+{
+    Pixelize, Sepia, Blur
+};
+using Image = std::vector<char>;
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+可以使用 <expected> 头文件的 std::expected<T, E> 类型，如下例所示：
+
+\begin{itemize}
+\item
+当从函数返回数据时，若执行过程中出现错误则返回 std::unexpected<E>，若一切顺利则返回数据（T 类型的值）：
+
+\begin{cpp}
+bool IsValidFormat(Image const& img) { return true; }
+bool IsValidLength(Image const& img) { return true; }
+bool Transform(Image& img, Filter const filter)
+{
+    switch(filter)
+    {
+        case Filter::Pixelize:
+            img.push_back('P');
+            std::cout << "Applying pixelize\n";
+        break;
+        case Filter::Sepia:
+            img.push_back('S');
+            std::cout << "Applying sepia\n";
+        break;
+        case Filter::Blur:
+            img.push_back('B');
+            std::cout << "Applying blur\n";
+        break;
+    }
+    return true;
+}
+std::expected<Image, Status> ApplyFilter(Image img,
+                                         Filter const filter)
+{
+    if (!IsValidFormat(img))
+        return std::unexpected<Status> {Status::InvalidFormat};
+    if (!IsValidLength(img))
+        return std::unexpected<Status> {Status::InvalidLength};
+    if (!Transform(img, filter))
+        return std::unexpected<Status> {Status::FilterError};
+    return img;
+}
+std::expected<Image, Status> FlipHorizontally(Image img)
+{
+    return Image{img.rbegin(), img.rend()};
+}
+\end{cpp}
+
+\item
+当检查返回 std::expected<T, E> 类型的函数的结果时，使用布尔操作符（或 \verb|has_value()| 方法）检查对象是否持有预期值，使用 value() 和 error() 方法分别返回预期值或意外错误：
+
+\begin{cpp}
+void ShowImage(Image const& img)
+{
+    std::cout << "[img]:";
+    for(auto const & e : img) std::cout << e;
+    std::cout << '\n';
+}
+void ShowError(Status const status)
+{
+    std::cout << "Error code: "
+              << static_cast<int>(status) << '\n';
+}
+int main()
+{
+    Image img{'I','M','G'};
+
+    auto result = ApplyFilter(img, Filter::Sepia);
+    if (result)
+    {
+        ShowImage(result.value());
+    }
+    else
+    {
+        ShowError(result.error());
+    }
+}
+\end{cpp}
+
+\item
+可以使用单子操作 \verb|and_then()|、\verb|or_else()|、\verb|transform()| 和 \verb|transform_error()| 组合返回 std::expected 值的函数的操作链：
+
+\begin{cpp}
+int main()
+{
+    Image img{'I','M','G'};
+
+    ApplyFilter(img, Filter::Sepia)
+    .and_then([](Image result){
+        return ApplyFilter(result, Filter::Pixelize);
+    })
+    .and_then([](Image result){
+        return ApplyFilter(result, Filter::Blur);
+    })
+    .and_then([](Image result){
+        ShowImage(result);
+        return std::expected<Image, Status>{result};
+    })
+    .or_else([](Status status){
+        ShowError(status);
+        return std::expected<Image, Status>{std::unexpect,
+            status};
+    });
+}
+\end{cpp}
+
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::expected<T, E> 类模板可在 C++23 头文件 <expected> 中找到。这个类是 std::variant 和 std::optional 类型（C++17）的混合体，但设计目的是从函数返回数据或意外值。具有区分联合的逻辑结构，要么持有预期类型 T 的值，要么持有意外类型（错误）E 的值。然而，其接口与 std::optional 类非常相似，具有以下成员：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{函数}                   & \textbf{描述}                                                                                                 \\ \hline
+\endfirsthead
+%
+\endhead
+%
+has\_value()                        & 返回一个布尔值，指示对象是否包含预期值。                        \\ \hline
+operator bool                       &  \begin{tabular}[c]{@{}l@{}} 与 has\_value() 相同。在 if 语句中更简便地使用而提供\\（如 if(result) 而非 if(result.has\_value())）。\end{tabular}  \\ \hline
+value() &
+\begin{tabular}[c]{@{}l@{}}返回预期值，除非对象包含意外值。这时，将抛出一个包含意\\外值的 std::bad\_expected\_access<E> 异常。\end{tabular} \\ \hline
+value\_or() &
+\begin{tabular}[c]{@{}l@{}}类似于 value()，但如果对象存储了意外值，则返回提供的替\\代值，而不是抛出异常。\end{tabular}  \\ \hline
+error()                             & 返回意外值。如果对象持有预期值，则行为未定义。                  \\ \hline
+operator-\textgreater and operator* & 访问预期值。如果对象持有意外值，则行为未定义。                \\ \hline
+\end{longtable}
+
+\begin{center}
+表 6.2: std::expected 最重要的成员列表
+\end{center}
+
+之前提到过 std::expected 类型是两个类型 T（预期）和 E（错误）的区分联合，但这并不完全正确。其实际持有的类型要么是 T，要么是 std::unexpected<E>。后者是一个持有 E 类型对象的帮助类。用于 T 和 E 的可能类型有一些限制：
+
+\begin{itemize}
+\item
+T 可以是 void 或者可销毁类型（可以调用析构函数的类型）。数组和引用类型不能替换 T。如果类型 T 是 void 类型，则 value\_or() 方法不可用。
+
+\item
+E 必须是可销毁类型。数组、引用类型，以及带有 const 和 volatile 限定符的类型不能替换 E。
+\end{itemize}
+
+当想对一个值应用多个操作时，会发生这种情况。在例子中，这可能是连续应用不同的滤镜到图像上。但也可能是其他操作，比如调整图像大小、改变格式/类型、不同方向翻转等等。这些操作中的每一个都会返回一个 std::expected 值。这时，可以编写如下代码：
+
+\begin{cpp}
+int main()
+{
+    Image img{'I','M','G'};
+
+    auto result = ApplyFilter(img, Filter::Sepia);
+    result = ApplyFilter(result.value(), Filter::Pixelize);
+    result = ApplyFilter(result.value(), Filter::Blur);
+    result = FlipHorizontally(result.value());
+    if (result)
+    {
+        ShowImage(result.value());
+    }
+    else
+    {
+        ShowError(result.error());
+    }
+}
+\end{cpp}
+
+如果没有错误发生，则运行此程序的结果如下：
+
+\begin{shell}
+Applying sepia
+Applying pixelize
+Applying blur
+[img]:BPSGMI
+\end{shell}
+
+如果在 ApplyFilter() 函数中发生错误，随后调用 value() 方法会导致 std::bad\_expected\_access 异常。实际上，必须在每次操作后检查结果。可以通过使用单子操作来改进。
+
+由于 std::expected 类型类似于 std::optional 类型，因此 C++23 中为 std::optional 提供的单子操作也适用于 std::expected。这些操作包括：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{函数}  & \textbf{描述}                                                                                     \\ \hline
+\endfirsthead
+%
+\endhead
+%
+and\_then() &
+\begin{tabular}[c]{@{}l@{}} std::expected 对象包含预期值（类型为 T），则应用给定函数并返回\\结果。否则，返回 std::expected 值。\end{tabular} \\ \hline
+or\_else() &
+\begin{tabular}[c]{@{}l@{}} std::expected 对象包含意外值（类型为 E），则应用给定函数并返回\\结果。否则，返回 std::expected 值。\end{tabular} \\ \hline
+transform()        & \begin{tabular}[c]{@{}l@{}} 这与 and\_then() 类似，只是返回值包装在 std::expected 值中。\end{tabular} \\ \hline
+transform\_error() & \begin{tabular}[c]{@{}l@{}}这与 or\_else() 类似，只是返回值包装在 std::expected 值中。\end{tabular}  \\ \hline
+\end{longtable}
+
+\begin{center}
+表 6.3: std::expected 的一元操作
+\end{center}
+
+可以使用单子操作重新编写最后一段代码：
+
+\begin{cpp}
+int main()
+{
+    Image img{'I','M','G'};
+
+    ApplyFilter(img, Filter::Sepia)
+    .and_then([](Image result){
+        return ApplyFilter(result, Filter::Pixelize);
+    })
+    .and_then([](Image result){
+        return ApplyFilter(result, Filter::Blur);
+    })
+    .and_then(FlipHorizontally)
+    .and_then([](Image result){
+        ShowImage(result);
+        return std::expected<Image, Status>{result};
+    })
+    .or_else([](Status status){
+        ShowError(status);
+        return std::expected<Image, Status>{std::unexpect, status};
+    });
+}
+\end{cpp}
+
+如果没有错误发生，则输出就是看到的那样。如果发生错误，比如说在使用 sepia 滤镜时，则输出会变为：
+
+\begin{shell}
+Applying sepia
+Error code: 3
+\end{shell}
+
+这个例子只展示了可用的单子操作中的两个，and\_then() 和 or\_else()。另外两个，transform() 和 transform\_error()也是类似，但其旨在将预期值或意外值转换为另一个值。下面的代码段（对前一个代码段的修改）中，无论是在预期值还是意外值的情况下，都连接了一个转换操作，最终返回一个字符串：
+
+\begin{cpp}
+int main()
+{
+    Image img{'I','M','G'};
+
+    auto obj = ApplyFilter(img, Filter::Sepia)
+    .and_then([](Image result){
+        return ApplyFilter(result, Filter::Pixelize);
+    })
+    .and_then([](Image result){
+        return ApplyFilter(result, Filter::Blur);
+    })
+    .and_then(FlipHorizontally)
+    .and_then([](Image result){
+        ShowImage(result);
+        return std::expected<Image, Status>{result};
+    })
+    .or_else([](Status status){
+        ShowError(status);
+        return std::expected<Image, Status>{std::unexpect, status};
+    })
+    .transform([](Image result){
+        std::stringstream s;
+        s << std::quoted(std::string(result.begin(),
+        result.end()));
+        return s.str();
+    })
+    .transform_error([](Status status){
+        return status == Status::Success ? "success" : "fail";
+    });
+    if(obj)
+        std::cout << obj.value() << '\n';
+    else
+        std::cout << obj.error() << '\n';
+}
+\end{cpp}
+
+如果在执行此程序的过程中没有发生任何错误，将输出以下内容：
+
+\begin{shell}
+Applying sepia
+Applying pixelize
+Applying blur
+[img]:BPSGMI
+"BPSGMI"
+\end{shell}
+
+如果在执行过程中发生错误，例如：使用 sepia 滤镜时，输出将变为：
+
+\begin{shell}
+Applying sepia
+Error code: 3
+fail
+\end{shell}
+
+上面的 or\_else() 函数中，可能会注意到使用了 std::unexpected。这是一个帮助类，用作 std::expected 构造函数的标签，以表明正在构造一个意外值。参数会完美转发给 E 类型（意外类型）的构造函数。对于新创建的 std::expected 值，has\_value() 方法将返回 false，表示其持有一个意外值。
+

@@ -1,0 +1,138 @@
+
+前一个示例中，介绍了一种称为奇特递归模板模式（Curiously Recurring Template Pattern，简称 CRTP）的设计模式，以及如何用于向类型添加通用功能。但这并非其唯一的用途；其他用途还包括限制类型实例化的次数和实现组合模式。与此模式相关的是另一种称为混入（mixins）的模式。混入是小类型，旨在向其他现有类型添加功能，能找到一些文章声称混入模式是通过 CRTP 实现的，这并不正确。事实上，CRTP 和混入模式相似，两者都用于向类型添加功能，但结构不同。CRTP 中，基类向从中派生的类添加功能。而混入类则是向其派生自的类添加功能，所以混入可以说是一种倒置的 CRTP。本示例中，将介绍如何使用混入向现有类添加通用功能。为此，继续研究相同的绘制控件（如按钮和复选框）的例子。这将有助于与 CRTP 进行良好的比较，能够更好地理解两者之间的差异（和相似之处）。
+
+\mySubsubsection{}{How to do it...}
+
+为了使用混入模式向现有类添加通用功能，请按照以下步骤操作（下面的例子中，通用功能是指绘制控件的背景和内容）：
+
+\begin{enumerate}
+\item
+考虑表现出通用功能的类型（可能是不相关的类型）：
+
+\begin{cpp}
+class button
+{
+public:
+    void erase_background()
+    {
+        std::cout << "erasing button background..." << '\n';
+    }
+    void paint()
+    {
+        std::cout << "painting button..." << '\n';
+    }
+};
+class checkbox
+{
+public:
+    void erase_background()
+    {
+        std::cout << "erasing checkbox background..." << '\n';
+    }
+    void paint()
+    {
+        std::cout << "painting checkbox..." << '\n';
+    }
+};
+\end{cpp}
+
+\item
+创建一个从其类型模板参数派生的类模板。这个混入类定义了一些新的功能，这些功能是基于基类的现有功能实现的：
+
+\begin{cpp}
+template <typename T>
+class control : public T
+{
+public:
+    void draw()
+    {
+        T::erase_background();
+        T::paint();
+    }
+};
+\end{cpp}
+
+\item
+实例化并使用混入类的实例来利用添加的功能：
+
+\begin{cpp}
+control<button> b;
+b.draw();
+control<checkbox> c;
+c.draw();
+\end{cpp}
+\end{enumerate}
+
+
+\mySubsubsection{}{How it works...}
+
+混入是一种向现有类型添加新功能的概念，这个模式在许多编程语言中实现方式不同。C++ 中混入是一个小类，向现有的类添加功能（无需对现有类进行任何修改）。为此，需要：
+
+\begin{itemize}
+\item
+让混入类成为一个模板。在例子中，这就是 control 类型。如果只有一个类型需要扩展，则无需使用模板，因为不会有代码重复。实际上，这可为多个类似类型添加通用功能。
+
+\item
+从其类型模板参数派生，该参数预期将用要扩展的类型实例化。通过重用类型模板参数类的功能来实现添加的功能。在例子中，新功能是 draw()，其使用了 \verb|T::erase_background()| 和 \verb|T::paint()|。
+\end{itemize}
+
+由于混入类是一个模板，不能多态地处理。例如，可能希望有一个函数能够绘制按钮、复选框和其他任何可绘制的控件。这样的函数可能像这样：
+
+\begin{cpp}
+void draw_all(std::vector<???*> const & controls)
+{
+    for (auto& c : controls)
+    {
+        c->draw();
+    }
+}
+\end{cpp}
+
+但在这一代码中，\verb|???| 代表什么？需要一个非模板的基类才能使其多态地工作。这样一个基类可能像这样：
+
+\begin{cpp}
+class control_base
+{
+    public:
+    virtual ~control_base() {}
+    virtual void draw() = 0;
+};
+\end{cpp}
+
+混入类（control）也需要从这个基类（\verb|control_base|）派生，而且 draw() 函数将成为一个覆盖的虚函数：
+
+\begin{cpp}
+template <typename T>
+class control : public control_base, public T
+{
+public:
+    void draw() override
+    {
+        T::erase_background();
+        T::paint();
+    }
+};
+\end{cpp}
+
+这能够多态地处理 control 实例：
+
+\begin{cpp}
+void draw_all(std::vector<control_base*> const & controls)
+{
+    for (auto& c : controls)
+    {
+        c->draw();
+    }
+}
+int main()
+{
+    std::vector<control_base*> controls;
+    control<button> b;
+    control<checkbox> c;
+    draw_all({&b, &c});
+}
+\end{cpp}
+
+正如这个示例和前一个示例中看到的那样，混入和 CRTP 都是为了同一个目的，即向类添加功能。此外，尽管实际模式结构不同，看起来非常相似。
+
+

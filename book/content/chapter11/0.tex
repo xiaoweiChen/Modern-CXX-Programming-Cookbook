@@ -1,0 +1,79 @@
+测试代码是软件开发的重要组成部分。虽然 C++ 标准中没有支持测试的功能，但有许多框架可用于单元测试 C++ 代码。本章的目的在于让你开始接触几个现代且广泛使用的测试框架，这些框架使你能够编写可移植的测试代码。本章将涵盖的框架有 Boost.Test、Google Test 和 Catch2。
+
+本章包含以下示例：
+
+\begin{itemize}
+\item
+开始使用 Boost.Test
+
+\item
+使用 Boost.Test 编写和调用测试
+
+\item
+使用 Boost.Test 断言
+
+\item
+使用 Boost.Test 的测试固件
+
+\item
+使用 Boost.Test 控制输出
+
+\item
+开始使用 Google Test
+
+\item
+使用 Google Test 编写和调用测试
+
+\item
+使用 Google Test 断言
+
+\item
+使用 Google Test 的测试固件
+
+\item
+使用 Google Test 控制输出
+
+\item
+开始使用 Catch2
+
+\item
+使用 Catch2 编写和调用测试
+
+\item
+使用 Catch2 断言
+
+\item
+使用 Catch2 控制输出
+\end{itemize}
+
+选择这三个框架是因为它们广泛的使用、丰富的功能、易于编写和执行、可扩展性和可定制性。下表简要比较了这三个库的特点：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|}
+\hline
+\textbf{特性}            & \textbf{Boost.Test}  & \textbf{Google Test} & \textbf{Catch2 (v3)}      \\ \hline
+\endfirsthead
+%
+\endhead
+%
+易于安装             & Yes                  & Yes                  & Yes                       \\ \hline
+仅头文件库                  & Yes                  & No                   & No                        \\ \hline
+编译库            & Yes                  & Yes                  & Yes                       \\ \hline
+易于编写测试         & Yes                  & Yes                  & Yes                       \\ \hline
+自动测试注册 & Yes                  & Yes                  & Yes                       \\ \hline
+支持测试套件        & Yes                  & Yes                  & No (通过标签间接支持) \\ \hline
+支持固件           & Yes (设置/清理) & Yes (设置/清理) & Yes (多种方式)       \\ \hline
+丰富的断言集         & Yes                  & Yes                  & Yes                       \\ \hline
+非致命断言           & Yes                  & Yes                  & Yes                       \\ \hline
+多种输出格式  & Yes (包括 HRF, XML) & Yes (包括 HRF, XML) & Yes (包括 HRF, XML) \\ \hline
+测试执行过滤n & Yes                  & Yes                  & Yes                       \\ \hline
+许可证                      & Boost                & Apache 2.0           & Boost                     \\ \hline
+\end{longtable}
+
+\begin{center}
+表 11.1: Boost.Test、Google Test 和 Catch2 的特性对比
+\end{center}
+
+每个框架的所有这些特点都将在本章中详细讨论。本章结构对称，每个测试框架有 4 到 5 个示例。首先介绍的框架是 Boost.Test。

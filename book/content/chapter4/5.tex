@@ -1,0 +1,134 @@
+
+前面的示例中，介绍了如何使用 \verb|static_assert| 和 \verb|std::enable_if| 对类型和函数施加限制，以及这两个方法的不同之处。在定义函数重载或编写变参函数模板时使用 SFINAE 和 \verb|std::enable_if|，模板元编程可能会变得复杂和混乱。C++17 的新特性旨在简化这样的代码，称为 constexpr if，其定义了一个在编译时评估条件的 if 语句，导致编译器在转换单元中选择分支的一个体或另一个体。constexpr if 的典型用途是简化变参模板和基于 \verb|std::enable_if| 的代码。
+
+\mySubsubsection{}{Getting ready}
+
+这个示例中，会参考并简化前两个示例中的代码。继续这个示例之前，应该花点时间回顾一下前几个示例：
+
+\begin{itemize}
+\item
+使用 \verb|enable_if| 条件编译类和函数示例中的 \verb|compute()| 函数重载，针对整型和非整型类型。
+
+\item
+第2章中创建原始用户定义字面量示例中的用户定义 8 位、16 位和 32 位二进制字面量。
+\end{itemize}
+
+这些实现有几个问题：
+
+\begin{itemize}
+\item
+难以阅读。很多注意力都集中在模板声明上，而函数体却非常简单。最大的问题是需要开发人员更多的注意力，因为其充斥着复杂的声明，比如 \verb|typename = std::enable_if<std::is_integral<T>::value, T>::type|。
+
+\item
+代码太多。第一个例子的最终目的是拥有一个对不同类型行为不同的通用函数，但需要为这个函数编写两个重载；此外，为了区分这两个重载，需要使用一个额外的未使用的模板参数。第二个例子中，目的是从字符 '0' 和 '1' 构建一个整数值，但需要编写一个类模板和三个特化来实现。
+
+\item
+要求具备高级的模板元编程技能，而这些技能对于完成如此简单的任务来说完全没必要。
+\end{itemize}
+
+constexpr if 的语法与常规的 if 语句非常相似，需要在条件前加上 constexpr 关键字：
+
+\begin{cpp}
+if constexpr (init-statement condition) statement-true
+else statement-false
+\end{cpp}
+
+注意，\verb|初始化语句| 可选。
+
+接下来的部分中，将探讨使用 constexpr if 进行条件编译的几种用例。
+
+\mySubsubsection{}{How to do it...}
+
+使用 constexpr if 语句来做到以下几点：
+
+\begin{itemize}
+\item
+避免使用 \verb|std::enable_if| 并依赖 SFINAE 来对函数模板类型施加限制和有条件地编译代码：
+
+\begin{cpp}
+template <typename T>
+auto value_of(T value)
+{
+    if constexpr (std::is_pointer_v<T>)
+        return *value;
+    else
+        return value;
+}
+\end{cpp}
+
+\item
+简化变参模板的编写并实现编译时递归的元编程：
+
+\begin{cpp}
+namespace binary
+{
+    using byte8 = unsigned char;
+    namespace binary_literals
+    {
+        namespace binary_literals_internals
+        {
+            template <typename CharT, char d, char... bits>
+            constexpr CharT binary_eval()
+            {
+                if constexpr(sizeof...(bits) == 0)
+                return static_cast<CharT>(d-'0');
+                else if constexpr(d == '0')
+                return binary_eval<CharT, bits...>();
+                else if constexpr(d == '1')
+                return static_cast<CharT>(
+                (1 << sizeof...(bits)) |
+                binary_eval<CharT, bits...>());
+            }
+        }
+        template<char... bits>
+        constexpr byte8 operator""_b8()
+        {
+            static_assert(
+            sizeof...(bits) <= 8,
+            "binary literal b8 must be up to 8 digits long");
+            return binary_literals_internals::
+            binary_eval<byte8, bits...>();
+        }
+    }
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+constexpr if 的工作方式相对简单：if 语句中的条件必须是一个编译时常量表达式，该表达式可以计算为布尔值或可以转换为布尔值。如果条件为真，则选择 if 语句的主体部分，则将进入转换单元进行编译。如果条件为假，则定义的 else 分支（如果有）。丢弃的 constexpr if 分支中的返回语句不会影响函数返回类型的推导。
+
+“How to do it...”的第一个例子中，\verb|value_of()| 函数模板有一个干净的签名。函数体也非常简单；如果替换模板参数的类型是指针类型，编译器将选择第一个分支（即 \verb|return *value;|）进行代码生成，并丢弃 else 分支。对于非指针类型，因为条件评估为假，编译器将选择 else 分支（即 \verb|return value;|）进行代码生成，并丢弃其余部分。这个函数可以这样使用：
+
+\begin{cpp}
+auto v1 = value_of(42);
+auto p = std::make_unique<int>(42);
+auto v2 = value_of(p.get());
+\end{cpp}
+
+如果没有 constexpr if 的帮助，只能使用 \verb|std::enable_if| 来实现。以下是一个杂乱的替代实现：
+
+\begin{cpp}
+template <typename T,
+          typename = typename std::enable_if_t<std::is_pointer_v<T>, T>>
+auto value_of(T value)
+{
+    return *value;
+}
+template <typename T,
+          typename = typename std::enable_if_t<!std::is_pointer_v<T>, T>>
+T value_of(T value)
+{
+    return value;
+}
+\end{cpp}
+
+constexpr if 的版本不仅更短，而且更具表现力，更容易阅读和理解。
+
+“How to do it...”的第二个例子中，内部的 \verb|binary_eval()| 辅助函数是一个没有参数的变参模板函数，只有模板参数。该函数评估第一个参数，然后以递归的方式（不是运行时递归）处理其余参数。当只剩下单个字符并且剩余包的大小为 0 时，返回由该字符表示的十进制值（对于 '0' 返回 0，对于 '1' 返回 1）。如果当前第一个元素是 '0'，返回由评估其余参数包确定的值，这涉及到一次递归调用。如果当前第一个元素是 '1'，可将 1 左移剩余包大小给出的位置数，或由评估其余参数包确定的值来返回值，这同样涉及到一次递归调用。
+
+
+
+
+
+

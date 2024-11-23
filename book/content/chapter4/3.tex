@@ -1,0 +1,85 @@
+
+C++ 中可以执行运行时和编译时断言检查，以确保代码中的特定条件为真。运行时断言的缺点在于只有在程序运行，并且控制流到达它们时才会验证。如果条件依赖于运行时数据，则没有替代方案；当情况并非如此时，应优先选择编译时断言检查。通过编译时断言，编译器能够在开发早期阶段以错误的形式通知某个特定条件未被满足。不过，这只能在条件可以在编译时评估的情况下使用。自 C++11 起，编译时断言通过 \verb|static_assert| 进行。
+
+
+\mySubsubsection{}{Getting ready}
+
+静态断言检查最常见的用途是在模板元编程中，可用于验证模板类型的前置条件是否满足（例如，类型是否为 POD 类型、可复制构造、引用类型等）。另一个典型的例子是确保类型（或对象）具有预期的大小。
+
+\mySubsubsection{}{How to do it...}
+
+使用 \verb|static_assert| 声明确保不同作用域中的条件得到满足：
+
+\begin{itemize}
+\item
+命名空间：验证类型的大小始终为 16：
+
+\begin{cpp}
+struct alignas(8) item
+{
+    int      id;
+    bool     active;
+    double   value;
+};
+static_assert(sizeof(item) == 16, "size of item must be 16 bytes");
+\end{cpp}
+
+\item
+类：验证 \verb|pod_wrapper| 只能与 POD 类型一起使用：
+
+\begin{cpp}
+template <typename T>
+class pod_wrapper
+{
+    static_assert(std::is_standard_layout_v<T>, "POD type expected!");
+    T value;
+};
+struct point
+{
+    int x;
+    int y;
+};
+pod_wrapper<int>         w1; // OK
+pod_wrapper<point>       w2; // OK
+pod_wrapper<std::string> w3; // error: POD type expected
+\end{cpp}
+
+\item
+块（函数）：验证函数模板只有整型的参数：
+
+\begin{cpp}
+template<typename T>
+auto mul(T const a, T const b)
+{
+    static_assert(std::is_integral_v<T>, "Integral type expected");
+    return a * b;
+}
+auto v1 = mul(1, 2);       // OK
+auto v2 = mul(12.0, 42.5); // error: Integral type expected
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|static_assert| 实际上是一个声明，但不引入新的名称。这些声明具有以下形式：
+
+\begin{cpp}
+static_assert(condition, message);
+\end{cpp}
+
+条件必须在编译时可转换为布尔值，而message必须是字符串字面量。从 C++17 开始，message为可选。
+
+当 \verb|static_assert| 声明中的条件求值为真时，什么也不会发生。当条件求值为假时，编译器会生成一个包含指定消息的错误（如果有消息的话）。
+
+消息参数必须是一个字符串字面量。但从 C++26 开始，其可以是一个产生字符序列的任意常量表达式。这有助于为用户提供更好的诊断信息，例如：假设存在一个 constexpr std::format() 函数：
+
+\begin{cpp}
+static_assert(
+    sizeof(item) == 16,
+    std::format("size of item must be 16 bytes but got {}", sizeof(item)));
+\end{cpp}
+
+
+
+
+

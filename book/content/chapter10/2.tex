@@ -1,0 +1,287 @@
+
+pimpl 是指实现指针（也称为柴郡猫惯用法或编译器防火墙惯用法），是一种不透明指针技术，能够使实现细节与接口分离。这具有改变实现而无需修改接口的优势，因此避免了重新编译使用该接口的代码的需求。当只有实现细节发生变化时，这有可能使得使用 pimpl 惯用法的库在其 ABI 上与旧版本向后兼容。这个示例中，将介绍如何使用现代 C++ 特性来实现 pimpl 惯用法。
+
+\begin{myNotic}
+术语 ABI 表示应用程序二进制接口，指的是两个二进制模块之间的接口。通常，这样的模块是库或操作系统，另一个是由用户执行的程序。
+\end{myNotic}
+
+\mySubsubsection{}{Getting ready}
+
+读者应熟悉智能指针和 \verb|std::string_view|，这两者都在本书的前几章中讨论过。
+
+为了以一种实用的方式演示 pimpl 惯用法，将使用以下类型，然后按照 pimpl 模式对其进行重构：
+
+\begin{cpp}
+class control
+{
+    std::string text;
+    int width = 0;
+    int height = 0;
+    bool visible = true;
+    void draw()
+    {
+        std::cout
+        << "control " << '\n'
+        << " visible: " << std::boolalpha << visible <<
+            std::noboolalpha << '\n'
+        << " size: " << width << ", " << height << '\n'
+        << " text: " << text << '\n';
+    }
+    public:
+    void set_text(std::string_view t)
+    {
+        text = t.data();
+        draw();
+    }
+    void resize(int const w, int const h)
+    {
+        width = w;
+        height = h;
+        draw();
+    }
+    void show()
+    {
+        visible = true;
+        draw();
+    }
+    void hide()
+    {
+        visible = false;
+        draw();
+    }
+};
+\end{cpp}
+
+此类表示一个具有诸如文本、大小和可见性等属性的控件。每当这些属性发生更改时，控件就会重绘。这个模拟实现中，绘制是将属性的值输出到控制台。
+
+\mySubsubsection{}{How to do it...}
+
+按照以下步骤实现 pimpl 惯用法，通过重构上述 control 类型来举例说明：
+
+\begin{enumerate}
+\item
+将所有私有成员，包括数据和函数，放入一个单独的类型中，将称这个类型为 pimpl 类型，原来的类型为公共类型。
+
+\item
+公共类型的头文件中，对 pimpl 类型可进行前置声明：
+
+\begin{cpp}
+// in control.h
+class control_pimpl;
+\end{cpp}
+
+\item
+公共类型定义中，使用 \verb|std::unique_ptr| 声明指向 pimpl 类型的指针。这应该是类型唯一的私有数据成员：
+
+\begin{cpp}
+class control
+{
+std::unique_ptr<control_pimpl, void(*)(control_pimpl*)> pimpl;
+public:
+    control();
+    void set_text(std::string_view text);
+    void resize(int const w, int const h);
+    void show();
+    void hide();
+};
+\end{cpp}
+
+\item
+将 pimpl 类定义放在公共类型的源文件中，pimpl 类型反映了公共类的公共接口：
+
+\begin{cpp}
+// in control.cpp
+class control_pimpl
+{
+    std::string text;
+    int width = 0;
+    int height = 0;
+    bool visible = true;
+    void draw()
+    {
+        std::cout
+            << "control " << '\n'
+            << " visible: " << std::boolalpha << visible
+            << std::noboolalpha << '\n'
+            << " size: " << width << ", " << height << '\n'
+            << " text: " << text << '\n';
+    }
+    public:
+    void set_text(std::string_view t)
+    {
+        text = t.data();
+        draw();
+    }
+    void resize(int const w, int const h)
+    {
+        width = w;
+        height = h;
+        draw();
+    }
+    void show()
+    {
+        visible = true;
+        draw();
+    }
+    void hide()
+    {
+        visible = false;
+        draw();
+    }
+};
+\end{cpp}
+
+\item
+公共类型的构造函数中实例化 pimpl 类型：
+
+\begin{cpp}
+control::control() :
+    pimpl(new control_pimpl(),
+        [](control_pimpl* pimpl) {delete pimpl; })
+{}
+\end{cpp}
+
+\item
+公共类型成员函数调用 pimpl 类型相应的成员函数：
+
+\begin{cpp}
+void control::set_text(std::string_view text)
+{
+    pimpl->set_text(text);
+}
+void control::resize(int const w, int const h)
+{
+    pimpl->resize(w, h);
+}
+void control::show()
+{
+    pimpl->show();
+}
+void control::hide()
+{
+    pimpl->hide();
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+pimpl 惯用法允许从库或模块的用户隐藏类型的内部实现：
+
+\begin{itemize}
+\item
+提供一个干净的接口。
+
+\item
+内部实现的变化不影响公共接口，这使得新版本的库（当公共接口保持不变时）能够实现二进制向后兼容。
+
+\item
+当内部实现发生变化时，使用此惯用法类型的用户不需要重新编译，无需长时间重新构建。
+
+\item
+头文件不需要包含用于私有实现的类型和函数的头文件，再次缩短了构建时间。
+\end{itemize}
+
+还有一些缺点需要注意：
+
+\begin{itemize}
+\item
+需要编写和维护更多的代码。
+
+\item
+代码可能可读性差，因为存在一层间接，所有的实现细节都需要在其他文件中查找。示例中，pimpl 类型定义是在公共类型的源文件提供，实际可能位于某个单独的文件中。
+
+\item
+公共类型到 pimpl 类型中隔着一层包装，运行时会有轻微的开销，可以忽略不计。
+
+\item
+此方法不适用于私有和受保护的成员，这些成员必须对派生类可用。
+
+\item
+此方法不适用于私有虚函数，其必须出现在类型中，要么是因为覆写了基类中的函数，要么是必须在派生类中可用以供覆写。
+\end{itemize}
+
+\begin{myTip}
+作为一个经验法则，当实现 pimpl 惯用法时，总是将所有的私有成员数据和函数（除了虚函数外）放入 pimpl 类型中，并将受保护的数据成员和函数以及所有私有虚函数留在公共类型中。
+\end{myTip}
+
+本示例中，\verb|control_pimpl| 类型基本上与原始的 control 类型相同。实践中，pimpl 类型可能需要一个指向公共类的指针，以便调用未移入 pimpl 类型的成员。
+
+关于重构后的 control 类型的实现，指向 \verb|control_pimpl| 的指针由 \verb|std::unique_ptr| 管理。这个指针的声明中，使用了自定义删除器：
+
+\begin{cpp}
+std::unique_ptr<control_pimpl, void(*)(control_pimpl*)> pimpl;
+\end{cpp}
+
+control 类型在编译器隐式定义的析构函数出现时，\verb|control_pimpl| 类型仍然是不完整的（在头文件中）。这会导致 \verb|std::unique_ptr| 出现错误，它无法删除不完整的类型。这个问题可以通过两种方式解决：
+
+\begin{itemize}
+\item
+为 control 类提供一个用户定义的析构函数，该析构函数在 \verb|control_pimpl| 类型的完整定义可用后明确实现（即使声明为默认）。
+
+\item
+\verb|std::unique_ptr| 提供一个自定义删除器。
+\end{itemize}
+
+\mySubsubsection{}{There's more...}
+
+原始的 control 类同时支持复制和移动：
+
+\begin{cpp}
+control c;
+c.resize(100, 20);
+c.set_text("sample");
+c.hide();
+control c2 = c;             // copy
+c2.show();
+control c3 = std::move(c2); // move
+c3.hide();
+\end{cpp}
+
+重构后的 control 类仅支持移动而不支持复制。下面的代码展示了一个既支持复制，又支持移动 control 类型的实现：
+
+\begin{cpp}
+class control_copyable
+{
+    std::unique_ptr<control_pimpl, void(*)(control_pimpl*)> pimpl;
+public:
+    control_copyable();
+    control_copyable(control_copyable && op) noexcept;
+    control_copyable& operator=(control_copyable && op) noexcept;
+    control_copyable(const control_copyable& op);
+    control_copyable& operator=(const control_copyable& op);
+    void set_text(std::string_view text);
+    void resize(int const w, int const h);
+    void show();
+    void hide();
+};
+control_copyable::control_copyable() :
+    pimpl(new control_pimpl(),
+        [](control_pimpl* pimpl) {delete pimpl; })
+{}
+control_copyable::control_copyable(control_copyable &&)
+    noexcept = default;
+control_copyable& control_copyable::operator=(control_copyable &&)
+    noexcept = default;
+control_copyable::control_copyable(const control_copyable& op)
+    : pimpl(new control_pimpl(*op.pimpl),
+        [](control_pimpl* pimpl) {delete pimpl; })
+{}
+control_copyable& control_copyable::operator=(
+const control_copyable& op)
+{
+    if (this != &op)
+    {
+        pimpl = std::unique_ptr<control_pimpl,void(*)(control_pimpl*)>(
+                new control_pimpl(*op.pimpl),
+                [](control_pimpl* pimpl) {delete pimpl; });
+    }
+    return *this;
+}
+// the other member functions
+\end{cpp}
+
+\verb|control_copyable| 既支持复制也支持移动，这里提供了复制构造函数和复制赋值操作符，以及移动构造函数和移动赋值操作符。后者可以默认，但前者需要明确实现，使用复制的实例创建一个新的 \verb|control_pimpl| 实例。
+
+
+

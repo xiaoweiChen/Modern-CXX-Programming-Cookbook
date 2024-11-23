@@ -1,0 +1,276 @@
+字符类型，经常是误解和困惑的来源。截至 C++20，语言中有五种字符数据类型：char、wchar\_t、char8\_t、char16\_t 和 char32\_t。本示例中，将了解一下这些类型之间的区别，以及其用途。
+
+\mySubsubsection{}{How to do it...}
+
+按照以下方式使用可用的字符类型：
+
+\begin{itemize}
+\item
+char 类型存储 ASCII 字符、ISO-8859 标准定义的拉丁字符集，甚至是 UTF-8 编码字符的单个字：
+
+\begin{cpp}
+char c = 'C';
+const char* s = "C++";
+std::cout << c <<  s << '\n';
+\end{cpp}
+
+\item
+wchar\_t 类型与 Windows API 一起存储和操作 UTF-16LE 编码的字符：
+
+\begin{cpp}
+wchar_t c = L'Ʃ';
+const wchar_t* s = L"δῆμος";
+std::wcout << c << s << '\n';
+\end{cpp}
+
+\item
+char8\_t 类型存储 UTF-8 编码的代码单元：
+
+\begin{cpp}
+char8_t c = u8'A';
+const char8_t* s = u8"Æthelflæd";
+\end{cpp}
+
+\item
+char16\_t 类型存储 UTF-16 编码的字符
+
+\begin{cpp}
+char16_t c = u'Æ';
+const char16_t* s = u"Æthelflæd";
+\end{cpp}
+
+\item
+char32\_t 类型存储 UTF-32 编码的字符
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+char32\_t c = U'\includegraphics[width=0.02\textwidth]{content/chapter2/images/code-1.png}'; \\
+const char32\_t* s = U"\includegraphics[width=0.07\textwidth]{content/chapter2/images/code-2.png}";
+}
+\end{tcolorbox}
+
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+C++ 早期，内置的字符存储数据类型就是 char 类型。这是一个不同于有符号 char 和无符号 char 的 8 位数据类型，其不是这两种数据类型中任何一种的类型定义。可以使用 std::is\_same 类型特征来测试:
+
+\begin{cpp}
+std::cout << std::is_same_v<char, signed char> << '\n';   // prints 0
+std::cout << std::is_same_v<char, unsigned char> << '\n'; // prints 0
+\end{cpp}
+
+这两行都会输出 0，所以可以为这三种数据类型编写函数重载:
+
+\begin{cpp}
+void f(char) {}
+void f(signed char) {}
+void f(unsigned char) {}
+\end{cpp}
+
+标准没有规定 char 有符号还是无符号，其符号性取决于编译器或目标平台。char 类型在 x86 和 x64 系统上有符号，在 ARM 上无符号。
+
+char 数据类型可以用来存储 ASCII 字符集中的字符和其他 8 位拉丁字符集，如 Latin-1、Latin-2、Latin/Cyrillic、Latin Nordic 等。也可以用来存储多字节字符集的单个字节，使用较多的多字节字符集是 Unicode 字符集的 UTF-8 编码。
+
+为了处理固定宽度的多字节字符集，C++98 引入了 wchar\_t 类型，这是一种独特的数据类型（不是某些整数类型的类型定义），其大小没有指定：在 Windows 上是 2 字节，而在 Unix 系统上通常是 4 字节。
+
+编写可移植代码时不应使用 wchar\_t。wchar\_t 类型主要在 Windows 上使用，用于存储 Unicode 字符集的 UTF-16LE 编码的 16 位字符。这是 Windows 操作系统的原生字符集。
+
+标准的新版本中引入了三种新的字符数据类型。C++11 添加了 char32\_t 和 char16\_t 类型，分别代表 32 位和 16 位宽字符。旨在表示 UTF-32 和 UTF-16 编码的 Unicode 字符。虽然各自是不同的类型，但在大小、符号性和对齐方式上分别与 uint\_least32\_t 和 uint\_least16\_t 相同。C++20 添加了 char8\_t 数据类型，旨在存储 UTF-8 代码单元（每个单元为 8 位）。char8\_t 类型是一个独特的 8 位类型，在大小、符号性和对齐方式上与 unsigned char 相同。
+
+将所有这些信息总结在下表中：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|}
+\hline
+\textbf{类型} & \textbf{C++ 标准} & \textbf{大小（字节）}                                                     & \textbf{符号性} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+char      & 所有版本 & 1 & 未指定 \\ \hline
+wchar\_t      & C++98                 & \begin{tabular}[c]{@{}l@{}}未指定（通常是 2 或 4）\end{tabular} & 未指定   \\ \hline
+char8\_t  & C++20        & 1 & 无符号    \\ \hline
+char16\_t & C++11        & 2 & 无符号    \\ \hline
+char32\_t & C++11        & 4 & 无符号    \\ \hline
+\end{longtable}
+
+\begin{center}
+表2.6 C++字符类型的大小和符号性总结
+\end{center}
+
+char和char8\_t类型的字符串称为窄字符串，wchar\_t、char16\_t和char32\_t类型的字符串称为宽字符串。C++标准提供了一个用于存储和操作字符序列的容器，这是一个类模板，定义了几个类型别名来简化使用：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{类型别名}  & \textbf{定义}                                  & \textbf{标准} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+std::string    & std::basic\_string\textless{}char\textgreater{}      & C++98                 \\ \hline
+std::wstring   & std::basic\_string\textless{}wchar\_t\textgreater{}  & C++98                 \\ \hline
+std::u8string  & std::basic\_string\textless{}char8\_t\textgreater{}  & C++20                 \\ \hline
+std::u16string & std::basic\_string\textless{}char16\_t\textgreater{} & C++11                 \\ \hline
+std::u32string & std::basic\_string\textless{}char32\_t\textgreater{} & C++11                 \\ \hline
+\end{longtable}
+
+\begin{center}
+表2.7 std::basic\_string的各种类型别名
+\end{center}
+
+像其他标准容器一样，std::basic\_string 提供了大量的成员函数来构造、访问元素、迭代、搜索或对包含的字符序列执行各种操作。关于 basic\_string 中数据的存储方式，在 C++11 中保证连续存储，就像数组一样。
+
+另一方面，如何处理字符串终止符可能会令人困惑。来看一个例子：
+
+\begin{cpp}
+std::string s = "demo";
+\end{cpp}
+
+存储在 basic\_string 对象中的元素是字符 'd'、'e'、'm' 和 'o'。如果遍历这个对象（例如，for (auto c : s)），会得到这些字符。size() 成员函数会返回 4。但c\_str() 和 data() 成员函数都会返回一个空终止符，所以可以保证 s[s.size()] 是 0。
+
+字符和字符串通常作为源代码中的字面量提供，不同字符类型的字面量有不同的前缀：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|}
+\hline
+\textbf{字面量前缀} & \textbf{C++ 标准} & \textbf{字符类型} & \textbf{字符串类型} \\
+\endfirsthead
+%
+\endhead
+%
+\hline
+无             & 所有版本          & char                    & const char*          \\ \hline
+L                & C++98                 & wchar\_t                & const wchar\_t*      \\ \hline
+u8 &
+C++11 &
+\begin{tabular}[c]{@{}l@{}}char（直到 C++20）\\char8\_t（自 C++20 起）\end{tabular} &
+\begin{tabular}[c]{@{}l@{}}const char*（直到 C++20）\\const char8\_t*（自 C++20 起）\end{tabular} \\ \hline
+u                & C++11                 & char16\_t               & const char16\_t*     \\ \hline
+U                & C++11                 & char32\_t               & const char32\_t*    \\ \hline
+\end{longtable}
+
+\begin{center}
+表2.8 不同字符和字符串类型的前缀
+\end{center}
+
+可以用下面的代码来演示这一点（使用 auto 是为了演示，以解释类型推导规则）：
+
+\begin{cpp}
+auto c1 = 'a';     // char
+auto c2 = L'b';    // wchar_t
+auto c3 = u8'c';   // char until C++20, char8_t in C++20
+auto c4 = u'd';    // char16_t
+auto c5 = U'e';    // char32_t
+auto sa1 = "a";    // const char*
+auto sa2 = L"a";   // const wchar_t*
+auto sa3 = u8"a";  // const char* until C++20
+// const char8_t* in C++20
+auto sa4 = u"a";   // const char16_t*
+auto sa5 = U"a";   // const char32_t*
+\end{cpp}
+
+第一部分中，由于使用了单引号，变量 c1 到 c5 推导出的字符类型取决于字面量前缀（推导出的类型在注释中提到）。第二部分中，使用了双引号，变量 sa1 到 sa5 推导出的字符串类型也取决于字面量前缀。
+
+对于 "a" 推导出的类型不是 std::string，而是 const char*。如果使用 std::string 等 basic\_string 的类型别名，必须显式定义类型（而不是使用 auto），或者使用 std::string\_literals 命名空间中提供的标准用户定义字面量后缀：
+
+\begin{cpp}
+using namespace std::string_literals;
+auto s1 = "a"s;    // std::string
+auto s2 = L"a"s;   // std::wstring
+auto s3 = u8"a"s;  // std::u8string
+auto s4 = u"a"s;   // std::u16string
+auto s5 = U"a"s;   // std::u32string
+\end{cpp}
+
+为了避免混淆，下表解释了各种指针类型的含义：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{类型} & \textbf{含义}        \\ \hline
+\endfirsthead
+%
+\endhead
+%
+char*              & 指向可变字符的可变指针。指针和指向的字符都可以修改。                           \\ \hline
+const char*        & 指向常量字符的可变指针。可以修改指针，但不能修改指向的位置的内容。       \\ \hline
+char * const       & 指向可变字符的常量指针。不能修改指针，但可以修改指向的位置的内容。 \\ \hline
+const char * const &指向常量字符的常量指针。既不能修改指针，也不能修改指向的位置的内容。   \\ \hline
+char{[}{]}    & 字符数组。 \\ \hline
+\end{longtable}
+
+\begin{center}
+表2.9: 各种指针类型的含义
+\end{center}
+
+上表中，前缀 u8 在不同的标准中有不同的行为：
+
+\begin{itemize}
+\item
+从 C++11 起到 C++20，其定义了一个 char 类型的字面量。
+
+\item
+自 C++20 起，随着 char8\_t 的引入，其定义了一个 char8\_t 类型的字面量。
+\end{itemize}
+
+这个 C++20 的变化是一个破坏性的变更，选择这种方式是为了避免引入另一个可能进一步复杂化的字面量前缀。
+
+一个字符或字符串字面量，可以包含代码点值，而非实际字符。这些必须用 \verb|\u|（用于4位十六进制代码点）或 \verb|\U|（用于8位十六进制代码点）转义。下面是一个例子：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+std::u16string hb = u"Harald Bluetooth \verb|\u|16BC\verb|\u|16d2"; // \includegraphics[width=0.02\textwidth]{content/chapter2/images/code-3.png}  \\
+std::u32string eh = U"Egyptian hieroglyphs \verb|\U|00013000 \verb|\U|000131B2"; // \includegraphics[width=0.04\textwidth]{content/chapter2/images/code-4.png}
+}
+\end{tcolorbox}
+
+C++23可以使用 Unicode 代替代码点值。可使用 \verb|\N{xxx}| 转义序列完成，其中 xxx 是分配给该 Unicode ，所以上面的代码也可以写成如下形式：
+
+\begin{cpp}
+std::u16string hb = u"Harald Bluetooth \N{Runic Letter Long-Branch-Hagall H}\N{Runic Letter Berkanan Beorc Bjarkan B}";
+std::u32string eh = U"Egyptian hieroglyphs \N{EGYPTIAN HIEROGLYPH A001} \N{EGYPTIAN HIEROGLYPH M003A}";
+\end{cpp}
+
+此外，C++23可以使用任意数量的十六进制数字表示代码点值。前面的例子中，包含埃及象形文字的字符串包含了代码点 13000，这是一个五位数的十六进制数。但由于 \verb|\U| 转义序列要求有八个十六进制数字，需要加上三个前导零 (\verb|\U00013000|)。C++23不再必要前导零，但需要使用 \verb|\u{n…}|（小写的 u），其中 n… 表示任意数量的十六进制数字，所以字符串也可以写成如下形式：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+std::u32string eh = U"Egyptian hieroglyphs \verb|\u{13000} \u{131B2}|"; // \includegraphics[width=0.04\textwidth]{content/chapter2/images/code-4.png}
+}
+\end{tcolorbox}
+
+可以使用多种方法将字符和字符串输出到控制台：
+
+\begin{itemize}
+\item
+使用 std::cout 和 std::wcout 全局对象
+
+\item
+使用 printf 函数族
+
+\item
+使用 C++23 中的 std::print 函数族
+
+\item
+使用第三方文本处理库，例如 fmt 库（ C++20 和 C++23 中标准工具 std::format 和 std::print 的来源）
+\end{itemize}
+
+std::cout 和 std::wcout 全局对象可用于将 \verb|char/const char*/std::string| 值和 \verb|wchar_t/const wchar_t*/std::wstring| 值分别输出到标准输出控制台。打印 ASCII 字符不会有问题，但处理其他字符集和编码（如 UTF-8）则更加困难(没有标准支持)，不同平台需要不同的解决方案。关于这个话题，可以在下一个示例中了解更多。
+
+
+
+
+
+
+
+

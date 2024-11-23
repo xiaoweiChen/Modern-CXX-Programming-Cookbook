@@ -1,0 +1,123 @@
+之前的示例中，已经看到了如何使用 std::bitset 和 std::vector<bool> 来处理固定和可变长度的位序列。而在某些情况下，需要操作或处理无符号整数值的单个或多个位。这包括计数或旋转位等操作，C++20 标准提供了一组位操作函数。这个示例中，将介绍这些是什么以及如何使用这些工具。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中讨论的所有函数模板都在新的 C++20 头文件 <bit> 中的 std 命名空间内可用。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下函数模板来操作无符号整型的位：
+
+\begin{itemize}
+\item
+如果需要进行循环移位，请使用 std::rotl<T>() 进行左旋，使用 std::rotr<T>() 进行右旋：
+
+\begin{cpp}
+unsigned char n = 0b00111100;
+auto vl1 = std::rotl(n, 0); // 0b00111100
+auto vl2 = std::rotl(n, 1); // 0b01111000
+auto vl3 = std::rotl(n, 3); // 0b11100001
+auto vl4 = std::rotl(n, 9); // 0b01111000
+auto vl5 = std::rotl(n, -2);// 0b00001111
+auto vr1 = std::rotr(n, 0);  // 0b00111100
+auto vr2 = std::rotr(n, 1);  // 0b00011110
+auto vr3 = std::rotr(n, 3);  // 0b10000111
+auto vr4 = std::rotr(n, 9);  // 0b00011110
+auto vr5 = std::rotr(n, -2); // 0b11110000
+\end{cpp}
+
+\item
+如果需要计算连续的 0 位数量（即直到找到 1 为止），请使用 \verb|std::countl_zero<T>()| 从左向右计数（即从最高有效位开始）和 \verb|std::countr_zero<T>()| 从右向左计数（即从最低有效位开始）：
+
+\begin{cpp}
+std::cout << std::countl_zero(0b00000000u) << '\n'; // 8
+std::cout << std::countl_zero(0b11111111u) << '\n'; // 0
+std::cout << std::countl_zero(0b00111010u) << '\n'; // 2
+std::cout << std::countr_zero(0b00000000u) << '\n'; // 8
+std::cout << std::countr_zero(0b11111111u) << '\n'; // 0
+std::cout << std::countr_zero(0b00111010u) << '\n'; // 1
+\end{cpp}
+
+\item
+如果需要计算连续的 1 位数量（即直到找到 0 为止），请使用 \verb|std::countl_one<T>()| 从左向右计数（即从最高有效位开始）和 \verb|std::countr_one<T>()| 从右向左计数（即从最低有效位开始）：
+
+\begin{cpp}
+std::cout << std::countl_one(0b00000000u) << '\n'; // 0
+std::cout << std::countl_one(0b11111111u) << '\n'; // 8
+std::cout << std::countl_one(0b11000101u) << '\n'; // 2
+std::cout << std::countr_one(0b00000000u) << '\n'; // 0
+std::cout << std::countr_one(0b11111111u) << '\n'; // 8
+std::cout << std::countr_one(0b11000101u) << '\n'; // 1
+\end{cpp}
+
+\item
+如果需要计算 1 位的数量，请使用 std::popcount<T>()。0 位的数量则是用来表示该值的位数（这可以通过 \verb|std::numeric_limits<T>::digits| 确定）减去 1 位的数量：
+
+\begin{cpp}
+std::cout << std::popcount(0b00000000u) << '\n'; // 0
+std::cout << std::popcount(0b11111111u) << '\n'; // 8
+std::cout << std::popcount(0b10000001u) << '\n'; // 2
+\end{cpp}
+
+\item
+如果需要检查一个数字是否为 2 的幂，请使用 \verb|std::has_single_bit<T>()|：
+
+\begin{cpp}
+std::cout << std::boolalpha << std::has_single_bit(0u) << '\n'; // false
+std::cout << std::boolalpha << std::has_single_bit(1u) << '\n'; // true
+std::cout << std::boolalpha << std::has_single_bit(2u) << '\n'; // true
+std::cout << std::boolalpha << std::has_single_bit(3u) << '\n'; // false
+std::cout << std::boolalpha << std::has_single_bit(4u) << '\n'; // true
+\end{cpp}
+
+\item
+如果需要找到大于等于给定数字的最小的 2 的幂，请使用 \verb|std::bit_ceil<T>()|。相反，如果需要找到小于等于给定数字的最大 2 的幂，请使用 \verb|std::bit_floor<T>()|：
+
+\begin{cpp}
+std::cout << std::bit_ceil(0u)  << '\n'; // 0
+std::cout << std::bit_ceil(3u)  << '\n'; // 4
+std::cout << std::bit_ceil(4u)  << '\n'; // 4
+std::cout << std::bit_ceil(31u) << '\n'; // 32
+std::cout << std::bit_ceil(42u) << '\n'; // 64
+std::cout << std::bit_floor(0u)  << '\n'; // 0
+std::cout << std::bit_floor(3u)  << '\n'; // 2
+std::cout << std::bit_floor(4u)  << '\n'; // 4
+std::cout << std::bit_floor(31u) << '\n'; // 16
+std::cout << std::bit_floor(42u) << '\n'; // 32
+\end{cpp}
+
+\item
+如果需要确定表示一个数字所需的最小位数，请使用 \verb|std::bit_width<T>()|：
+
+\begin{cpp}
+std::cout << std::bit_width(0u)    << '\n'; // 0
+std::cout << std::bit_width(2u)    << '\n'; // 2
+std::cout << std::bit_width(15u)   << '\n'; // 4
+std::cout << std::bit_width(16u)   << '\n'; // 5
+std::cout << std::bit_width(1000u) << '\n'; // 10
+\end{cpp}
+
+\item
+如果需要重新解释类型 F 的对象表示形式为类型 T 的对象表示形式，则请使用 \verb|std::bit_cast<T, F>()|：
+
+\begin{cpp}
+const double   pi   = 3.1415927;
+const uint64_t bits = std::bit_cast<uint64_t>(pi);
+const double   pi2  = std::bit_cast<double>(bits);
+std::cout
+    << std::fixed << pi   << '\n' // 3.1415923
+    << std::hex   << bits << '\n' // 400921fb5a7ed197
+    << std::fixed << pi2  << '\n';  // 3.1415923
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+上一节中提到的所有函数模板，除了 \verb|std::bit_cast<T, F>()| 外，都只适用于无符号整型。这包括 unsigned char、unsigned short、unsigned int、unsigned long 和 unsigned long long 类型，以及固定宽度的无符号整型（如 \verb|uint8_t|、\verb|uint64_t|、\verb|uint_least8_t|、\verb|uintmax_t| 等）。这些函数很简单，不需要详细的描述。
+
+与其他函数不同的是 \verb|std::bit_cast<T, F>()|，F 是要重新解释的类型，T 是我们要解释成的类型。此函数模板不要求 T 和 F 必须是无符号整型，但都必须是简单可复制的。此外，sizeof(T) 必须与 sizeof(F) 相同。
+
+该函数的规范中未提及结果中填充位的值。如果结果值不对应于类型 T 的有效值，则行为未定义。
+
+如果 T、F 和其所有子类型都不是联合类型、指针类型、成员指针类型或带有 volatile 限定符的类型，并且没有非静态数据成员为引用类型，则 \verb|std::bit_cast<T, F>()| 可以为 constexpr 。
+

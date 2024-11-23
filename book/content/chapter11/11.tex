@@ -1,0 +1,206 @@
+
+Catch2 是一个多范式测试框架，适用于 C++ 和 Objective-C。Catch2 的命名延续了其第一版框架 Catch，后者代表 C++ Automated Test Cases in Headers（C++ 中的自动化测试用例头文件）。允许开发者使用传统的测试函数组合成测试用例的方式编写测试，或者采用行为驱动开发（Behavior-Driven Development, BDD）风格，使用“给定-当-然后”（given-when-then）部分。测试是自我注册的，框架提供了多种断言宏；其中最常用的有两个：一个是致命的（即，REQUIRE），另一个是非致命的（即，CHECK）。它们对左右两边的值进行表达式分解，如果测试失败，这些值会记录下来。与第一个版本不同，Catch2 不再支持 C++03。目前版本的 Catch2 是 v3，与 Catch2 v2 相比有显著的变化，例如库不再是一个单一头文件库，而是作为一个常规库工作（需要编译），并且需要 C++14 编译器。
+
+\begin{myNotic}
+将介绍如何使用 Catch2 版本 3 编写单元测试。
+\end{myNotic}
+
+\mySubsubsection{}{Getting ready}
+
+Catch2 测试框架具有基于宏的 API。只需使用提供的宏编写测试，但想要很好地使用该框架，建议对宏有一个良好的理解。
+
+\mySubsubsection{}{How to do it...}
+
+为了使用 Catch2 测试框架，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+从 \url{https://github.com/catchorg/Catch2} 克隆或下载 Git 存储库。
+
+\item
+下载存储库后，解压存档。
+\end{enumerate}
+
+使用 Catch2 v3 版本，有两种选择：
+
+\begin{itemize}
+\item
+在测试项目中使用合并后的（amalgamated）头文件和源文件，这些文件称为 \verb|catch_amalgamated.hpp| 和 \verb|catch_amalgamated.cpp|。位于 Catch2 库的 extras 文件夹中，如果需要，可以将它们复制到测试项目中。这样做的一大优点是不必处理 CMake 脚本，但代价是增加构建时间。
+
+\item
+使用 CMake 将 Catch2 添加为项目的静态库。
+\end{itemize}
+
+要使用 Catch2 及其合并文件创建第一个测试程序，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+创建一个新的空 C++ 项目。
+
+\item
+将 \verb|catch_amalgamated.hpp| 和 \verb|catch_amalgamated.cpp| 文件从 Catch2 库的 extras 文件夹复制到测试项目中。
+
+\item
+将 \verb|catch_amalgamated.cpp| 源文件添加到项目中，以便与其他源文件（包含测试）一起编译。
+
+\item
+向项目中添加一个新源文件：
+
+\begin{cpp}
+#include "catch_amalgamated.hpp"
+TEST_CASE("first_test_case", "[learn][catch]")
+{
+    SECTION("first_test_function")
+    {
+        auto i{ 42 };
+        REQUIRE(i == 42);
+    }
+}
+\end{cpp}
+
+\item
+构建并运行项目。
+\end{enumerate}
+
+要使用 CMake 集成创建第一个 Catch2 测试程序，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+打开控制台/命令提示符，并将目录更改为已克隆/解压的 Catch2 文件的位置。
+
+\item
+使用以下命令构建库。在 Unix 系统上，运行：
+
+\begin{shell}
+cmake -Bbuild -H. -DBUILD_TESTING=OFF
+sudo cmake --build build/ --target install
+\end{shell}
+
+在 Windows 系统上，以管理员权限运行命令提示符，执行以下命令：
+
+\begin{shell}
+cmake -Bbuild -H. -DBUILD_TESTING=OFF
+cmake --build build/ --target install
+\end{shell}
+
+\item
+为 C++ 测试项目创建一个新文件夹（称为 Test）。
+
+\item
+向此文件夹中添加一个新源文件（名为 main.cpp）：
+
+\begin{cpp}
+#include <catch2/catch_test_macros.hpp>
+TEST_CASE("first_test_case", "[learn][catch]")
+{
+    SECTION("first_test_function")
+    {
+        auto i{ 42 };
+        REQUIRE(i == 42);
+    }
+}
+\end{cpp}
+
+\item
+向 Test 文件夹中添加一个 CMakeLists.txt文件：
+
+\begin{cmake}
+find_package(Catch2 3 REQUIRED)
+add_executable(Test main.cpp)
+target_link_libraries(Test PRIVATE Catch2::Catch2WithMain)
+\end{cmake}
+
+\item
+运行 cmake.exe 生成/构建项目。
+\end{enumerate}
+
+\begin{myNotic}
+使用 CMake 设置项目的方法有很多种。本示例中，提供了一个小例子，也可以在 GitHub 存储库的源文件中找到。熟悉 CMake 的读者可能会发现比这里提供的更好的方法。可以通过在线资源了解更多关于 CMake 的信息。
+\end{myNotic}
+
+\mySubsubsection{}{How it works...}
+
+Catch2 能够编写自我注册的测试用例函数，甚至提供一个默认的 main() 函数实现，以便可以专注于测试代码并减少设置代码的编写量。测试用例划分为独立运行的部分。框架并不遵循“设置-测试-清理”架构的风格。相反，测试用例部分（或更确切地说是最内层的部分，部分可以嵌套）作为测试单元被执行，同时还有所包围的部分。这使得对固件的需求变得多余，可以在多个级别上重复使用数据和设置及清理代码。
+
+测试用例和部分通过字符串而非标识符（如同大多数测试框架那样）来识别。测试用例还可以打上标签，以便根据标签执行或列出测试。测试结果以文本形式打印给人类阅读，也可以导出为 XML，使用特定于 Catch2 的模式或 JUNIT ANT 模式以方便与持续交付系统的集成。测试的执行可以参数化，以便在失败时中断（在 Windows 和 macOS 上），这样可以添加调试器并检查程序。
+
+框架易于安装和使用。如“How to do it…”部分所述，有两种替代方案：
+
+\begin{itemize}
+\item
+使用合并文件 \verb|catch_amalgamated.hpp| 和 \verb|catch_amalgamated.cpp|。这是所有头文件和源文件的合并。优点是不必担心构建 Catch2 库，只需要将这些文件复制到所需位置（通常是在项目内部），在包含测试的文件中包含 \verb|catch_amalgamated.hpp| 头文件，并将 \verb|catch_amalgamated.cpp| 与其他源文件一起构建。缺点是增加了构建时间。
+
+\item
+将 Catch2 用作静态库。这要求使用之前构建库。显式地将头文件和库文件添加到项目中，或者为此目的使用 CMake。这种方法的优势在于减少了构建时间。
+\end{itemize}
+
+上一节中展示的示例代码包含以下部分：
+
+\begin{enumerate}
+\item
+\verb|#include "catch_amalgamated.hpp"| 包含了库的合并头文件，这是所有库头文件的合并。另一方面，如果您使用的是构建版本，只需包含所需的特定头文件，例如 \verb|<catch2/catch_test_macros.hpp>|。虽然可以包含 \verb|<catch2/catch_all.hpp>|，但这将包含所有库头文件，不建议这样用。一般来说，应该只包含所需的头文件。
+
+\item
+\verb|TEST_CASE("first_test_case", "[learn][catch]")| 定义了一个名为 \verb|first_test_case| 的测试用例，有两个相关的标签：learn 和 catch。标签用于选择运行或仅列出测试用例。多个测试用例可以带有相同的标签。
+
+\item
+\verb|SECTION("first_test_function")| 定义了一个部分，即一个名为 \verb|first_test_function| 的测试函数，作为外部测试用例的一部分。
+
+\item
+\verb|REQUIRE(i == 42);| 是一个断言，告诉测试如果条件不满足则失败。
+\end{enumerate}
+
+运行此程序的输出如下：
+
+\begin{shell}
+=========================================================
+All tests passed (1 assertion in 1 test cases)
+\end{shell}
+
+\mySubsubsection{}{There's more...}
+
+如前所述，框架能够使用带有“给定-当-然后”（given-when-then）部分的行为驱动开发（BDD）风格编写测试。这是通过几个别名实现的：\verb|SCENARIO| 对应 \verb|TEST_CASE|，\verb|GIVEN|、\verb|WHEN|、\verb|AND_WHEN|、\verb|THEN| 和 \verb|AND_THEN| 对应 \verb|SECTION|。使用这种风格，可以重写之前展示的测试：
+
+\begin{cpp}
+SCENARIO("first_scenario", "[learn][catch]")
+{
+    GIVEN("an integer")
+    {
+        auto i = 0;
+        WHEN("assigned a value")
+        {
+            i = 42;
+            THEN("the value can be read back")
+            {
+                REQUIRE(i == 42);
+            }
+        }
+    }
+}
+\end{cpp}
+
+成功执行时，程序输出以下输出：
+
+\begin{shell}
+=========================================================
+All tests passed (1 assertion in 1 test cases)
+\end{shell}
+
+失败时（假设我们得到了错误的条件：i == 0），失败的表达式以及左右两边的值将在输出中输出出来：
+
+\begin{shell}
+---------------------------------------------------------------
+f:\chapter11ca_01\main.cpp(11)
+...............................................................
+f:\chapter11ca_01\main.cpp(13): FAILED:
+REQUIRE( i == 0 )
+with expansion:
+42 == 0
+===============================================================
+test cases: 1 | 1 failed
+assertions: 1 | 1 failed
+\end{shell}
+
+这里展示的输出，以及后续示例中的其他片段，都是从实际控制台输出中稍微修剪或压缩过的，以便更容易地在页面中列出。
+
+

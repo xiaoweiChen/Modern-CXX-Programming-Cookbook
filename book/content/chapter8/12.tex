@@ -1,0 +1,204 @@
+std::thread 表示单一的执行线程，允许多个函数并发执行，但有一个主要的不便之处：必须显式地调用 join() 方法来等待线程完成执行。这可能会导致问题，如果 std::thread 对象在仍然可连接（joinable）的情况下销毁，会调用 std::terminate()。C++20 提供了一个改进的线程类叫做 std::jthread（从可连接线程而来），当对象销毁时，如果线程仍然是可汇入，会自动调用 join()。此外，这种类型支持通过 \verb|std::stop_source/std::stop_token| 进行取消，并且其析构函数也会在连接之前请求线程停止。这个示例中，将介绍如何使用这些 C++20 类型。
+
+\mySubsubsection{}{Getting ready}
+
+要使用 std::jthread，需要包含相同的 <thread> 头文件。对于 \verb|std::stop_source| 和 \verb|std::stop_token|，你需要包含头文件 \verb|<stop_token>|。
+
+\mySubsubsection{}{How to do it...}
+
+使用可汇入线程和合作取消机制的典型场景如下：
+
+\begin{itemize}
+\item
+如果想在线程对象超出作用域时自动汇入线程，使用 std::jthread。仍然可以使用 std::thread 所有的方法，比如显式地使用 join()：
+
+\begin{cpp}
+void thread_func(int i)
+{
+    while(i-- > 0)
+    {
+        std::cout << i << '\n';
+    }
+}
+int main()
+{
+    std::jthread t(thread_func, 10);
+}
+\end{cpp}
+
+\item
+如果需要能够取消线程的执行，应该按照以下步骤操作：
+
+\begin{itemize}
+\item
+确保线程函数的第一个参数是一个 \verb|std::stop_token| 实例。
+
+\item
+线程函数中，定期使用 \verb|std::stop_token| 实例的 \verb|stop_requested()| 方法检查是否请求停止，并在收到信号时停止。
+
+\item
+使用 std::jthread 在单独的线程上执行函数。
+
+\item
+从调用线程使用 std::jthread 实例的 \verb|request_stop()| 方法请求线程函数停止并返回：
+
+\begin{cpp}
+void thread_func(std::stop_token st, int& i)
+{
+    while(!st.stop_requested() && i < 100)
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(200ms);
+        i++;
+    }
+}
+int main()
+{
+    int a = 0;
+
+    std::jthread t(thread_func, std::ref(a));
+
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(1s);
+
+    t.request_stop();
+
+    std::cout << a << '\n';       // prints 4
+}
+\end{cpp}
+\end{itemize}
+
+\item
+如果需要取消多个线程的工作，可以按照以下步骤操作：
+
+\begin{itemize}
+\item
+所有线程函数都必须将 \verb|std::stop_token| 实例作为第一个参数。
+
+\item
+所有线程函数应该定期调用 \verb|std::stop_token| 的 \verb|stop_requested()| 方法检查是否请求停止，如果请求停止，则终止执行。
+
+\item
+使用 std::jthread 在不同的线程上执行函数。
+
+\item
+调用线程中创建一个 \verb|std::stop_source| 实例。
+
+\item
+通过调用 \verb|std::stop_source| 实例的 \verb|get_token()| 方法获取一个 \verb|std::stop_token| 实例，当创建 std::jthread 实例时，将其作为第一个参数传递给线程函数。
+
+\item
+当想要停止线程函数的执行时，调用 \verb|std::stop_source| 实例的 \verb|request_stop()| 方法。
+
+\begin{cpp}
+void thread_func(std::stop_token st, int& i)
+{
+    while(!st.stop_requested() && i < 100)
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(200ms);
+        i++;
+    }
+}
+int main()
+{
+    int a = 0;
+    int b = 10;
+
+    std::stop_source st;
+
+    std::jthread t1(thread_func, st.get_token(),
+    std::ref(a));
+    std::jthread t2(thread_func, st.get_token(),
+    std::ref(b));
+
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(1s);
+
+    st.request_stop();
+
+    std::cout << a << ' ' << b << '\n';       // prints 4
+    // and 14
+}
+\end{cpp}
+\end{itemize}
+
+\item
+如果需要在一个停止源请求取消时执行一段代码，可以使用 \verb|std::stop_callback| 创建与 \verb|std::stop_token| 实例关联的回调函数，该回调函数会在停止请求通过 \verb|std::stop_source| 实例发出时调用：
+
+\begin{cpp}
+void thread_func(std::stop_token st, int& i)
+{
+    while(!st.stop_requested() && i < 100)
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(200ms);
+        i++;
+    }
+}
+int main()
+{
+    int a = 0;
+
+    std::stop_source src;
+    std::stop_token token = src.get_token();
+    std::stop_callback cb(token, []{std::cout << "the end\n";});
+
+    std::jthread t(thread_func, token, std::ref(a));
+
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(1s);
+
+    src.request_stop();
+
+    std::cout << a << '\n';       // prints "the end" and 4
+}
+\end{cpp}
+
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::jthread 类似于 std::thread，它是为了弥补 C++11 中线程所缺失的功能而做出的努力。其公共接口与 std::thread 相似。std::thread 所有的方法也存在于 std::jthread 中，但在以下几个关键方面有所不同：
+
+\begin{itemize}
+\item
+内部至少逻辑上维护了一个共享停止状态，这允许请求线程函数停止执行。
+
+\item
+几个用于处理合作取消的方法：\verb|get_stop_source()|，返回与线程共享停止状态相关联的 \verb|std::stop_source| 实例；\verb|get_stop_token()|，返回与线程共享停止状态相关联的 \verb|std::stop_token| 实例；以及 \verb|request_stop()|，通过共享停止状态请求取消线程函数的执行。
+
+\item
+其析构函数的行为，当线程可连接时，会先调用 \verb|request_stop()| 请求停止执行，然后调用 join() 等待直到线程完成其执行。
+\end{itemize}
+
+可以像创建 std::thread 实例一样创建 std::jthread 实例，但传递给 std::jthread 的可调用函数可以有一个类型为 \verb|std::stop_token| 的第一个参数。当要能够取消线程的执行时，需要这样做。
+
+典型的场景包括图形用户界面中用户交互可能取消正在进行的工作，但也可以设想许多其他情况。调用这样的线程函数发生如下：
+
+\begin{itemize}
+\item
+如果在线程函数构造 std::jthread 时提供的第一个参数是 \verb|std::stop_token|，则会转发给可调用函数。
+
+\item
+如果有参数，且可调用函数的第一个参数不是一个 \verb|std::stop_token| 实例，则与 std::jthread 实例内部共享停止状态相关联的 \verb|std::stop_token| 实例会传递给函数。此令牌通过调用 \verb|get_stop_token()| 获得。
+\end{itemize}
+
+线程函数必须定期检查 \verb|std::stop_token| 实例的状态。\verb|stop_requested()| 方法用来检查是否请求了停止。停止请求来自 \verb|std::stop_source| 实例。
+
+如果多个停止令牌与同一个停止源关联，停止请求对所有停止令牌都可见。请求停止，就不能撤回，连续的停止请求也没有意义。要请求停止，应该调用 \verb|request_stop()| 方法。可以通过调用 \verb|stop_possible()| 方法检查 \verb|std::stop_source| 是否与停止状态关联并可以请求停止。
+
+如果需要在停止源请求停止时调用回调函数，可以使用 \verb|std::stop_callback| 类型。这将一个 \verb|std::stop_token| 对象与一个回调函数关联起来。当停止令牌的停止源请求停止时，就会调用回调函数。回调函数的调用如下：
+
+\begin{itemize}
+\item
+在同一调用 \verb|request_stop()| 的线程中。
+
+\item
+如果在构建停止回调对象之前已请求停止，则在构建 \verb|std::stop_callback| 示例的线程中。
+\end{itemize}
+
+可以为同一个停止令牌创建任意数量的 \verb|std::stop_callback| 实例，但回调函数调用的顺序未指定。唯一可以保证是，如果停止是在构建 \verb|std::stop_callback| 实例之后请求，将会同步执行。
+
+还有一点很重要，如果回调函数通过异常返回，将会调用 std::terminate()。
+

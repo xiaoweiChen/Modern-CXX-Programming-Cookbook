@@ -1,0 +1,175 @@
+
+虚函数允许派生类修改基类的实现来为类提供专业化点。当通过指向基类的指针或引用处理派生类对象时，对重写虚函数的调用最终会调用派生类中的重写实现。另一方面，定制是一个实现细节，良好的设计应将接口与实现分离。
+
+非虚接口惯用法（Non-Virtual Interface Idiom），由 Herb Sutter 在《C/C++ Users Journal》的一篇文章中提出，通过使（公共）接口非虚且虚函数私有化，促进了接口与实现关注点的分离。
+
+公共虚接口阻止了类型对其接口施加前置条件和后置条件，因为这些方法可以在派生类中重写，所以期望基类实例不能保证公共虚函数的预期行为。此惯用法有助于强制执行接口的契约。
+
+\mySubsubsection{}{Getting ready}
+
+读者应对与虚函数相关的方面有所了解，包括定义和覆盖虚函数、抽象类和纯虚函数说明符。
+
+\mySubsubsection{}{How to do it...}
+
+实现此惯用法需要遵循几个简单的设计指南，这些指南由 Herb Sutter 在《C/C++ Users Journal》19(9)，2001 年 9 月期中提出：
+
+\begin{itemize}
+\item
+将（公共）接口设为非虚。
+
+\item
+将虚函数设为私有。
+
+\item
+如果基类实现必须从派生类调用，则将虚函数设为受保护。
+
+\item
+将基类的析构函数设为公共且虚，或设为受保护且非虚。
+\end{itemize}
+
+以下是一个简单的控件层次结构的例子，遵循了上述所有四条指导原则：
+
+\begin{cpp}
+class control
+{
+private:
+    virtual void paint() = 0;
+protected:
+    virtual void erase_background()
+    {
+        std::cout << "erasing control background..." << '\n';
+    }
+public:
+    void draw()
+    {
+        erase_background();
+        paint();
+    }
+    virtual ~control() {}
+};
+class button : public control
+{
+private:
+    virtual void paint() override
+    {
+        std::cout << "painting button..." << '\n';
+    }
+protected:
+    virtual void erase_background() override
+    {
+        control::erase_background();
+        std::cout << "erasing button background..." << '\n';
+    }
+};
+class checkbox : public button
+{
+private:
+    virtual void paint() override
+    {
+        std::cout << "painting checkbox..." << '\n';
+    }
+protected:
+    virtual void erase_background() override
+    {
+        button::erase_background();
+        std::cout << "erasing checkbox background..." << '\n';
+    }
+};
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+NVI 惯用法使用了模板方法设计模式，允许派生类定制基类功能（即算法）的部分（即步骤）。通过将算法分解成更小的部分来完成，每部分都由一个虚函数实现。基类可以提供或不提供默认实现，而派生类可以对其进行覆盖，同时保持算法的整体结构和意义。
+
+NVI 惯用法的核心原则是虚函数不应公开；应该是私有的，或者在基类中为受保护时，可以使用派生类调用。类型的接口，即用户可访问的公共部分，应完全由非虚函数组成。这有几个优点：
+
+\begin{itemize}
+\item
+接口与不再暴露给客户的实现细节分开。
+
+\item
+在不改变公共接口的情况下更改实现细节成为可能，而无需更改用户代码，从而使基类更加健壮。
+
+\item
+允许一个类型对其接口拥有唯一的控制权。如果公共接口包含虚方法，派生类可以改变承诺的功能，所以无法确保其前置条件和后置条件。当除析构函数外的虚方法都不为用户所访问时，类型可以强制执行其接口的前置条件和后置条件。
+\end{itemize}
+
+\begin{myNotic}
+对于这个惯用法，需要特别提到类的析构函数。通常强调基类的析构函数应该是虚的，以便实例可以多态地删除（通过指向基类的指针或引用）。当析构函数非虚时，多态地销毁实例会导致未定义的行为。然而，并非所有的基类都是打算多态地删除。对于这些情况，基类的析构函数不应该声明为虚。但也不应该是公共的，而应该是受保护的。
+\end{myNotic}
+
+前一节中的例子定义了一个表示视觉控件的类层次结构：
+
+\begin{itemize}
+\item
+control 是基类，但有派生类，如 button 和 checkbox，是按钮的一种类型，因此是从这个类派生出来的。
+
+\item
+control 类定义的唯一功能是绘制控件。\verb|draw()| 方法非虚，但调用了两个虚方法，\verb|erase_background()| 和 \verb|paint()|，以实现绘制控件的两个阶段。
+
+\item
+\verb|erase_background()| 是一个受保护的虚方法，派生类需要在自己的实现中调用。
+
+\item
+paint() 是一个私有的纯虚方法。派生类必须进行实现，但不希望调用基类的实现。
+
+\item
+control 类的析构函数是公共且虚的，预计删除实例会是多态地。
+\end{itemize}
+
+以下展示了使用这些类的例子。这些类型实例由指向基类的智能指针管理：
+
+\begin{cpp}
+std::vector<std::unique_ptr<control>> controls;
+controls.emplace_back(std::make_unique<button>());
+controls.emplace_back(std::make_unique<checkbox>());
+for (auto& c : controls)
+    c->draw();
+\end{cpp}
+
+输出如下：
+
+\begin{shell}
+erasing control background...
+erasing button background...
+painting button...
+erasing control background...
+erasing button background...
+erasing checkbox background...
+painting checkbox...
+destroying button...
+destroying control...
+destroying checkbox...
+destroying button...
+destroying control...
+\end{shell}
+
+NVI 惯用法在公共函数调用执行，实际实现的非公共虚函数时引入了一层间接性。前面的例子中，draw() 方法调用了几个其他函数，但通常只调用一次：
+
+\begin{cpp}
+class control
+{
+protected:
+    virtual void initialize_impl()
+    {
+        std::cout << "initializing control..." << '\n';
+    }
+public:
+    void initialize()
+    {
+        initialize_impl();
+    }
+};
+class button : public control
+{
+protected:
+    virtual void initialize_impl()
+    {
+        control::initialize_impl();
+        std::cout << "initializing button..." << '\n';
+    }
+};
+\end{cpp}
+
+这个例子中，control 类性有一个方法叫做 initialize()（为了简化起见，没有显示类的先前内容），调用了一个 \verb|initialize_impl()| 的单个非公共虚方法，该方法在每个派生类中实现不同。这不会带来多少开销——如果有开销的话——像这样的简单函数，很可能会被编译器内联。
+

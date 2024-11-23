@@ -1,0 +1,109 @@
+作为一种多范式编程语言，C++支持面向对象编程。多态性，作为面向对象编程的核心原则，在C++中有两种形式：编译时多态，通过函数和操作符重载实现，以及运行时多态，通过虚函数实现。虚函数允许派生类覆盖基类中函数的实现。然而，C++20中虚函数允许出现在常量表达式中，所以可以在编译时调用。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将在随后的例子中使用以下结构来表示文档和信封的尺寸：
+
+\begin{cpp}
+struct dimension
+{
+    double width;
+    double height;
+};
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+可以通过以下步骤将运行时多态性移动到编译时：
+
+\begin{itemize}
+\item
+将要移动到编译时调用的虚函数声明为constexpr。
+
+\item
+将继承层次结构中基类的析构函数声明为constexpr。
+
+\item
+将重写的虚函数声明为constexpr。
+
+\item
+在常量表达式中调用constexpr虚函数。
+\end{itemize}
+
+以下代码展示了这一过程：
+
+\begin{cpp}
+struct document_type
+{
+    constexpr virtual ~document_type() {};
+    constexpr virtual dimension size() const = 0;
+};
+struct document_a5 : document_type
+{
+    constexpr dimension size() const override { return { 148.5, 210 }; }
+};
+struct envelope_type
+{
+    constexpr virtual ~envelope_type() {}
+    constexpr virtual dimension size() const = 0;
+    constexpr virtual dimension max_enclosure_size() const = 0;
+};
+struct envelop_commercial_8 : envelope_type
+{
+    constexpr dimension size() const override { return { 219, 92 }; }
+    constexpr dimension max_enclosure_size() const override
+    { return { 213, 86 }; }
+};
+constexpr bool document_fits_envelope(document_type const& d,
+envelope_type const& e)
+{
+    return e.max_enclosure_size().width >= d.size().width;
+}
+int main()
+{
+    constexpr envelop_commercial_8 e1;
+    constexpr document_a5          d1;
+    static_assert(document_fits_envelope(d1, e1));
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+C++20之前，虚函数不能声明为constexpr。然而，用于常量表达式实例的动态类型必须在编译时已知。因此，C++20中取消了使虚函数成为constexpr的限制。
+
+拥有constexpr虚函数的优势在于，某些计算可以从运行时移至编译时。虽然实践中对许多使用场景没有实际影响，但在上一节中给出了一个例子。
+
+有一系列不同的文档纸张尺寸，例如：包括A3、A4、A5、法律、信纸和半信纸。尺寸不同的，例如：A5是148.5毫米 x 210毫米，而信纸是215.9毫米 x 279.4毫米。
+
+另一方面，有各种类型和大小的信封。例如，有一个信封尺寸为92毫米 x 219毫米，最大装入尺寸为86毫米 x 213毫米。要编写一个函数来确定某种类型的折叠纸能否放入信封中。由于尺寸是标准的，在编译时已知。所以可以在此时进行检查，而不是在运行时。
+
+为此，在“How to do it...”部分中，已经看到了：
+
+\begin{itemize}
+\item
+文档的继承层次结构，基类称为\verb|document_type|。有两个成员：一个虚析构函数和一个虚函数size()，该函数返回纸张的尺寸。这两个函数都是constexpr。
+
+\item
+信封的继承层次结构，基类称为\verb|envelope_type|。有三个成员：一个虚析构函数、一个虚函数size()，该函数返回信封的尺寸，以及一个虚函数\verb|max_enclosure_size()|，该函数返回可以放入信封的最大（折叠）纸张尺寸。所有这些都是constexpr。
+
+\item
+一个名为\verb|document_fits_envelope()|的独立函数，通过比较两者的宽度，来确定给定文档类型是否适合特定的信封类型。这也是一个constexpr函数。
+\end{itemize}
+
+因为提到的所有函数都是constexpr，所以在常量表达式中可以调用\verb|document_fits_envelope()|函数，比如\verb|static_assert|，前提是调用其实例也是constexpr。在随书附带的代码文件中，会发现一个关于各种纸张和信封尺寸的详细例子。
+
+你应该记住：
+
+\begin{itemize}
+\item
+即使基类中被覆盖的函数未定义为constexpr，也可以将覆写的虚函数声明为constexpr。
+
+\item
+相反的情况也是可能的，派生类中覆写的虚函数可以是非constexpr的，即使该函数在基类中定义为constexpr。
+
+\item
+如果在一个多层次的继承结构中，一个虚函数的一些覆写版本定义为constexpr，而一些则不是，则最终决定该虚函数是否为constexpr的，是针对该函数调用实例适用的最终覆写版本。
+\end{itemize}
+
+
+

@@ -1,0 +1,123 @@
+
+ C++17标准添加了 \verb|std::string_view| 类型，表示对常量连续字符序列视图的对象。这种视图通常通过指向序列第一个元素的指针和长度来实现(字符串是编程语言中最常用的数据类型)，具有非拥有的视图特性，不会分配内存，避免了复制，并且在某些操作上比 \verb|std::string| 更快，这是一个重要的优势。但字符串只是特定于文本操作的字符特殊vector，所以有一个表示连续对象序列视图的类型是有意义的。这就是 C++20 中加入 \verb|std::span| 类型模板的原因，可以说 \verb|std::span| 对于 \verb|std::vector| 和数组类型来说，如同 \verb|std::string_view| 对于 \verb|std::string| 一样。
+
+\mySubsubsection{}{Getting ready}
+
+\verb|std::span| 类型模板可以在头文件 <span> 中找到。
+
+\mySubsubsection{}{How to do it...}
+
+使用 C 风格接口的地方，可用 \verb|std::span<T>| 替换指针和大小对：
+
+\begin{cpp}
+void func(int* buffer, size_t length) { /* ... */ }
+\end{cpp}
+
+可替换为：
+
+\begin{cpp}
+void func(std::span<int> buffer) { /* ... */ }
+\end{cpp}
+
+使用 \verb|std::span| 时，可以做以下事情：
+
+\begin{itemize}
+\item
+使用编译时常量长度（称为静态范围）创建span，指定 span 中的元素数量：
+
+\begin{cpp}
+int arr[] = {1, 1, 2, 3, 5, 8, 13};
+std::span<int, 7> s {arr};
+\end{cpp}
+
+\item
+使用运行时常量长度（称为动态范围）创建 span，不指定 span 中的元素数量：
+
+\begin{cpp}
+int arr[] = {1, 1, 2, 3, 5, 8, 13};
+std::span<int> s {arr};
+\end{cpp}
+
+\item
+可以使用 span 在基于范围的 for 循环中：
+
+\begin{cpp}
+void func(std::span<int> buffer)
+{
+    for(auto const e : buffer)
+    std::cout << e << ' ';
+    std::cout << '\n';
+}
+\end{cpp}
+
+\item
+可以使用 front()、back()、data() 方法和下标操作符 [] 访问 span 的元素：
+
+\begin{cpp}
+int arr[] = {1, 1, 2, 3, 5, 8, 13};
+std::span<int, 7> s {arr};
+std::cout << s.front() << " == " << s[0] << '\n';
+// prints 1 == 1
+std::cout << s.back() << " == " << s[s.size() - 1] << '\n';
+// prints 13 == 13
+std::cout << *s.data() << '\n';
+// prints 1
+\end{cpp}
+
+\item
+可以通过 first()、last() 和 subspan() 方法获取 span 的子 span：
+
+\begin{cpp}
+std::span<int> first_3 = s.first(3);
+func(first_3);  // 1 1 2.
+std::span<int> last_3 = s.last(3);
+func(last_3);   // 5 8 13
+std::span<int> mid_3 = s.subspan(2, 3);
+func(mid_3);    // 2 3 5
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|std::span| 类型模板不是实例的容器，而是一种轻量级的封装器，定义了连续对象序列的视图。最初，span 称为 \verb|array_view|，有人认为这是个更好的名字，因为清楚地表明了该类型是对序列的非拥有视图，也因为与 \verb|string_view| 的命名保持了一致，而标准库最终以 span 这个名称命名该类型。
+
+虽然标准没有规定实现细节，但 span 通常是通过存储指向序列第一个元素的指针和长度（表示视图中元素的数量）来实现的，所以span 可以用来定义一个对（但不限于）\verb|std::vector|、\verb|std::array|、T[] 或 T* 的非拥有视图。但不能用于列表或关联容器（如 \verb|std::list|、\verb|std::map| 或 \verb|std::set|），这些不是连续元素序列的容器。
+
+span 可以有编译时常量大小或运行时常量大小。当 span 中的元素数量在编译时指定时，这是一个具有静态范围（编译时常量大小）的 span。如果元素数量未指定但在运行时确定，这是一个具有动态范围的 span。
+
+\verb|std::span| 类具有简单的接口：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{成员函数} & \textbf{描述}                                            \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\begin{tabular}[c]{@{}l@{}}begin(), end()\\ cbegin(), cend()\end{tabular} &
+可变和常量迭代器，指向序列的第一个和最后一个之后的元素。 \\ \hline
+\begin{tabular}[c]{@{}l@{}}rbegin(), rend()\\ cbegin(), crend()\end{tabular} &
+可变和常量反向迭代器，指向序列的开始和结束位置。 \\ \hline
+front(), back()          & 访问序列的第一个和最后一个元素。            \\ \hline
+data()                   & 返回指向元素序列开始处的指针。 \\ \hline
+operator{[}{]}           & 根据索引访问序列中的元素。     \\ \hline
+size()                   & 获取序列中的元素数量。               \\ \hline
+size\_bytes()            & 获取序列的字节大小。                    \\ \hline
+empty()                  & 检查序列是否为空。                           \\ \hline
+first()                  & 获取包含序列前 N 个元素的子 span。 \\ \hline
+last()                   & 获取包含序列最后 N 个元素的子 span。  \\ \hline
+subspan() &
+\begin{tabular}[c]{@{}l@{}}从指定偏移开始获取包含 N 个元素的子 span。\\如果不指定计数 N，则返回一个包含从偏移到序列末尾所有元素的 span。 \end{tabular}\\ \hline
+\end{longtable}
+
+\begin{center}
+表 6.4: \verb|std::span| 最重要的成员函数列表
+\end{center}
+
+与通用算法（如 sort、copy、find\_if 等）使用的迭代器对或作为标准容器的替代品不同，span 不是用作这些用途的，其主要目的是构建比 C 风格接口更好的接口，在这些接口中传递指针和大小给函数。用户可能会传递错误的大小值，这可能导致访问序列边界之外的内存。span 提供了安全性和边界检查。其也是传递 \verb|std::vector<T>| 的常量引用作为函数参数的一个好选择（\verb|std::vector<T> const &|）。span 不拥有其元素，并且足够小，可以按值传递（不应该按引用或常量引用传递 span）。
+
+与 \verb|std::string_view| 不支持更改序列中元素的值不同，\verb|std::span| 定义了一个可变视图，并支持修改其元素，像 front()、back() 和 operator[] 这样的函数返回的是引用。
+

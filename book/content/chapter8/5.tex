@@ -1,0 +1,280 @@
+
+互斥锁是用于保护对共享数据访问的同步原语，标准库还提供了一种称为条件变量的同步原语，一个线程能够向其他线程发出信号，表明某个条件已经发生。等待条件变量的线程或线程组会阻塞，直到条件变量通知、超时或发生伪唤醒为止。本示例中，将介绍如何使用条件变量在生产线程和消费线程之间发送通知。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例，需要熟悉线程、互斥锁和锁。条件变量在 \verb|<condition_variable>| 头文件的 std 命名空间中可用。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下模式通过条件变量上的通知同步线程：
+
+\begin{enumerate}
+\item
+定义一个条件变量（适当的上下文中）：
+
+\begin{cpp}
+std::condition_variable cv;
+\end{cpp}
+
+\item
+定义一个互斥锁供线程锁定，使用第二个互斥锁来同步从不同线程对标准控制台的访问：
+
+\begin{cpp}
+std::mutex data_mutex; // data mutex
+std::mutex io_mutex;   // I/O mutex
+\end{cpp}
+
+\item
+定义线程间共享的数据：
+
+\begin{cpp}
+int data = 0;
+\end{cpp}
+
+\item
+生产者线程中，修改数据之前锁定互斥锁：
+
+\begin{cpp}
+std::thread producer([&](){
+    // simulate long running operation
+    {
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(2s);
+    }
+    // produce
+    {
+        std::unique_lock lock(data_mutex);
+        data = 42;
+    }
+    // print message
+    {
+        std::lock_guard l(io_mutex);
+        std::cout << "produced " << data << '\n';
+    }
+    // continued at 5.
+});
+\end{cpp}
+
+\item
+生产者线程中，使用调用 \verb|notify_one()| 或 \verb|notify_all()| 来通知条件变量（用于保护共享数据的互斥锁解锁后执行此操作）：
+
+\begin{cpp}
+// continued from 4.
+cv.notify_one();
+\end{cpp}
+
+\item
+在消费者线程中，获取数据互斥锁的唯一锁，并用它来等待条件变量。注意，伪唤醒可能发生，这将在“How it works...”部分详细讨论：
+
+\begin{cpp}
+std::thread consumer([&](){
+    // wait for notification
+    {
+        std::unique_lock lock(data_mutex);
+        cv.wait(lock);
+    }
+    // continued at 7.
+});
+\end{cpp}
+
+\item
+消费者线程中，条件通知后使用共享数据：
+
+\begin{cpp}
+// continued from 6.
+{
+    std::lock_guard lock(io_mutex);
+    std::cout << "consumed " << data << '\n';
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+前面的例子展示了两个线程共享共同数据（例子中，是一个整型变量）。一个线程在长时间计算后产生数据（用休眠模拟），而另一个线程仅在数据生成后才消费。为此，使用了一种同步机制，即使用互斥锁和条件变量来阻止消费者线程，直到生产者线程发出通知，表明数据已准备好。这条通信渠道的关键是消费者线程等待的条件变量。两个线程几乎同时开始，生产者线程开始一个长时间的计算，这个计算应该为消费者线程生成数据。与此同时，消费者线程不能运行，直到数据可用；必须保持阻塞状态，直到接收到数据已产生的通知。接收到通知时，可以继续执行。整个机制的工作方式为：
+
+\begin{itemize}
+\item
+至少有一个线程等待条件变量的通知。
+
+\item
+至少有一个线程正在通知条件变量。
+
+\item
+等待的线程必须首先获得一个互斥锁（\verb|std::unique_lock<std::mutex>|），并将其传递给条件变量的 \verb|wait()|, \verb|wait_for()| 或 \verb|wait_until()|。所有等待的方法都会原子地释放互斥锁并阻塞线程，直到条件变量通知。此时，线程解除阻塞，互斥锁再次原子地获取（涉及的操作视为整体，线程在执行这些操作时不会中断）。
+
+\item
+通知条件变量的线程可以使用 \verb|notify_one()|，其中只有一个阻塞的线程解除阻塞，或者使用 \verb|notify_all()|，其中所有等待条件变量的被阻塞线程都解除阻塞。
+\end{itemize}
+
+\begin{myNotic}
+条件变量在多处理器系统上无法完全预测，伪唤醒可能发生，即使没有通知条件变量，线程也会解锁。线程解除阻塞后，有必要检查条件是否成立。然而，伪唤醒可能多次发生，因此有必要在一个循环中检查条件变量。关于伪唤醒的更多信息，参见 \url{https://en.wikipedia.org/wiki/Spurious_wakeup}。
+\end{myNotic}
+
+C++ 标准提供了两种条件变量的实现：
+
+\begin{itemize}
+\item
+\verb|std::condition_variable|，本示例中使用的是与 \verb|std::unique_lock| 关联的条件变量。
+
+\item
+\verb|std::condition_variable_any| 表示一种更通用的实现，可以与满足基础锁要求（实现 lock() 和 unlock() 方法）的锁一起工作。这种实现的一个可能用途是在接收到中断信号时提供可中断的等待，正如 Anthony Williams 在《C++ In Action》（2012年）中的解释：
+
+\begin{myTip}
+自定义锁操作不仅会像预期那样锁定关联的互斥锁，会在接收到中断信号时通知这个条件变量。
+\end{myTip}
+\end{itemize}
+
+条件变量的所有等待方法都有两个重载：
+
+\begin{itemize}
+\item
+第一个重载接受 \verb|std::unique_lock<std::mutex>|（基于类型，即持续时间或时间点），并导致线程保持阻塞，直到条件变量被通知。这个重载会原子地释放互斥锁并阻塞当前线程，然后将其添加到等待条件变量的线程列表中。当条件 \verb|notify_one()| 或 \verb|notify_all()| 通知、发生伪唤醒或超时时（取决于函数重载），线程解除阻塞，互斥锁再次原子地获取。
+
+\item
+第二个重载除了其他重载的参数外，还接受一个谓词。这个谓词可用于在等待条件变为真时避免伪唤醒。这个重载等价于以下代码：
+
+\begin{cpp}
+while(!pred())
+    wait(lock);
+\end{cpp}
+\end{itemize}
+
+以下代码展示了一个比前一节提供的例子更复杂的示例。生产者线程在一个循环中生成数据（这个例子中，是一个有限循环），而消费者线程等待新数据可用并消费它（将其打印到控制台）。生产者线程在完成数据生成后终止，而消费者线程在没有更多数据可消费时终止。数据可添加到 queue<int> 中，一个布尔变量用于指示给消费者线程数据生成过程已完成。以下是生产者线程实现的代码：
+
+\begin{cpp}
+std::mutex g_lockprint;
+std::mutex g_lockqueue;
+std::condition_variable g_queuecheck;
+std::queue<int> g_buffer;
+bool g_done;
+void producer(
+int const id,
+std::mt19937& generator,
+std::uniform_int_distribution<int>& dsleep,
+std::uniform_int_distribution<int>& dcode)
+{
+    for (int i = 0; i < 5; ++i)
+    {
+        // 模拟工作
+        std::this_thread::sleep_for(
+        std::chrono::seconds(dsleep(generator)));
+        // 生成数据
+        {
+            std::unique_lock<std::mutex> locker(g_lockqueue);
+            int value = id * 100 + dcode(generator);
+            g_buffer.push(value);
+            {
+                std::unique_lock<std::mutex> locker(g_lockprint);
+                std::cout << "[produced(" << id << ")]: " << value << '\n';
+            }
+        }
+        // 通知消费者
+        g_queuecheck.notify_one();
+    }
+}
+\end{cpp}
+
+另一方面，消费者线程的实现：
+
+\begin{cpp}
+void consumer()
+{
+    // 循环直到接收到数据生成结束的信号
+    while (!g_done)
+    {
+        std::unique_lock<std::mutex> locker(g_lockqueue);
+        g_queuecheck.wait_for(
+        locker,
+        std::chrono::seconds(1),
+        [&]() {return !g_buffer.empty(); });
+        // 如果队列中有值则处理它们
+        while (!g_done && !g_buffer.empty())
+        {
+            std::unique_lock<std::mutex> locker(g_lockprint);
+            std::cout << "[consumed]: " << g_buffer.front() << '\n';
+            g_buffer.pop();
+        }
+    }
+}
+\end{cpp}
+
+消费者线程执行以下操作：
+
+\begin{itemize}
+\item
+循环直到接收到数据生成结束的信号。
+
+\item
+获取与条件变量关联的互斥锁实例的唯一锁。
+
+\item
+使用带有谓词的 \verb|wait_for()| 重载，检查在唤醒时缓冲区是否为空（以避免伪唤醒）。此方法使用1秒的超时，并在超时发生后返回，即使已经发出通知。
+
+\item
+条件变量接收到信号后，从队列中消费所有数据。
+\end{itemize}
+
+为了测试，可以启动几个生产者线程和一个消费者线程。生产者线程生成随机数据，共享伪随机数生成引擎和分布。所有这些都在下面的代码样本中展示：
+
+\begin{cpp}
+auto seed_data = std::array<int, std::mt19937::state_size> {};
+std::random_device rd {};
+std::generate(std::begin(seed_data), std::end(seed_data),
+              std::ref(rd));
+std::seed_seq seq(std::begin(seed_data), std::end(seed_data));
+auto generator = std::mt19937{ seq };
+auto dsleep = std::uniform_int_distribution<>{ 1, 5 };
+auto dcode = std::uniform_int_distribution<>{ 1, 99 };
+std::cout << "start producing and consuming..." << '\n';
+std::thread consumerthread(consumer);
+std::vector<std::thread> threads;
+for (int i = 0; i < 5; ++i)
+{
+    threads.emplace_back(producer,
+                         i + 1,
+                         std::ref(generator),
+                         std::ref(dsleep),
+                         std::ref(dcode));
+}
+// 等待工作者线程完成工作
+for (auto& t : threads)
+    t.join();
+// 通知消费者线程完成并等待它
+g_done = true;
+consumerthread.join();
+std::cout << "done producing and consuming" << '\n';
+\end{cpp}
+
+这个程序的可能输出如下所示（每次执行的实际输出会有所不同）：
+
+\begin{shell}
+start producing and consuming...
+[produced(5)]: 550
+[consumed]: 550
+[produced(5)]: 529
+[consumed]: 529
+[produced(5)]: 537
+[consumed]: 537
+[produced(1)]: 122
+[produced(2)]: 224
+[produced(3)]: 326
+[produced(4)]: 458
+[consumed]: 122
+[consumed]: 224
+[consumed]: 326
+[consumed]: 458
+...
+done producing and consuming
+\end{shell}
+
+标准库还提供了一个名为 \verb|notify_all_at_thread_exit()| 的辅助函数，提供了一种方法，让线程通过 \verb|condition_variable| 实例通知其他线程，包括销毁所有 \verb|thread_local| 实例在内的完整执行已经结束。这个函数有两个参数：一个 \verb|condition_variable| 和一个与条件变量关联的 \verb|std::unique_lock<std::mutex>|（会接管该锁的所有权）。这个函数的典型用例是运行一个分离的线程，该线程在即将结束前调用此函数。
+
+
+
+
+
+
+
+

@@ -1,0 +1,333 @@
+开发人员操作位标志（bit flag）是很常见的事情，因为他们与操作系统 API（通常用 C 语言）打交道，这些 API 接受各种类型的参数（如选项或样式）形式的位标志，或者使用的库也做类似的事情，又或者仅仅是因为某些类型的问题可以通过位标志来解决。
+
+可以考虑位操作的替代方案，比如：定义一个为每个选项/标志准备一个元素的数组，或者定义一个带有成员和函数的结构体来模拟位标志，但这些方法往往更加复杂；而且当需要将表示位标志的数值传递给函数时，仍然需要将数组或结构体转换成位序列。因此，C++ 标准提供了名为 std::bitset 的容器，用于处理固定大小的位序列。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例，需要熟悉位运算（AND、OR、XOR、NOT 和移位——即将数字的二进制表示中的每一位向左或向右移动）。如果需要了解更多关于这些内容的信息，\url{https://en.wikipedia.org/wiki/Bitwise_operation} 是一个很好的起点。
+
+bitset 类在 <bitset> 头文件中可用，位于 std 命名空间内。bitset 表示一个固定大小的位序列，其大小在编译时确定。本示例中，大多数例子将使用 8 位的 bitset。
+
+\mySubsubsection{}{How to do it...}
+
+要构造一个 std::bitset 类型实例，可以使用以下构造函数：
+
+\begin{itemize}
+\item
+创建一个所有位都设置为 0 的空 bitset：
+
+\begin{cpp}
+std::bitset<8> b1;            // [0,0,0,0,0,0,0,0]
+\end{cpp}
+
+\item
+从数值创建一个 bitset：
+
+\begin{cpp}
+std::bitset<8> b2{ 10 };      // [0,0,0,0,1,0,1,0]
+\end{cpp}
+
+\item
+从包含 '0' 和 '1' 的字符串创建一个 bitset：
+
+\begin{cpp}
+std::bitset<8> b3{ "1010"s }; // [0,0,0,0,1,0,1,0]
+\end{cpp}
+
+\item
+从包含任意两个字符表示 '0' 和 '1' 的字符串创建一个 bitset；必须指定哪个字符代表 0（第四个参数，'o'）以及哪个字符代表 1（第五个参数，'x'）：
+
+\begin{cpp}
+std::bitset<8> b4
+    { "ooooxoxo"s, 0, std::string::npos, 'o', 'x' };
+    // [0,0,0,0,1,0,1,0]
+\end{cpp}
+\end{itemize}
+
+要测试集合中的单个位或整个集合的特定值，可以使用以下方法：
+
+\begin{itemize}
+\item
+count() 获取设置为 1 的位数：
+
+\begin{cpp}
+std::bitset<8> bs{ 10 };
+std::cout << "has " << bs.count() << " 1s" << '\n';
+\end{cpp}
+
+\item
+any() 检查是否有至少一位设置为 1：
+
+\begin{cpp}
+if (bs.any()) std::cout << "has some 1s" << '\n';
+\end{cpp}
+
+\item
+all() 检查所有位是否都设置为 1：
+
+\begin{cpp}
+if (bs.all()) std::cout << "has only 1s" << '\n';
+\end{cpp}
+
+\item
+none() 检查所有位是否都设置为 0：
+
+\begin{cpp}
+if (bs.none()) std::cout << "has no 1s" << '\n';
+\end{cpp}
+
+\item
+test() 检查单个位的值（该函数的唯一参数是位的位置）：
+
+\begin{cpp}
+if (!bs.test(0)) std::cout << "even" << '\n';
+\end{cpp}
+
+\item
+operator[] 访问并测试单个位：
+
+\begin{cpp}
+if(!bs[0]) std::cout << "even" << '\n';
+\end{cpp}
+\end{itemize}
+
+要修改 bitset 的内容，可以使用以下任一方法：
+
+\begin{itemize}
+\item
+成员操作符 |=, \verb|&=|, \verb|^=|, 和 \verb|~| 分别执行二进制操作 OR、AND、XOR 和 NOT。或者，也可以使用非成员操作符 |, \&, 和 \^{}：
+
+\begin{cpp}
+std::bitset<8> b1{ 42 }; // [0,0,1,0,1,0,1,0]
+std::bitset<8> b2{ 11 }; // [0,0,0,0,1,0,1,1]
+auto b3 = b1 | b2;       // [0,0,1,0,1,0,1,1]
+auto b4 = b1 & b2;       // [0,0,0,0,1,0,1,0]
+auto b5 = b1 ^ b2;       // [0,0,1,0,0,0,0,1]
+auto b6 = ~b1;           // [1,1,0,1,0,1,0,1]
+\end{cpp}
+
+\item
+成员操作符 <{}<=, <{}<, >{}>=, 和 >{}> 执行移位操作：
+
+\begin{cpp}
+auto b7 = b1 << 2;       // [1,0,1,0,1,0,0,0]
+auto b8 = b1 >> 2;       // [0,0,0,0,1,0,1,0]
+\end{cpp}
+
+\item
+flip() 切换整个集合或单个位从 0 到 1 或从 1 到 0：
+
+\begin{cpp}
+b1.flip();               // [1,1,0,1,0,1,0,1]
+b1.flip(0);              // [1,1,0,1,0,1,0,0]
+\end{cpp}
+
+\item
+set() 将整个集合或单个位更改为 true 或指定的值：
+
+\begin{cpp}
+b1.set(0, true);         // [1,1,0,1,0,1,0,1]
+b1.set(0, false);        // [1,1,0,1,0,1,0,0]
+\end{cpp}
+
+\item
+reset() 将整个集合或单个位更改为 false：
+
+\begin{cpp}
+b1.reset(2);             // [1,1,0,1,0,0,0,0]
+\end{cpp}
+\end{itemize}
+
+要将 bitset 转换为数值或字符串，可以使用以下方法：
+
+\begin{itemize}
+\item
+\verb|to_ulong()| 和 \verb|to_ullong()| 将 bitset 转换为无符号长整型或无符号长长整型。如果值不能在输出类型中表示，则这些操作会抛出 \verb|std::overflow_error| 异常。请参考以下示例：
+
+\begin{cpp}
+std::bitset<8> bs{ 42 };
+auto n1 = bs.to_ulong();  // n1 = 42UL
+auto n2 = bs.to_ullong(); // n2 = 42ULL
+\end{cpp}
+
+\item
+\verb|to_string()| 将 bitset 转换为 \verb|std::basic_string|。默认情况下，结果是一个包含 '0' 和 '1' 的字符串，可以为这两个值指定不同的字符：
+
+\begin{cpp}
+auto s1 = bs.to_string();         // s1 = "00101010"
+auto s2 = bs.to_string('o', 'x'); // s2 = "ooxoxoxo"
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+如果曾经使用过 C 或者 C 类似的 API，那么很可能已经写过或者至少见过操纵位来定义样式、选项或其他类型值的代码：
+
+\begin{itemize}
+\item
+定义位标志；这些可以是枚举、类中的静态常量，或者是使用 C 风格的 \verb|#define| 引入的宏。通常，有一个标志表示没有值（样式、选项等）。由于这些应该是位标志，值是 2 的幂。
+
+\item
+从集合（即数值）中添加和删除标志。添加位标志是通过按位或操作符完成的（value |= FLAG），而删除位标志是通过按位与操作符和取反后的标志完成的（\verb|value &= ~FLAG|）。
+
+\item
+测试标志是否已添加到集合中（\verb|value & FLAG == FLAG|）。
+
+\item
+调用带有标志作为参数的函数。
+\end{itemize}
+
+下面展示了一个简单的示例，其中的标志定义了控件边框样式，该控件可以在左侧、右侧、顶部或底部有边框，或者这些组合中的一个，包括没有边框：
+
+\begin{cpp}
+#define BORDER_NONE   0x00
+#define BORDER_LEFT   0x01
+#define BORDER_TOP    0x02
+#define BORDER_RIGHT  0x04
+#define BORDER_BOTTOM 0x08
+void apply_style(unsigned int const style)
+{
+    if (style & BORDER_BOTTOM) { /* do something */ }
+}
+// 初始化时不带标志
+unsigned int style = BORDER_NONE;
+// 设置一个标志
+style = BORDER_BOTTOM;
+// 添加更多标志
+style |= BORDER_LEFT | BORDER_RIGHT | BORDER_TOP;
+// 删除一些标志
+style &= ~BORDER_LEFT;
+style &= ~BORDER_RIGHT;
+// 测试是否设置了标志
+if ((style & BORDER_BOTTOM) == BORDER_BOTTOM) {}
+// 将标志作为参数传递给函数
+apply_style(style);
+\end{cpp}
+
+标准的 std::bitset 类型作为 C++ 中对 C 风格位集操作的一种替代，能够编写更健壮和安全的代码，通过成员函数抽象了位操作(尽管仍然需要识别集合中每个位所代表的意义)：
+
+\begin{itemize}
+\item
+添加和删除标志是通过 set() 和 reset() 方法完成的，这些方法将由位置指示的位的值设置为 1 或 0（或 true 和 false）；或者，可以使用索引操作符达到同样的目的。
+
+\item
+通过 test() 方法测试位是否已设置。
+
+\item
+从整数或字符串转换通过构造函数完成，而转换回整数或字符串则通过成员函数完成，这样就可以在期望整数的地方（如函数参数）使用 bitset 的值。
+\end{itemize}
+
+注意，从字符序列构建 bitset 的构造函数——无论是 \verb|std::basic_string|、const char*（或其他字符类型），还是 C++26 中的 \verb|std::basic_string_view|，都可能抛出异常：如果字符不是指定的零或一位，则抛出 \verb|std::invalid_argument| 异常；如果序列的起始偏移量超出序列的末端，则抛出 \verb|std::out_of_range| 异常。
+
+除了这些操作之外，bitset 类还有其他方法用于对位执行位运算、移位、测试等，这些已在上一节中展示。
+
+概念上，std::bitset 是一个数值的表示，允许访问和修改各个位。然而，bitset 内部拥有一个整数数组，其会在这个数组上执行位操作。bitset 的大小不受数值类型大小的限制；大小任意，但需要是编译时常量。
+
+上一节中关于控件边框样式的示例可以使用 std::bitset ：
+
+\begin{cpp}
+struct border_flags
+{
+    static const int left = 0;
+    static const int top = 1;
+    static const int right = 2;
+    static const int bottom = 3;
+};
+// 初始化时不带标志
+std::bitset<4> style;
+// 设置一个标志
+style.set(border_flags::bottom);
+// 设置更多标志
+style
+    .set(border_flags::left)
+    .set(border_flags::top)
+    .set(border_flags::right);
+// 删除一些标志
+style[border_flags::left] = 0;
+style.reset(border_flags::right);
+// 测试是否设置了标志
+if (style.test(border_flags::bottom)) {}
+// 将标志作为参数传递给函数
+apply_style(style.to_ulong());
+\end{cpp}
+
+这只是可能的一种实现方式，例如：\verb|border_flags| 类可以是一个枚举。但使用作用域枚举会需要显式的类型转换到 int，不同的解决方案可能各有优缺点。可以将尝试编写一个替代方案作为一个练习。
+
+\mySubsubsection{}{There's more...}
+
+bitset 可以从一个整数创建，并且可以使用 \verb|to_ulong()| 或 \verb|to_ullong()| 方法将其值转换回整数。但如果 bitset 的大小大于这些数值类型，并且超出请求的数值类型大小的任何位设置为 1，那么这些方法将抛出一个 \verb|std::overflow_error| 异常。因为该值无法在无符号长整型或无符号长长整型中表示。为了提取所有的位，需要执行以下操作：
+
+\begin{itemize}
+\item
+清除超出无符号长整型或无符号长长整型大小的位。
+
+\item
+将值转换为无符号长整型或无符号长长整型。
+
+\item
+按照无符号长整型或无符号长长整型中的位数移位 bitset。
+
+\item
+重复上述步骤直到所有位都被提取。
+\end{itemize}
+
+这些操作如下所示：
+
+\begin{cpp}
+template <size_t N>
+std::vector<unsigned long> bitset_to_vectorulong(std::bitset<N> bs)
+{
+    auto result = std::vector<unsigned long> {};
+    auto const size = 8 * sizeof(unsigned long);
+    auto const mask = std::bitset<N>{ static_cast<unsigned long>(-1)};
+    auto totalbits = 0;
+    while (totalbits < N)
+    {
+        auto value = (bs & mask).to_ulong();
+        result.push_back(value);
+        bs >>= size;
+        totalbits += size;
+    }
+    return result;
+}
+\end{cpp}
+
+为了举例说明，可创建如下 bitset：
+
+\begin{cpp}
+std::bitset<128> bs =
+    (std::bitset<128>(0xFEDC) << 96) |
+    (std::bitset<128>(0xBA98) << 64) |
+    (std::bitset<128>(0x7654) << 32) |
+    std::bitset<128>(0x3210);
+std::cout << bs << '\n';
+\end{cpp}
+
+如果打印其内容，将会得到如下输出：
+
+\begin{shell}
+000000000000000011111110110111000000000000000000101110101001100000000000000000000111011001010100
+00000000000000000011001000010000
+\end{shell}
+
+然而，当使用 \verb|bitset_to_vectorulong()| 函数将这个集合转换为一系列无符号长整型值，并打印其十六进制表示时，可得到如下输出：
+
+\begin{cpp}
+auto result = bitset_to_vectorulong(bs);
+for (auto const v : result)
+    std::cout << std::hex << v << '\n';
+\end{cpp}
+
+\begin{shell}
+3210
+7654
+ba98
+fedc
+\end{shell}
+
+对于那些在编译时无法确定 bitset 大小的情况，替代方案是使用 std::vector<bool>，将在下一个示例中讨论。
+
+
+
+
+

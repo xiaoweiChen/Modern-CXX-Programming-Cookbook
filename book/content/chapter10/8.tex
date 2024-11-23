@@ -1,0 +1,349 @@
+
+多态性（特别是 C++ 中的运行时多态性）能够以通用的方式处理类的层次结构。然而，某些情况下，也希望以相同的方式处理那些不继承自公共基类的类型。当代码不属于我们所有或因各种原因，无法更改代码以创建层次结构时，这种情况就可能发生。这种利用具有某些特定成员（函数或变量）的不同类型来完成给定任务（并且仅使用这些通用成员）的过程称为鸭子类型（duck typing）。解决这个问题的一个简单方法是构建一个每个需要通用处理的类的包装类层次结构。但这存在缺点，因为会有大量的样板代码，每当有新类型需要以相同方式处理时，就必须创建一个新的包装器。对此方法的一种替代方案就是所谓的类型擦除（type erasure）。这个术语指的是具体类型的详细信息擦除，从而使不同的甚至无关的类型能够被通用地处理。本示例中，将介绍这个惯用法是如何工作的。
+
+\mySubsubsection{}{Getting ready}
+
+为了展示类型擦除惯用法，将使用以下两个类型，它们分别表示一个按钮和一个复选框控件：
+
+\begin{cpp}
+class button
+{
+public:
+    void erase_background()
+    {
+        std::cout << "erasing button background..." << '\n';
+    }
+    void paint()
+    {
+        std::cout << "painting button..." << '\n';
+    }
+};
+class checkbox
+{
+public:
+    void erase_background()
+    {
+        std::cout << "erasing checkbox background..." << '\n';
+    }
+    void paint()
+    {
+        std::cout << "painting checkbox..." << '\n';
+    }
+};
+\end{cpp}
+
+这些是在之前示例中以多种形式见过的相同类型，都有 \verb|erase_background()| 和 \verb|paint()| 成员函数，但没有共同的基类；因此，不属于一个可以以多态方式处理层次结构的部分。
+
+\mySubsubsection{}{How to do it...}
+
+为了实现类型擦除惯用法，需要遵循以下步骤：
+
+\begin{enumerate}
+\item
+创建一个内部类（控制类的内部类），定义需要通用处理的类型之间的公共接口。这个接口称为概念（concept），因此将这个类型称为 \verb|control_concept|：
+
+\begin{cpp}
+struct control
+{
+};
+\end{cpp}
+
+\item
+定义一个提供擦除类型信息机制的类型。对于本示例中处理控件的情况，将其简单地命名为 control：
+
+\begin{cpp}
+struct control_concept
+{
+    virtual ~control_concept() = default;
+    virtual void draw() = 0;
+};
+\end{cpp}
+
+\item
+创建另一个内部类（控制类的内部类），从概念类派生。但这将是一个类模板，其类型模板参数代表需要通用处理的类型。例子中，替换为 button 和 checkbox。此实现称为模型（model），因此这个类模板称为 \verb|control_model|：
+
+\begin{cpp}
+template <typename T>
+struct control_model : public control_concept
+{
+    control_model(T & unit) : t(unit) {}
+    void draw() override
+    {
+        t.erase_background();
+        t.paint();
+    }
+private:
+    T& t;
+};
+\end{cpp}
+
+\item
+向控制类添加一个数据成员，表示指向概念实例的指针。这个示例中，将为此目的使用智能指针：
+
+\begin{cpp}
+private:
+    std::shared_ptr<control_concept> ctrl;
+\end{cpp}
+
+\item
+为控制类定义一个构造函数。这必须是一个函数模板，并且必须将概念指针设置为模型的一个实例：
+
+\begin{cpp}
+template <typename T>
+control(T&& obj) :
+ctrl(std::make_shared<control_model<T>>(std::forward<T>(obj)))
+{
+}
+\end{cpp}
+
+\item
+定义控制类客户端应该能够调用的公共接口。例子中，这是一个用于绘制控件的函数。将它命名为 draw()（尽管不必与概念中的虚方法同名）：
+
+\begin{cpp}
+void draw()
+{
+    ctrl->draw();
+}
+\end{cpp}
+\end{enumerate}
+
+将所有这些放在一起，处理无关控件类的类型擦除惯用法：
+
+\begin{cpp}
+struct control
+{
+    template <typename T>
+    control(T&& obj) :
+    ctrl(std::make_shared<control_model<T>>(std::forward<T>(obj)))
+    {
+    }
+    void draw()
+    {
+        ctrl->draw();
+    }
+    struct control_concept
+    {
+        virtual ~control_concept() = default;
+        virtual void draw() = 0;
+    };
+    template <typename T>
+    struct control_model : public control_concept
+    {
+        control_model(T& unit) : t(unit) {}
+        void draw() override
+        {
+            t.erase_background();
+            t.paint();
+        }
+        private:
+        T& t;
+    };
+private:
+    std::shared_ptr<control_concept> ctrl;
+};
+\end{cpp}
+
+可以使用这个包装类型，以多态方式处理按钮和复选框（以及其他类似的类）：
+
+\begin{cpp}
+void draw(std::vector<control>& controls)
+{
+    for (auto& c : controls)
+    {
+        c.draw();
+    }
+}
+int main()
+{
+    checkbox cb;
+    button btn;
+    std::vector<control> v{control(cb), control(btn)};
+    draw(v);
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+最原始形式的类型擦除（也可以说是最终的形式）是使用空指针。虽然这提供了在 C 中实现该惯用法的机制，但由于非类型安全，因此应避免在 C++ 中使用。其要求从指向类型的指针转换为指向 void 的指针，然后再反过来转换，这很容易出错：
+
+\begin{cpp}
+void draw_button(void* ptr)
+{
+    button* b = static_cast<button*>(ptr);
+    if (b)
+    {
+        b->erase_background();
+        b->paint();
+    }
+}
+int main()
+{
+    button btn;
+    draw_button(&btn);
+    checkbox cb;
+    draw_button(&cb); // runtime error
+}
+\end{cpp}
+
+代码中，\verb|draw_button()| 是一个知道如何绘制按钮的函数。可以通过指针传递任何东西——编译时不会有任何错误或警告，但程序很可能在运行时崩溃。
+
+C++解决这个问题的方法是定义一个包装类的层次结构来处理各个类。为此，可以从定义一个基类开始，该基类定义了包装类的接口。例子中，感兴趣的只是绘制控件，所以唯一的方法是名为 draw() 的虚方法。
+
+将这个类型称为 \verb|control_concept|。其定义如下：
+
+\begin{cpp}
+struct control_concept
+{
+    virtual ~control_concept() = default;
+    virtual void draw() = 0;
+};
+\end{cpp}
+
+下一步是对每种可以绘制的控件类型进行派生（使用两个 \verb|erase_background()| 和 \verb|paint()| 函数）。按钮和复选框的包装器如下：
+
+\begin{cpp}
+struct button_wrapper : control_concept
+{
+    button_wrapper(button& b):btn(b)
+    {}
+    void draw() override
+    {
+        btn.erase_background();
+        btn.paint();
+    }
+    private:
+    button& btn;
+};
+struct checkbox_wrapper : control_concept
+{
+    checkbox_wrapper(checkbox& cb) :cbox(cb)
+    {}
+    void draw() override
+    {
+        cbox.erase_background();
+        cbox.paint();
+    }
+    private:
+    checkbox& cbox;
+};
+\end{cpp}
+
+有了这个包装器层次结构，可以编写一个通过使用指向 \verb|control_concept| 的指针（包装器层次结构的基类）来多态地绘制控件的函数：
+
+\begin{cpp}
+void draw(std::vector<control_concept*> const & controls)
+{
+    for (auto& c : controls)
+    c->draw();
+}
+int main()
+{
+    checkbox cb;
+    button btn;
+    checkbox_wrapper cbw(cb);
+    button_wrapper btnw(btn);
+    std::vector<control_concept*> v{ &cbw, &btnw };
+    draw(v);
+}
+\end{cpp}
+
+尽管这种方法有效，但 \verb|button_wrapper| 和 \verb|control_wrapper| 几乎完全相同。因此，都模板化的良好候选者。接下来展示了一个封装这两个类中所见功能的类型模板：
+
+\begin{cpp}
+template <typename T>
+struct control_wrapper : control_concept
+{
+    control_wrapper(T& b) : ctrl(b)
+    {}
+    void draw() override
+    {
+        ctrl.erase_background();
+        ctrl.paint();
+    }
+private:
+    T& ctrl;
+};
+\end{cpp}
+
+用户代码只需要一个小改动：用 \verb|control_wrapper<button>| 和 \verb|control_wrapper<checkbox>| 替换 \verb|button_wrapper| 和 \verb|checkbox_wrapper|：
+
+\begin{cpp}
+int main()
+{
+    checkbox cb;
+    button btn;
+    control_wrapper<checkbox> cbw(cb);
+    control_wrapper<button> btnw(btn);
+    std::vector<control_concept*> v{ &cbw, &btnw };
+    draw(v);
+}
+\end{cpp}
+
+\verb|control_concept| 类型与擦除模式中看到的一样，而 \verb|control_wrapper<T>| 与 \verb|control_model<T>| 相同。此外，该模式还定义了一种封装模型的方法。
+
+还可以将处理这些控件类型的 draw() 自由函数移到控制类内部。最终实现如下所示：
+
+\begin{cpp}
+struct control_collection
+{
+    template <typename T>
+    void add_control(T&& obj)
+    {
+        ctrls.push_back(
+        std::make_shared<control_model<T>>(std::forward<T>(obj)));
+    }
+    void draw()
+    {
+        for (auto& c : ctrls)
+        {
+            c->draw();
+        }
+    }
+    struct control_concept
+    {
+        virtual ~control_concept() = default;
+        virtual void draw() = 0;
+    };
+    template <typename T>
+    struct control_model : public control_concept
+    {
+        control_model(T& unit) : t(unit) {}
+        void draw() override
+        {
+            t.erase_background();
+            t.paint();
+        }
+        private:
+        T& t;
+    };
+private:
+    std::vector<std::shared_ptr<control_concept>> ctrls;
+};
+\end{cpp}
+
+这需要对用户代码进行小的更改（见“How to do it...”部分）：
+
+\begin{cpp}
+int main()
+{
+    checkbox cb;
+    button btn;
+    control_collection cc;
+
+    cc.add_control(cb);
+    cc.add_control(btn);
+    cc.draw();
+}
+\end{cpp}
+
+本示例中看到的是一个简单的例子，但在现实世界场景中也会使用到这种惯用法，包括 C++ 标准库中：
+
+\begin{itemize}
+\item
+\verb|std::function|，这是一个多态函数包装器，允许存储、复制和调用可调用实例：函数、函数实例、成员函数指针、成员数据指针、lambda 表达式和绑定表达式。
+
+\item
+\verb|std::any|，这是一种表示可以容纳可复制构造类型值的容器类型。
+\end{itemize}
+
+

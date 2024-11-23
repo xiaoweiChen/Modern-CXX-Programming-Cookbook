@@ -1,0 +1,233 @@
+文件和目录的操作，例如复制、移动和删除文件，或者创建、重命名和删除目录，都由文件系统库支持。文件和目录通过路径来标识（可以是绝对路径、规范路径或相对路径）。本示例中，将介绍上述操作的标准函数是什么，以及其工作原理。
+
+\mySubsubsection{}{Getting ready}
+
+对于以下所有示例，将使用以下变量，并假设当前路径在 Windows 上是 \verb|C:\Users\Marius\Documents|，而在 POSIX 系统上是 /home/marius/docs：
+
+\begin{cpp}
+auto err = std::error_code{};
+auto basepath = fs::current_path();
+auto path = basepath / "temp";
+auto filepath = path / "sample.txt";
+\end{cpp}
+
+假设当前路径的 temp 子目录中存在一个名为 sample.txt 的文件（例如 \verb|C:\Users\Marius\Documents\temp\sample.txt| 或 \verb|/home/marius/docs/temp/sample.txt|）。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下库函数执行目录操作：
+
+\begin{itemize}
+\item
+要创建新目录，请使用 \verb|create_directory()|。如果目录已存在，此方法不会执行任何操作，不会递归地创建目录：
+
+\begin{cpp}
+auto success = fs::create_directory(path, err);
+\end{cpp}
+
+\item
+要递归地创建新目录，请使用 \verb|create_directories()|：
+
+\begin{cpp}
+auto temp = path / "tmp1" / "tmp2" / "tmp3";
+auto success = fs::create_directories(temp, err);
+\end{cpp}
+
+\item
+要移动现有目录，请使用 rename()：
+
+\begin{cpp}
+auto temp = path / "tmp1" / "tmp2" / "tmp3";
+auto newtemp = path / "tmp1" / "tmp3";
+fs::rename(temp, newtemp, err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要重命名现有目录，也请使用 rename()：
+
+\begin{cpp}
+auto temp = path / "tmp1" / "tmp3";
+auto newtemp = path / "tmp1" / "tmp4";
+fs::rename(temp, newtemp, err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要复制现有目录，请使用 copy()。要递归地复制整个目录的内容，请使用 \verb|copy_options::recursive| 标志：
+
+\begin{cpp}
+fs::copy(path, basepath / "temp2",
+         fs::copy_options::recursive, err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要创建指向目录的符号链接，请使用 \verb|create_directory_symlink()|：
+
+\begin{cpp}
+auto linkdir = basepath / "templink";
+fs::create_directory_symlink(path, linkdir, err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要删除空目录，请使用 remove()：
+
+\begin{cpp}
+auto temp = path / "tmp1" / "tmp4";
+auto success = fs::remove(temp, err);
+\end{cpp}
+
+\item
+要递归地删除目录及其全部内容，请使用 \verb|remove_all()|：
+
+\begin{cpp}
+auto success = fs::remove_all(path, err) !=
+               static_cast<std::uintmax_t>(-1);
+\end{cpp}
+
+\item
+要更改目录或文件的权限，请使用 permissions()，指定来自 perms 枚举的权限选项。除非从 \verb|perm_options| 枚举中指定操作类型（替换、添加或移除），否则默认行为是用指定的权限替换所有现有权限：
+
+\begin{cpp}
+// replace permissions with specified ones
+fs::permissions(temp, fs::perms::owner_all |
+                      fs::perms::group_all, err);
+if (err) std::cout << err.message() << '\n';
+// remove specified permissions
+fs::permissions(temp, fs::perms::group_exec,
+                      fs::perm_options::remove, err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+\end{itemize}
+
+使用以下库函数执行文件操作：
+
+\begin{itemize}
+\item
+要复制文件，请使用 \verb|copy()| 或 \verb|copy_file()|。下一节会解释这两个函数之间的区别：
+
+\begin{cpp}
+auto success = fs::copy_file(filepath, path / "sample.bak", err);
+if (!success) std::cout << err.message() << '\n';
+fs::copy(filepath, path / "sample.cpy", err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要重命名文件，请使用 rename()：
+
+\begin{cpp}
+auto newpath = path / "sample.log";
+fs::rename(filepath, newpath, err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要移动文件，请使用 rename()：
+
+\begin{cpp}
+auto newpath = path / "sample.log";
+fs::rename(newpath, path / "tmp1" / "sample.log", err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要创建指向文件的符号链接，请使用 \verb|create_symlink()|：
+
+\begin{cpp}
+auto linkpath = path / "sample.txt.link";
+fs::create_symlink(filepath, linkpath, err);
+if (err) std::cout << err.message() << '\n';
+\end{cpp}
+
+\item
+要删除文件，请使用 remove()：
+
+\begin{cpp}
+auto success = fs::remove(path / "sample.cpy", err);
+if (!success) std::cout << err.message() << '\n';
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+本示例中提到的所有函数，都有多个重载版本，可以分为两类：
+
+\begin{itemize}
+\item
+最后一个参数接受 \verb|std::error_code| 引用的重载：这些重载不会抛出异常（定义为 noexcept）。相反，如果发生操作系统错误，会将 \verb|error_code| 值设置为操作系统错误代码。如果没有此类错误，则调用 \verb|error_code| 的 clear() 方法以重置先前设置的错误码。
+
+\item
+不接受最后一个参数为 \verb|std::error_code| 类型的重载：如果发生错误，这些重载会抛出异常。如果发生操作系统错误，会抛出 \verb|std::filesystem::filesystem_error| 异常。另一方面，如果内存分配失败，这些函数会抛出 \verb|std::bad_alloc| 异常。
+\end{itemize}
+
+上一节中的所有示例都使用了不抛出异常，而是在发生错误时设置代码的重载。一些函数返回布尔值以指示成功或失败。可以通过检查方法 value() 返回的错误代码值是否不同于 0，或者使用转换操作符 bool（对于同样的情况返回 true，否则返回 false）来判断 \verb|error_code| 是否持有错误代码。要获取错误码的说明字符串，请使用 message() 方法。
+
+某些文件系统库函数同时适用于文件和目录。这适用于 rename()、remove() 和 copy()。每个函数的可能很复杂，特别是 copy()。
+
+关于复制文件，有两种函数可以使用：\verb|copy()| 和 \verb|copy_file()|。这两种函数具有相同的签名的等效重载，表面上看起来工作方式相同。但有一个重要的区别（除了 \verb|copy()| 同样适用于目录之外）：\verb|copy_file()| 会跟随符号链接。
+
+为了避免这样，而是复制实际的符号链接，必须使用 \verb|copy_symlink()| 或带有 \verb|copy_options::copy_symlinks| 标志的 \verb|copy()|。无论是 \verb|copy()| 还是 \verb|copy_file()| 函数都接受 \verb|std::filesystem::copy_options| 类型参数的重载，该参数定义了操作应该如何执行。\verb|copy_options| 是一个作用域枚举：
+
+\begin{cpp}
+enum class copy_options
+{
+    none               = 0,
+    skip_existing      = 1,
+    overwrite_existing = 2,
+    update_existing    = 4,
+    recursive          = 8,
+    copy_symlinks      = 16,
+    skip_symlinks      = 32,
+    directories_only   = 64,
+    create_symlinks    = 128,
+    create_hard_links  = 256
+};
+\end{cpp}
+
+下表定义了每个标志如何影响 \verb|copy()| 或 \verb|copy_file()| 的复制操作。表格摘自 C++ 标准 N4917 版本的第 31.12.8.3 段落：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|ll|}
+\hline
+\multicolumn{2}{|l|}{\textbf{控制现有目标文件 copy\_file 函数效果的选项组}}             \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\multicolumn{1}{|l|}{none}                & （默认）错误；文件已存在                                 \\ \hline
+\multicolumn{1}{|l|}{skip\_existing}      & 不覆盖现有文件；不报告错误                \\ \hline
+\multicolumn{1}{|l|}{overwrite\_existing} & 覆盖现有文件                                          \\ \hline
+\multicolumn{1}{|l|}{update\_existing}    & 如果现有文件比替换文件旧，则覆盖现有文件 \\ \hline
+\multicolumn{2}{|l|}{\textbf{控制 copy 函数子目录效果的选项组}}                          \\ \hline
+\multicolumn{1}{|l|}{none}                & 默认）不复制子目录                                  \\ \hline
+\multicolumn{1}{|l|}{recursive}           & 递归复制子目录及其内容                   \\ \hline
+\multicolumn{2}{|l|}{\textbf{控制 copy 函数符号链接效果的选项组}}                          \\ \hline
+\multicolumn{1}{|l|}{none}                & （默认）跟随符号链接                                       \\ \hline
+\multicolumn{1}{|l|}{copy\_symlinks} &
+复制符号链接本身，而非其所指向的目标 \\ \hline
+\multicolumn{1}{|l|}{skip\_symlinks}      &忽略符号链接，不复制                                                \\ \hline
+\multicolumn{2}{|l|}{\textbf{控制复制功能效果的选项组，用于选择复制的形式}}            \\ \hline
+\multicolumn{1}{|l|}{none}                & （默认）复制内容                                              \\ \hline
+\multicolumn{1}{|l|}{directories\_only}   & 仅复制目录，忽略文件   \\ \hline
+\multicolumn{1}{|l|}{create\_symlinks} &
+\begin{tabular}[c]{@{}l@{}}创建符号链接而不是文件副本；\\源路径将是绝对路径，除非目标路径在当前目录中\end{tabular}  \\ \hline
+\multicolumn{1}{|l|}{create\_hard\_links} & 制作硬链接,而非文件副本                           \\ \hline
+\end{longtable}
+
+\begin{center}
+表 7.3: copy\_operation 标志如何影响复制操作
+\end{center}
+
+另一个需要提及的方面与符号链接有关：\verb|create_directory_symlink()| 创建指向目录的符号链接，而 \verb|create_symlink()| 则创建指向文件或目录的符号链接。在 POSIX 系统上，当涉及到目录时，两者是相同的。但其他系统（如 Windows）中，创建指向目录的符号链接与创建指向文件的符号链接的方式不同，建议为了编写在所有系统上都能正确运行的代码，对于目录使用 \verb|create_directory_symlink()|。
+
+\begin{myTip}
+进行文件和目录的操作，如本示例中描述的那些操作，并且使用可能会抛出异常的重载时，请在调用时使用 try-catch。无论使用哪种类型的重载，都应检查操作的成功与否，并在失败的情况下采取适当的措施。
+\end{myTip}
+
+如果需要更改文件或目录的权限，可以使用 permissions() 函数。其有几个重载版本，允许指定一系列权限选项。这些选项定义在 \verb|std::filesystem::perms| 枚举中。如果没有指定特定的更改操作，将会执行现有权限的完整替换。但可以使用 \verb|std::filesystem::perm_options| 枚举中提供的选项来指定添加或删除权限。除了替换、添加和移除外，还有一个第四个选项，即 nofollow。这适用于符号链接，这样权限就会更改在符号链接本身上，而不是解析到原文件上。
+

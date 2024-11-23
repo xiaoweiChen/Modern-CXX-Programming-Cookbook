@@ -1,0 +1,119 @@
+第一个示例中，介绍了线程支持库，并了解了如何使用线程进行一些基本操作。简要讨论了线程函数中的异常处理，并提到线程启动上下文中不能用 try…catch 语句捕获异常。另一方面，异常可以在 \verb|std::exception_ptr| 包装器内跨线程传输。本示例中，将介绍如何处理来自线程函数的异常。
+
+\mySubsubsection{}{Getting ready}
+
+\verb|exception_ptr| 类型在 std 命名空间中可用，该命名空间位于 <exception> 头文件中；互斥锁（之前有更详细的讨论）也在此命名空间中可用，但位于 <mutex> 头文件中。
+
+\mySubsubsection{}{How to do it...}
+
+为了正确处理工作线程中抛出，并在主线程或其加入的线程中处理的异常，请执行以下操作（假设可以从多个线程抛出多个异常）：
+
+\begin{enumerate}
+\item
+使用全局容器来保存 \verb|std::exception_ptr| 的实例：
+
+\begin{cpp}
+std::vector<std::exception_ptr> g_exceptions;
+\end{cpp}
+
+\item
+使用全局互斥锁来同步对共享容器的访问：
+
+\begin{cpp}
+std::mutex g_mutex;
+\end{cpp}
+
+\item
+顶层线程函数中执行的代码周围使用 \verb|try...catch| 块。使用 \verb|std::current_exception()| 捕获当前异常，并将其副本或引用封装进 \verb|std::exception_ptr| 指针中，然后将其添加到异常的共享容器中：
+
+\begin{cpp}
+void func1()
+{
+    throw std::runtime_error("exception 1");
+}
+void func2()
+{
+    throw std::runtime_error("exception 2");
+}
+void thread_func1()
+{
+    try
+    {
+        func1();
+    }
+    catch (...)
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_exceptions.push_back(std::current_exception());
+    }
+}
+void thread_func2()
+{
+    try
+    {
+        func2();
+    }
+    catch (...)
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_exceptions.push_back(std::current_exception());
+    }
+}
+\end{cpp}
+
+\item
+启动线程之前，主线程清除容器：
+
+\begin{cpp}
+g_exceptions.clear();
+\end{cpp}
+
+\item
+主线程中，所有线程执行完毕后，检查捕获的异常并处理每个异常：
+
+\begin{cpp}
+std::thread t1(thread_func1);
+std::thread t2(thread_func2);
+t1.join();
+t2.join();
+for (auto const & e : g_exceptions)
+{
+    try
+    {
+        if(e)
+        std::rethrow_exception(e);
+    }
+    catch(std::exception const & ex)
+    {
+        std::cout << ex.what() << '\n';
+    }
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+前面的例子中，假设多个线程可能会抛出异常，因此需要一个容器来保存所有异常。如果一次只有一个线程抛出单个异常，那么不需要共享容器和用于同步访问的互斥锁。可以使用一个全局的 \verb|std::exception_ptr| 类型实例来保存在各线程间传输的异常。
+
+\verb|std::current_exception()| 是一个通常在 catch 子句中使用的函数，用于捕获当前异常并创建 \verb|std::exception_ptr| 的实例。这是为了保持对原始异常的副本或引用（取决于实现），只要存在指向 \verb|std::exception_ptr| 指针，该副本或引用就一直有效。如果此函数在没有处理异常的情况下调用，则会创建一个空的 \verb|std::exception_ptr|。
+
+\verb|std::exception_ptr| 使用 \verb|std::current_exception()| 捕获的异常包装器。如果默认构造，则不持有任何异常，是一个空指针。如果这两个对象都是空或指向相同的异常实例，则这两种类型实例相等。\verb|std::exception_ptr| 实例可以传递给其他线程，可以重新抛出并在 \verb|try...catch| 块中捕获。
+
+\verb|std::rethrow_exception()| 是一个接受 \verb|std::exception_ptr| 作为参数的函数，会抛出由其参数引用的异常对象。
+
+\begin{myNotic}
+\verb|std::current_exception()|, \verb|std::rethrow_exception()| 和 \verb|std::exception_ptr| 在 C++11 中可用。
+\end{myNotic}
+
+前一节的例子中，每个线程函数都使用了整个代码执行的 \verb|try...catch|。当处理异常时，会获取全局互斥锁实例上的锁，并将持有当前异常的 \verb|std::exception_ptr| 实例添加到共享容器中。通过这种方法，线程函数会在遇到第一个异常时停止；然而，即使前一个操作抛出了异常，也可能需要执行多个操作，需要有多个 \verb|try...catch| 语句，并且可能只将某些异常传输到线程外部。
+
+主线程中，所有线程执行完毕后，迭代容器，每个非空异常都会重新抛出，并在 \verb|try...catch| 块中捕获并处理。
+
+
+
+
+
+
+
+
+

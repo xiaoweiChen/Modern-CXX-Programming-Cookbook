@@ -1,0 +1,66 @@
+
+
+上一节介绍了伪随机数库及其组件，以及如何生成不同统计分布的数字。其中，忽略了一个重要因素，就是伪随机数生成器的正确初始化。
+
+通过仔细分析（超出了本书的范畴），可以证明梅森旋转引擎倾向于重复生成某些值而遗漏其他值，因此生成的数字不是均匀分布，而是二项式或泊松分布。本示例中，将介绍如何初始化生成器，以便生成真正均匀分布的伪随机数。
+
+\mySubsubsection{}{Getting ready}
+
+阅读上一节，了解伪随机数库。
+
+\mySubsubsection{}{How to do it...}
+
+为了正确初始化伪随机数生成器以生成均匀分布的伪随机数序列，请执行以下步骤：
+
+\begin{enumerate}
+\item
+使用 \verb|std::random_device| 生成随机数作为随机种子：
+
+\begin{cpp}
+std::random_device rd;
+\end{cpp}
+
+\item
+为引擎的所有内部位生成随机数据：
+
+\begin{cpp}
+std::array<int, std::mt19937::state_size> seed_data {};
+std::generate(std::begin(seed_data), std::end(seed_data),
+              std::ref(rd));
+\end{cpp}
+
+\item
+从之前生成的伪随机数据创建 \verb|std::seed_seq| 实例：
+
+\begin{cpp}
+std::seed_seq seq(std::begin(seed_data), std::end(seed_data));
+\end{cpp}
+
+\item
+创建引擎实例，并初始化代表引擎内部状态的所有位；例如，\verb|mt19937| 具有 19,937 位的内部状态：
+
+\begin{cpp}
+auto eng = std::mt19937{ seq };
+\end{cpp}
+
+\item
+根据应用程序的需求使用适当的分布：
+
+\begin{cpp}
+auto dist = std::uniform_real_distribution<>{ 0, 1 };
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it work...}
+
+上一节中展示的代码中，使用了 \verb|std::mt19937| 引擎来生成伪随机数。虽然梅森旋转引擎的速度比其他引擎慢，但可以生成最长的非重复数字序列，并具有最佳的频谱特性。问题在于 \verb|mt19937| 引擎的内部状态有 624 个 32 位整数，而在上一节的示例中，只初始化了其中的一个。
+
+使用伪随机数库时，请记住以下经验法则。
+
+\begin{myNotic}
+为了获得最佳结果，生成数字之前，引擎的整个内部状态必须正确初始化。
+\end{myNotic}
+
+伪随机数库为此特定目的提供了名为 \verb|std::seed_seq| 的类型，可以使用 32 位整数种子生成器，并在 32 位空间内均匀地生成请求的数量的整数。
+
+“How to do it...”中定义了一个名为 \verb|seed_data| 的数组，其中包含等于 \verb|mt19937| 发生器内部状态的 32 位整数的数量——即 624 个整数，使用 \verb|std::random_device| 生成的随机数初始化了数组。后来，该数组用于设置 \verb|std::seed_seq|的种子，后者可用于设置 \verb|mt19937| 发生器的种子。

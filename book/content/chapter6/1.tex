@@ -1,0 +1,144 @@
+处理时间和日期是编程语言中常见的操作。C++11作为标准库的一部分提供了日期和时间库，能够定义时间点和时间段。这个名为chrono的库是一个通用工具库，设计用于与不同的系统上的计时器和时钟配合工作。该库位于<chrono>头文件中，并在std::chrono命名空间内定义和实现了几个组件：
+
+\begin{itemize}
+\item
+duration，表示时间段
+
+\item
+time point，表示从某个时钟的纪元开始起的时间点
+
+\item
+clock，定义了纪元（即时间的起点）和刻度
+\end{itemize}
+
+本示例中，将介绍如何使用duration。
+
+\mySubsubsection{}{Getting ready}
+
+本示例不是duration类型的完整参考，建议查阅其他资源（库的参考文档可在\url{http://en.cppreference.com/w/cpp/chrono}找到）。
+
+chrono库中，时间段由std::chrono::duration类型表示。
+
+\mySubsubsection{}{How to do it...}
+
+要处理时间段，可使用以下方法：
+
+\begin{itemize}
+\item
+使用std::chrono::duration的类型定义来创建小时、分钟、秒、毫秒、微秒和纳秒的时间段：
+
+\begin{cpp}
+std::chrono::hours        half_day(12);
+std::chrono::minutes      half_hour(30);
+std::chrono::seconds      half_minute(30);
+std::chrono::milliseconds half_second(500);
+std::chrono::microseconds half_millisecond(500);
+std::chrono::nanoseconds  half_microsecond(500);
+\end{cpp}
+
+\item
+使用来自C++14的标准用户定义字面量操作符，这些操作符位于\verb|std::chrono_literals|命名空间中，来创建小时、分钟、秒、毫秒、微秒和纳秒的时间段：
+
+\begin{cpp}
+using namespace std::chrono_literals;
+auto half_day         = 12h;
+auto half_hour        = 30min;
+auto half_minute      = 30s;
+auto half_second      = 500ms;
+auto half_millisecond = 500us;
+auto half_microsecond = 500ns;
+\end{cpp}
+
+\item
+使用直接转换，将较低精度的时间段转换为较高精度的时间段：
+
+\begin{cpp}
+std::chrono::hours half_day_in_h(12);
+std::chrono::minutes half_day_in_min(half_day_in_h);
+std::cout << half_day_in_h.count() << "h" << '\n';    //12h
+std::cout << half_day_in_min.count() << "min" << '\n';//720min
+\end{cpp}
+
+\item
+使用\verb|std::chrono::duration_cast|将较高精度的时间段转换为较低精度的时间段：
+
+\begin{cpp}
+using namespace std::chrono_literals;
+auto total_seconds = 12345s;
+auto hours =
+    std::chrono::duration_cast<std::chrono::hours>(total_seconds);
+auto minutes =
+    std::chrono::duration_cast<std::chrono::minutes>(total_seconds % 1h);
+auto seconds =
+    std::chrono::duration_cast<std::chrono::seconds>(total_seconds % 1min);
+std::cout << hours.count()   << ':'
+          << minutes.count() << ':'
+          << seconds.count() << '\n'; // 3:25:45
+\end{cpp}
+
+\item
+需要四舍五入时，使用C++17中std::chrono命名空间提供的转换函数floor()、round()和ceil()（不要与<cmath>头文件中的std::floor()、std::round()和std::ceil()混淆）：
+
+\begin{cpp}
+using namespace std::chrono_literals;
+auto total_seconds = 12345s;
+auto m1 = std::chrono::floor<std::chrono::minutes>(total_seconds);
+// 205 min
+auto m2 = std::chrono::round<std::chrono::minutes>(total_seconds);
+// 206 min
+auto m3 = std::chrono::ceil<std::chrono::minutes>(total_seconds);
+// 206 min
+auto sa = std::chrono::abs(total_seconds);
+\end{cpp}
+
+\item
+使用算术运算、复合赋值和比较运算来修改和比较时间段：
+
+\begin{cpp}
+using namespace std::chrono_literals;
+auto d1 = 1h + 23min + 45s; // d1 = 5025s
+auto d2 = 3h + 12min + 50s; // d2 = 11570s
+if (d1 < d2) { /* do something */ }
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::chrono::duration类定义了一段时间单位内的刻度数（两个时刻之间的增量）。默认单位是秒，为了表达其他单位，如分钟或毫秒，需要使用比率。对于大于一秒的单位，比率大于一，例如：ratio<60>表示分钟。对于小于一秒的单位，比率小于一，例如：ratio<1, 1000>表示毫秒。可以通过成员函数count()获取刻度数。
+
+标准库定义了几种类型别名，用于表示纳秒、微秒、毫秒、秒、分钟和小时的时间段。以下代码展示了这些时间段在chrono命名空间中的定义方式：
+
+\begin{cpp}
+namespace std {
+    namespace chrono {
+        typedef duration<long long, ratio<1, 1000000000>> nanoseconds;
+        typedef duration<long long, ratio<1, 1000000>> microseconds;
+        typedef duration<long long, ratio<1, 1000>> milliseconds;
+        typedef duration<long long> seconds;
+        typedef duration<int, ratio<60> > minutes;
+        typedef duration<int, ratio<3600> > hours;
+    }
+}
+\end{cpp}
+
+根据这种灵活的定义，可以表达像1.2个六分之一分钟（即12秒）这样的时间段，其中1.2是持续时间的刻度数，而ratio<10>（就像60/6一样）是时间单位：
+
+\begin{cpp}
+std::chrono::duration<double, std::ratio<10>> d(1.2); // 12 sec
+\end{cpp}
+
+C++14的\verb|std::chrono_literals|命名空间添加了几个标准用户定义的字面量操作符，定义持续时间更加容易，但必须在想要使用字面量操作符的作用域中包含该命名空间。
+
+\begin{myTip}
+应在希望用户定义字面量操作符的作用域中包含相应的命名空间，而不是在更大的作用域中，以免与其他库和命名空间中同名的操作符发生冲突。
+\end{myTip}
+
+所有算术运算都适用于duration类型。可以对持续时间进行加减运算乘除，或者应用取模运算。但需要注意的是，当两个不同时间单位的持续时间相加或相减时，结果是一个具有这两个时间单位最大公约数的时间单位的持续时间。如果将表示秒的持续时间和表示分钟的持续时间相加，结果将是表示秒的持续时间。
+
+从精度较低的时间单位的持续时间到精度较高的时间单位的持续时间的转换是隐式的，而从精度较高的时间单位到精度较低的时间单位的转换需要显式转换。这可通过非成员函数\verb|std::chrono::duration_cast()|完成的。“How to do it...”的示例中，用于确定给定以秒表示的持续时间中有多少小时、分钟和秒。
+
+C++17添加了几个新的非成员转换函数，这些函数执行带有四舍五入的持续时间转换：floor()向下取整，ceil()向上取整，round()取最近值。此外，C++17还添加了一个名为abs()的非成员函数，用于获取持续时间的绝对值。
+
+\mySubsubsection{}{there's more}
+
+C++20之前，chrono是一个通用库，缺乏许多功能，如用年、月、日部分表示日期，处理时区和日历等。C++20标准增加了对日历和时区的支持。如果使用的编译器不支持这些C++20新增功能，第三方库可以实现这些功能，推荐Howard Hinnant的date库（MIT许可证）\url{https://github.com/HowardHinnant/date}，该库是C++20 chrono新增功能的基础。

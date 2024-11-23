@@ -1,0 +1,192 @@
+
+标准库提供了名为 \verb|std::regex_search()| 的算法，可以将正则表达式与字符串的任何部分匹配，就和 \verb|regex_match()| 一样。然而，这个函数不允许在输入字符串中搜索正则表达式出现的所有情况，所以需要使用标准库中的迭代器。
+
+本示例中，将介绍如何使用正则表达式解析字符串的内容，需要考虑解析包含名称-值对的文本文件的问题，格式为 \verb|name = value|，但以 \# 开头的行表示注释，必须忽略。以下是一个例子：
+
+\begin{shell}
+#remove # to uncomment a line
+timeout=120
+server = 127.0.0.1
+#retrycount=3
+\end{shell}
+
+\mySubsubsection{}{Getting ready}
+
+接下来的例子中，text 是一个变量：
+
+\begin{cpp}
+auto text {
+    R"(
+    #remove # to uncomment a line
+    timeout=120
+    server = 127.0.0.1
+    #retrycount=3
+    )"s};
+\end{cpp}
+
+目的是简化代码，实际应用中可能会从文件或其他来源读取文本。
+
+\mySubsubsection{}{How to do it...}
+
+在字符串中搜索正则表达式的出现情况，应该按照以下步骤操作：
+
+\begin{enumerate}
+\item
+包含头文件 <regex> 和 <string> 以及用于字符串的标准用户定义字面量的命名空间 \verb|std::string_literals|（C++14）：
+
+\begin{cpp}
+#include <regex>
+#include <string>
+using namespace std::string_literals;
+\end{cpp}
+
+\item
+使用原字符串字面量（对于 \verb|std::wregex| 使用原宽字符串字面量）来指定正则表达式，以避免转义反斜杠。以下正则表达式验证了前面提出的数据格式：
+
+\begin{cpp}
+auto pattern {R"(^(?!#)(\w+)\s*=\s*([\w\d]+[\w\d._,\-:]*)$)"s};
+\end{cpp}
+
+\item
+创建 \verb|std::regex/std::wregex| 类型实例（取决于使用的字符集）来封装正则表达式:
+
+\begin{cpp}
+auto rx = std::regex{pattern};
+\end{cpp}
+
+\item
+要搜索给定文本中正则表达式的首次出现，可用通用算法 \verb|std::regex_search()|（示例 1）:
+
+\begin{cpp}
+auto match = std::smatch{};
+if (std::regex_search(text, match, rx))
+{
+    std::cout << match[1] << '=' << match[2] << '\n';
+}
+\end{cpp}
+
+\item
+要查找给定文本中正则表达式的所有出现，可用迭代器 \verb|std::regex_iterator|（示例 2）:
+
+\begin{cpp}
+auto end = std::sregex_iterator{};
+for (auto it=std::sregex_iterator{ std::begin(text),
+                                   std::end(text), rx };
+    it != end; ++it)
+{
+    std::cout << '\'' << (*it)[1] << "'='"
+    << (*it)[2] << '\'' << '\n';
+}
+\end{cpp}
+
+\item
+要遍历匹配的所有子表达式，可用迭代器 \verb|std::regex_token_iterator|（示例 3）:
+
+\begin{cpp}
+auto end = std::sregex_token_iterator{};
+for (auto it = std::sregex_token_iterator{
+                 std::begin(text), std::end(text), rx };
+    it != end; ++it)
+{
+    std::cout << *it << '\n';
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it work...}
+
+可以解析前面显示输入文件的简单正则表达式：
+
+\begin{shell}
+^(?!#)(\w+)\s*=\s*([\w\d]+[\w\d._,\-:]*)$
+\end{shell}
+
+此正则表达式会忽略所有以 \# 开头的行；对于那些不以 \# 开头的行，匹配一个名字后面跟着等号，然后是一个值，该值可以由字母数字字符和其他几个字符（下划线、点、逗号等）组成。该正则表达式的具体含义解释如下
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{部分}        & \textbf{描述}                                                                   \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\textasciicircum{}   & 行首                                                                          \\ \hline
+(?!\#)               & 负向前瞻，确保不能匹配 \# 字符 \\ \hline
+(\textbackslash{}w)+ & 捕获组，至少包含一个单词字符的标识符          \\ \hline
+\textbackslash{}s*   & 任意空白字符                                                                       \\ \hline
+=                    & 等号                                                                            \\ \hline
+\textbackslash{}s*   & 任意空白字符                                                                       \\ \hline
+({[}\textbackslash{}w\textbackslash{}d{]}+{[}\textbackslash{}w\textbackslash{}d.\_,\textbackslash{}-:{]}*) &
+\begin{tabular}[c]{@{}l@{}}捕获组，以字母数字字符开头，也可以包含点、\\逗号、反斜杠、破折号、冒号或下划线的值 \end{tabular} \\ \hline
+\$                   & 行尾                                                                             \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.15: 解析正则表达式
+\end{center}
+
+可以使用 \verb|std::regex_search()| 在输入文本中搜索匹配项。这个算法有多个重载版本，工作方式相同。必须指定要处理的字符范围、一个输出 \verb|std::match_results| 类型实例（将包含匹配结果）、一个表示正则表达式及其匹配标志的 \verb|std::basic_regex| 类型实例（标志定义了搜索方式）。如果找到匹配，则函数返回 true；否则返回 false。
+
+前面部分的第一个示例（见第四条列表项）中，match 是 \verb|std::smatch| 的一个类型实例，\verb|std::smatch| 是 \verb|std::match_results| 的类型别名，模板类型为 \verb|string::const_iterator|。如果找到了匹配项，此实例将在一系列值中包含所有匹配子表达式的匹配信息；索引 0 处的子匹配始终是整个匹配。
+
+索引 1 处的子匹配是第一个匹配的子表达式，索引 2 处的子匹配是第二个匹配的子表达式，依此类推。正则表达式中有两个捕获组（即子表达式），在成功的情况下，\verb|std::match_results| 将会有三个子匹配。表示名称的标识符位于索引 1，等号后的值位于索引 2，所以这段代码会输出以下内容：
+
+\myGraphic{0.3}{content/chapter2/images/10.png}{图 2.9: 第一个示例的输出}
+
+\verb|std::regex_search()| 算法无法遍历文本中所有可能的匹配项，需要使用迭代器，就是 \verb|std::regex_iterator| 的作用所在。不仅可以遍历所有的匹配项，还能访问匹配项的所有子匹配项。
+
+迭代器是在构造时和每次递增时调用 \verb|std::regex_search()|，调用结果为 \verb|std::match_results|。默认构造函数创建一个表示序列末尾的迭代器，可以用来测试何时应停止遍历匹配项。
+
+前面部分的第二个示例（见第五条列表项）中，首先创建一个序列末尾迭代器，然后开始遍历所有可能的匹配项。构造时会调用 \verb|std::regex_match()|，如果找到匹配项，可以通过当前迭代器访问其结果。这将持续进行直到找不到匹配项（即到达序列末尾）：
+
+\myGraphic{0.3}{content/chapter2/images/11.png}{图 2.10: 第二个示例的输出}
+
+\verb|std::regex_iterator| 的替代方案是 \verb|std::regex_token_iterator|。工作原理类似于 \verb|std::regex_iterator|，实际上内部包含了一个这样的迭代器，能够访问匹配项中的特定子表达式。 “How to do it...”的第三个示例（见第六条列表项）中已经有所展示。首先创建一个序列末尾迭代器，然后循环遍历匹配项，直到达到序列末尾。构造函数中，没有指定通过迭代器访问的子表达式的索引，所以默认值为 0。此程序将输出所有的匹配项：
+
+\myGraphic{0.3}{content/chapter2/images/12.png}{图 2.11: 第三个示例的输出}
+
+如果只想访问第一个子表达式（这种情况下就是名称），只需要在token迭代器的构造函数中指定子表达式的索引即可：
+
+\begin{cpp}
+auto end = std::sregex_token_iterator{};
+for (auto it = std::sregex_token_iterator{ std::begin(text),
+               std::end(text), rx, 1 };
+    it != end; ++it)
+{
+    std::cout << *it << '\n';
+}
+\end{cpp}
+
+这次，得到的输出只包含名称，如下图所示：
+
+\myGraphic{0.3}{content/chapter2/images/13.png}{图 2.12: 输出仅包含名称}
+
+关于token迭代器的一个有趣之处在于，如果子表达式的索引为 -1，会返回字符串中未匹配的部分，返回一个对应的 \verb|std::match_results| 类型实例，代表上次匹配与序列结束间的字符序列：
+
+\begin{cpp}
+auto end = std::sregex_token_iterator{};
+for (auto it = std::sregex_token_iterator{ std::begin(text),
+               std::end(text), rx, -1 };
+    it != end; ++it)
+{
+    std::cout << *it << '\n';
+}
+\end{cpp}
+
+这个程序将输出以下内容：
+
+\myGraphic{0.4}{content/chapter2/images/14.png}{图 2.13: 包括空行的输出}
+
+注意，输出中的空行对应于空token。
+
+
+
+
+
+
+
+
+

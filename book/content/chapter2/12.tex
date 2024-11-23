@@ -1,0 +1,298 @@
+
+
+正则表达式是一种对文本进行模式匹配和替换的语言。C++11 在标准库中(<regex> 头文件)提供了一组类型、算法和迭代器来支持正则表达式。本示例中，将介绍如何使用正则表达式来验证字符串是否符合某个模式（例如：验证电子邮件或IP地址格式）。
+
+\mySubsubsection{}{Getting ready}
+
+整个示例中，必要时会解释所使用的正则表达式的细节。但读者们应该对正则表达式有简单的了解，以便使用 C++ 标准库中的正则表达式功能。关于正则表达式语法和标准的描述超出了本书的目的；如果不熟悉正则表达式，在继续阅读本示例和其他使用正则表达式的示例之前，建议先了解相关的信息。可以在线上 \url{https://regexr.com} 和 \url{https://regex101.com} 学习、构建和调试正则表达式。
+
+\mySubsubsection{}{How to do it...}
+
+为了验证字符串是否符合正则表达式，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+包含 <regex> 和 <string> 头文件以及用于字符串的标准用户定义字面量的命名空间 \verb|std::string_literals|（C++14）：
+
+\begin{cpp}
+#include <regex>
+#include <string>
+using namespace std::string_literals;
+\end{cpp}
+
+\item
+使用原字符串字面量来指定正则表达式，以避免转义反斜杠。以下正则表达式可验证大多数电子邮件格式：
+
+\begin{cpp}
+auto pattern {R"(^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$)"s};
+\end{cpp}
+
+\item
+创建一个 std::regex 或 std::wregex 类型实例（取决于使用的字符集），以封装正则表达式：
+
+\begin{cpp}
+auto rx = std::regex{pattern};
+\end{cpp}
+
+\item
+为了忽略大小写或指定其他解析选项，可以使用带有参数（正则表达式标志）的重载构造函数：
+
+\begin{cpp}
+auto rx = std::regex{pattern, std::regex_constants::icase};
+\end{cpp}
+
+\item
+使用 \verb|std::regex_match()| 将整个字符串与正则表达式进行匹配：
+
+\begin{cpp}
+auto valid = std::regex_match("marius@domain.com"s, rx);
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it work...}
+
+考虑到验证电子邮件地址格式的问题，看起好像很简单，但实际上很难找到一个能涵盖所有有效电子邮件格式的简单正则表达式。本示例中，不会尝试寻找那个终极表达式，而是用一个对于大多数情况都够用的正则表达式：
+
+\begin{shell}
+^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$
+\end{shell}
+
+下表解释了该正则表达式的结构：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{部分}      & \textbf{描述}                                                  \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\textasciicircum{} & 字符串的开始                                                       \\ \hline
+{[}A-Z0-9.\_\%+-{]}+ &
+\begin{tabular}[c]{@{}l@{}}至少为一个字符，可以是大写字母 A-Z、数字 0-9 或 .、\%、+、- 符号，\\表示电子邮件地址的本地部分\end{tabular} \\ \hline
+@                  & 字符  @                                                       \\ \hline
+{[}A-Z0-9.-{]}+ &
+\begin{tabular}[c]{@{}l@{}}至少为一个字符，可以是大写字母 A-Z、数字 0-9 或 .、- 符号，\\表示域名部分的主机名\end{tabular} \\ \hline
+\textbackslash{}.  & A分隔域名主机名和标签的点                    \\ \hline
+{[}A-Z{]}\{2,\}    & 域名的 DNS 标签，可包含 2 到 63 个字符 \\ \hline
+\$                 & 字符串的结束                                                 \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.14: 正则表达式的结构
+\end{center}
+
+实际上，域名由主机名后面跟着一系列用点分隔的 DNS 标签组成。例如，\verb|localhost|、\verb|gmail.com| 和 \verb|yahoo.co.uk|。这个正则表达式无法匹配没有 DNS 标签的域名，如 \verb|localhost|（像 \verb|root@localhost| 这样的电子邮件地址是有效的）。域名也可以是一个括号中的 IP 地址，如 \verb|[192.168.100.11]|（如 \verb|john.doe@[192.168.100.11]|），包含这种域名的电子邮件地址将无法匹配上述正则表达式。
+
+\begin{myTip}
+本示例中的正则表达式仅供教学目的，不建议直接在生产代码中使用。
+\end{myTip}
+
+首先包含了必要的头文件——用于正则表达式的 <regex> 和用于字符串的 <string>。接下来是 \verb|is_valid_email_format()|，该函数接收一个表示电子邮件地址的字符串，并返回一个布尔值指示电子邮件是否有正确的格式。
+
+首先构建一个 std::regex 实例，封装用原字符串字面量表示的正则表达式。使用原始字符串字面量有助于避免转义反斜杠，这些反斜杠在正则表达式中也用作转义字符。然后，函数调用 \verb|std::regex_match()|，传递输入文本和正则表达式：
+
+\begin{cpp}
+bool is_valid_email_format(std::string const & email)
+{
+    auto pattern {R"(^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$)"s};
+    auto rx = std::regex{ pattern };
+    return std::regex_match(email, rx);
+}
+\end{cpp}
+
+\verb|std::regex_match()| 方法尝试将正则表达式与整个字符串进行匹配。如果匹配成功，则返回 true；否则返回 false：
+
+\begin{cpp}
+auto ltest = [](std::string const & email)
+{
+    std::cout << std::setw(30) << std::left
+    << email << " : "
+    << (is_valid_email_format(email) ?
+    "valid format" : "invalid format")
+    << '\n';
+};
+ltest("JOHN.DOE@DOMAIN.COM"s);         // valid format
+ltest("JOHNDOE@DOMAIL.CO.UK"s);        // valid format
+ltest("JOHNDOE@DOMAIL.INFO"s);         // valid format
+ltest("J.O.H.N_D.O.E@DOMAIN.INFO"s);   // valid format
+ltest("ROOT@LOCALHOST"s);              // invalid format
+ltest("john.doe@domain.com"s);         // invalid format
+\end{cpp}
+
+这个简单的测试中，唯一不匹配正则表达式的电子邮件地址是 \verb|ROOT@LOCALHOST| 和 \verb|john.doe@domain.com|。前者包含没有点前缀的DNS 域名，这种情况不在正则表达式的考虑范围内。后者只包含小写字母，而正则表达式中规定的本地部分和域名的有效字符集是大写字母 A 至 Z。
+
+为了避免在正则表达式中增加有效字符（如 \verb|[A-Za-z0-9._%+-]|）而使其复杂化，可以指定匹配时忽略这种情况。通过向 \verb|std::basic_regex| 的构造函数添加一个参数来完成。为此目的定义的常量位于 \verb|regex_constants| 命名空间中。
+
+对 \verb|is_valid_email_format()| 的以下细微改动将使其忽略大小写，允许包含小写字母和大写字母的电子邮件地址正确匹配正则表达式：
+
+\begin{cpp}
+bool is_valid_email_format(std::string const & email)
+{
+    auto rx = std::regex{
+        R"(^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$)"s,
+        std::regex_constants::icase};
+    return std::regex_match(email, rx);
+}
+\end{cpp}
+
+\verb|is_valid_email_format()| 函数相当简单，将正则表达式作为参数连同要匹配的文本一起提供，可以用于匹配任何内容。不仅能处理多字节字符串（std::string），还能处理宽字符串（std::wstring），并且使用单个函数来处理会更好。这可以通过创建一个字符类型作为模板参数，提供的函数模板来实现：
+
+\begin{cpp}
+template <typename CharT>
+using tstring = std::basic_string<CharT, std::char_traits<CharT>,
+                                  std::allocator<CharT>>;
+template <typename CharT>
+bool is_valid_format(tstring<CharT> const & pattern,
+                     tstring<CharT> const & text)
+{
+    auto rx = std::basic_regex<CharT>{ pattern, std::regex_constants::icase };
+    return std::regex_match(text, rx);
+}
+\end{cpp}
+
+首先为 \verb|std::basic_string| 创建一个别名模板，以简化其使用。新的 \verb|is_valid_format()| 函数是一个非常类似于 \verb|is_valid_email_format()| 的函数模板。现在使用 \verb|std::basic_regex<CharT>|，而非 \verb|std::regex| 类型别名，模式作为第一个参数提供。现在实现一个新的函数 \verb|is_valid_email_format_w()| 来处理宽字符串，该函数依赖于这个函数模板，但这个函数模板还可以用于实现其他验证(比如：车牌是否具有特定格式)：
+
+\begin{cpp}
+bool is_valid_email_format_w(std::wstring const & text)
+{
+    return is_valid_format(
+    LR"(^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$)"s,
+    text);
+}
+auto ltest2 = [](auto const & email)
+{
+    std::wcout << std::setw(30) << std::left
+    << email << L" : "
+    << (is_valid_email_format_w(email) ? L"valid" : L"invalid")
+    << '\n';
+};
+ltest2(L"JOHN.DOE@DOMAIN.COM"s);       // valid
+ltest2(L"JOHNDOE@DOMAIL.CO.UK"s);      // valid
+ltest2(L"JOHNDOE@DOMAIL.INFO"s);       // valid
+ltest2(L"J.O.H.N_D.O.E@DOMAIN.INFO"s); // valid
+ltest2(L"ROOT@LOCALHOST"s);            // invalid
+ltest2(L"john.doe@domain.com"s);       // valid
+\end{cpp}
+
+展示的例子中，唯一不匹配的是 \verb|ROOT@LOCALHOST|。
+
+实际上，\verb|std::regex_match()| 方法有几个重载版本，其中一些版本有一个参数是指向 \verb|std::match_results| 对象的引用，用于存储匹配的结果。如果没有匹配项，则\verb|std::match_results| 为空，其大小为 0。如果有匹配项，\verb|std::match_results| 不为空，其大小为 1 加上匹配子表达式的数量。
+
+下面的函数版本使用了提到的重载，并返回一个包含匹配子表达式的 \verb|std::smatch| 实例。正则表达式已更改，定义了三个捕获组——一个用于本地部分，一个用于域名的主机名部分，另一个用于 DNS 标签。如果匹配成功，\verb|std::smatch| 实例将包含四个子匹配对象：第一个（索引 0）匹配整个字符串，第二个（索引 1）匹配第一个捕获组（本地部分），第三个（索引 2）匹配第二个捕获组（主机名），第四个（索引 3）匹配第三个也是最后一个捕获组（DNS 标签）。结果以元组的形式返回，其中第一项实际上是指示成功或失败：
+
+\begin{cpp}
+std::tuple<bool, std::string, std::string, std::string>
+is_valid_email_format_with_result(std::string const & email)
+{
+    auto rx = std::regex{
+        R"(^([A-Z0-9._%+-]+)@([A-Z0-9.-]+)\.([A-Z]{2,})$)"s,
+        std::regex_constants::icase };
+    auto result = std::smatch{};
+    auto success = std::regex_match(email, result, rx);
+    return std::make_tuple(
+        success,
+        success ? result[1].str() : ""s,
+        success ? result[2].str() : ""s,
+        success ? result[3].str() : ""s);
+}
+\end{cpp}
+
+之后，使用 C++17 结构化绑定来解包元组的内容到命名变量中：
+
+\begin{cpp}
+auto ltest3 = [](std::string const & email)
+{
+    auto [valid, localpart, hostname, dnslabel] =
+    is_valid_email_format_with_result(email);
+    std::cout << std::setw(30) << std::left
+        << email << " : "
+        << std::setw(10) << (valid ? "valid" : "invalid")
+        << "local=" << localpart
+        << ";domain=" << hostname
+        << ";dns=" << dnslabel
+        << '\n';
+};
+ltest3("JOHN.DOE@DOMAIN.COM"s);
+ltest3("JOHNDOE@DOMAIL.CO.UK"s);
+ltest3("JOHNDOE@DOMAIL.INFO"s);
+ltest3("J.O.H.N_D.O.E@DOMAIN.INFO"s);
+ltest3("ROOT@LOCALHOST"s);
+ltest3("john.doe@domain.com"s);
+\end{cpp}
+
+程序的输出如下所示：
+
+\myGraphic{0.6}{content/chapter2/images/9.png}{图 2.8: 测试输出}
+
+\mySubsubsection{}{There's more...}
+
+正则表达式存在多种版本，C++ 标准库支持六种：ECMAScript、基本 POSIX、扩展 POSIX、awk、grep 和 egrep（带 \verb|-E| 选项的 grep）。默认使用的语法是 ECMAScript，为了使用其他的语法，当定义正则表达式时必须明确指定语法。可以了解更多关于支持的语法选项的信息，参见 \url{https://en.cppreference.com/w/cpp/regex/syntax_option_type}。除了指定语法外，还可以指定解析选项，例如：忽略大小写的匹配。
+
+标准库提供了比迄今为止看到的更多的类和算法。库中可用的主要类如下（都是类型模板，为不同的字符类型提供了类型定义）：
+
+\begin{itemize}
+\item
+类型模板 \verb|std::basic_regex| 定义了正则表达式对象：
+
+\begin{cpp}
+typedef basic_regex<char>    regex;
+typedef basic_regex<wchar_t> wregex;
+\end{cpp}
+
+\item
+类型模板 \verb|std::sub_match| 表示一个与捕获组匹配的字符序列；这个类型实际上是 \verb|std::pair| 的派生类型，其 \verb|first| 和 \verb|second| 成员代表匹配序列的第一个字符和最后一个字符后的一个位置的迭代器。如果没有匹配序列，这两个迭代器相等：
+
+\begin{cpp}
+typedef sub_match<const char *>            csub_match;
+typedef sub_match<const wchar_t *>         wcsub_match;
+typedef sub_match<string::const_iterator>  ssub_match;
+typedef sub_match<wstring::const_iterator> wssub_match;
+\end{cpp}
+
+\item
+类型模板 \verb|std::match_results| 是一个匹配集合；第一个元素总是目标中的完整匹配，而其他元素则是子表达式的匹配：
+
+\begin{cpp}
+typedef match_results<const char *>            cmatch;
+typedef match_results<const wchar_t *>         wcmatch;
+typedef match_results<string::const_iterator>  smatch;
+typedef match_results<wstring::const_iterator> wsmatch;
+\end{cpp}
+\end{itemize}
+
+正则表达式标准库中可用的算法包括：
+
+\begin{itemize}
+\item
+\verb|std::regex_match()|: 将一个正则表达式（由 \verb|std::basic_regex| 实例表示）与整个字符串匹配。
+
+\item
+\verb|std::regex_search()|: 将一个正则表达式（由 \verb|std::basic_regex| 实例表示）与字符串的一部分（包括整个字符串）匹配。
+
+\item
+\verb|std::regex_replace()|: 根据指定格式替换正则表达式的匹配项。
+\end{itemize}
+
+正则表达式标准库中可用的迭代器包括：
+
+\begin{itemize}
+\item
+\verb|std::regex_interator|: 常量前向迭代器，用于遍历字符串中模式的所有出现。持有一个指向 \verb|std::basic_regex| 的指针，该指针必须存活至迭代器销毁。创建和递增时，迭代器调用 \verb|std::regex_search()| 并存储由算法返回的 \verb|std::match_results| 对象的副本。
+
+\item
+\verb|std::regex_token_iterator|: 常量前向迭代器，用于遍历字符串中正则表达式每个匹配的子匹配。内部使用 \verb|std::regex_iterator| 来遍历子匹配。由于存储了一个指向 \verb|std::basic_regex| 实例的指针，正则表达式对象必须存活至迭代器销毁。
+\end{itemize}
+
+标准正则库的性能相比其他实现（如 Boost.Regex）较差，且不支持 Unicode。此外，可以说 API 自身使用起来也较为笨拙，但使用标准库的好处在于避免添加依赖。
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,242 @@
+
+C++20 范围库简化了对元素范围的处理。库中定义的 16 种范围适配器（视图）提供了有用的操作，正如前一个示例中所示。然而，可以创建自己的视图，与标准视图一起使用。这个示例中，将介绍如何做到这一点。将创建一个名为 trim 的视图，给定一个范围和一个一元谓词，返回一个新的范围，该范围去除了满足谓词的前端和后端元素。
+
+\mySubsubsection{}{Getting ready}
+
+这个示例中，将使用与上一个示例相同的命名空间别名，其中 rg 是 std::ranges 的别名，而 rv 是 std::ranges::views 的别名。
+
+\mySubsubsection{}{How to do it...}
+
+要创建一个视图，请按照以下步骤操作：
+
+\begin{itemize}
+\item
+创建一个派生自 \verb|std::ranges::view_interface| 的类型模板，称为 \verb|trim_view|：
+
+\begin{cpp}
+template<rg::input_range R, typename P>
+    requires rg::view<R>
+class trim_view :
+    public rg::view_interface<trim_view<R, P>>
+{
+};
+\end{cpp}
+
+\item
+定义类的内部状态，至少应包括开始和结束迭代器以及由视图适应的可查看范围。对于这个适配器，还需要一个谓词，以及一个布尔变量，来标记迭代器是否已计算：
+
+\begin{cpp}
+private:
+    R base_ {};
+    P pred_;
+    mutable rg::iterator_t<R> begin_ {std::begin(base_)};
+    mutable rg::iterator_t<R> end_   {std::end(base_)};
+    mutable bool evaluated_ = false;
+    void ensure_evaluated() const
+    {
+        if(!evaluated_)
+        {
+            while(begin_ != std::end(base_) && pred_(*begin_))
+                {begin_ = std::next(begin_);}
+            while(end_ != begin_ && pred_(*std::prev(end_)))
+                {end_ = std::prev(end_);}
+                evaluated_ = true;
+        }
+    }
+\end{cpp}
+
+\item
+定义默认构造函数（可以默认实现）和带所需参数的 constexpr 构造函数，第一个参数总是范围。对于这个视图，另一个参数是谓词：
+
+\begin{cpp}
+public:
+    trim_view() = default;
+    constexpr trim_view(R base, P pred)
+        : base_(std::move(base))
+        , pred_(std::move(pred))
+        , begin_(std::begin(base_))
+        , end_(std::end(base_))
+    {}
+\end{cpp}
+
+\item
+提供对内部数据的访问器，如基础范围和谓词：
+
+\begin{cpp}
+constexpr R base() const &       {return base_;}
+constexpr R base() &&            {return std::move(base_);}
+constexpr P const & pred() const { return pred_; }
+\end{cpp}
+
+\item
+提供获取开始和结束迭代器的函数。确保视图是惰性的，迭代器应该仅在其首次使用时才进行计算：
+
+\begin{cpp}
+constexpr auto begin() const
+{ ensure_evaluated(); return begin_; }
+constexpr auto end() const
+{ ensure_evaluated(); return end_ ; }
+\end{cpp}
+
+\item
+提供其他有用的成员函数，如返回范围大小的函数：
+
+\begin{cpp}
+constexpr auto size() requires rg::sized_range<R>
+{ return std::distance(begin_, end_); }
+constexpr auto size() const requires rg::sized_range<const R>
+{ return std::distance(begin_, end_); }
+\end{cpp}
+\end{itemize}
+
+最终的 trim\_view 类型为：
+
+\begin{cpp}
+template<rg::input_range R, typename P> requires rg::view<R>
+class trim_view : public rg::view_interface<trim_view<R, P>>
+{
+private:
+    R base_ {};
+    P pred_;
+    mutable rg::iterator_t<R> begin_ {std::begin(base_)};
+    mutable rg::iterator_t<R> end_   {std::end(base_)};
+    mutable bool evaluated_ = false;
+private:
+    void ensure_evaluated() const
+    {
+        if(!evaluated_)
+        {
+            while(begin_ != std::end(base_) && pred_(*begin_))
+            {begin_ = std::next(begin_);}
+            while(end_ != begin_ && pred_(*std::prev(end_)))
+            {end_ = std::prev(end_);}
+            evaluated_ = true;
+        }
+    }
+public:
+    trim_view() = default;
+    constexpr trim_view(R base, P pred)
+        : base_(std::move(base))
+        , pred_(std::move(pred))
+        , begin_(std::begin(base_))
+        , end_(std::end(base_))
+    {}
+    constexpr R base() const &       {return base_;}
+    constexpr R base() &&            {return std::move(base_);}
+    constexpr P const & pred() const { return pred_; }
+    constexpr auto begin() const
+    { ensure_evaluated(); return begin_; }
+    constexpr auto end() const
+    { ensure_evaluated(); return end_ ; }
+    constexpr auto size() requires rg::sized_range<R>
+    { return std::distance(begin_, end_); }
+    constexpr auto size() const requires rg::sized_range<const R>
+    { return std::distance(begin_, end_); }
+};
+\end{cpp}
+
+为了简化用户自定义视图与标准视图的组合使用：
+
+\begin{itemize}
+\item
+为 \verb|trim_view| 类型模板的模板参数推导创建用户自定义推导指南：
+
+\begin{cpp}
+template<class R, typename P>
+trim_view(R&& base, P pred)
+    -> trim_view<rg::views::all_t<R>, P>;
+\end{cpp}
+
+\item
+创建可以实例化 \verb|trim_view| 适配器的功能对象，并带有适当的参数。这些可以在单独的命名空间中提供，其代表了实现细节：
+
+\begin{cpp}
+namespace details
+{
+    template <typename P>
+    struct trim_view_range_adaptor_closure
+    {
+        P pred_;
+        constexpr trim_view_range_adaptor_closure(P pred)
+        : pred_(pred)
+        {}
+        template <rg::viewable_range R>
+        constexpr auto operator()(R && r) const
+        {
+            return trim_view(std::forward<R>(r), pred_);
+        }
+    };
+    struct trim_view_range_adaptor
+    {
+        template<rg::viewable_range R, typename P>
+        constexpr auto operator () (R && r, P pred)
+        {
+            return trim_view( std::forward<R>(r), pred ) ;
+        }
+        template <typename P>
+        constexpr auto operator () (P pred)
+        {
+            return trim_view_range_adaptor_closure(pred);
+        }
+    };
+}
+\end{cpp}
+
+\item
+为先前定义的 \verb|trim_view_range_adaptor_closure| 类型重载管道操作符：
+
+\begin{cpp}
+namespace details
+{
+    template <rg::viewable_range R, typename P>
+    constexpr auto operator | (
+        R&& r,
+        trim_view_range_adaptor_closure<P> const & a)
+    {
+        return a(std::forward<R>(r)) ;
+    }
+}
+\end{cpp}
+
+\item
+创建一个 \verb|trim_view_range_adaptor| 类型的实例，可以用来创建 \verb|trim_view| 实例。这可以在一个名为 views 的命名空间中完成，以与范围库的命名空间创建相似性：
+
+\begin{cpp}
+namespace views
+{
+    inline static details::trim_view_range_adaptor trim;
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+这里定义的 \verb|trim_view| 类型模板是从 \verb|std::ranges::view_interface| 类模板派生的。这是一个在范围库中用于定义视图的帮助类，使用了奇特递归模板模式（CRTP）。\verb|trim_view| 类有两个模板参数：必须满足 \verb|std::ranges::input_range| 概念的范围类型和谓词类型。
+
+\verb|trim_view| 类内部存储了基础范围和谓词，还需要一个开始和结束（哨兵）迭代器。这些迭代器必须指向不满足修剪谓词的第一个元素和最后一个元素之后的位置。但由于视图是一个惰性对象，所以在需要遍历范围之前，这些迭代器不应该解析。下图展示了这些迭代器在整数范围中的位置，当视图需要从前端和后端修剪奇数时，对于范围 \verb|{1,1,2,3,5,6,4,7,7,9}|：
+
+可以使用 \verb|trim_view| 类型编写以下代码：:
+
+\begin{cpp}
+auto is_odd = [](int const n){return n%2 == 1;};
+std::vector<int> n { 1,1,2,3,5,6,4,7,7,9 };
+auto v = trim_view(n, is_odd);
+rg::copy(v, std::ostream_iterator<int>(std::cout, " "));
+// prints 2 3 5 6 4
+for(auto i : rv::reverse(trim_view(n, is_odd)))
+    std::cout << i << ' ';
+// prints 4 6 5 3 2
+\end{cpp}
+
+通过使用声明在 details 命名空间中的功能对象，这些对象代表实现细节，使用 \verb|trim_view| 类型以及与其他视图的组合变得更加简单。不过，这些功能对象加上重载的管道操作符（|），使得可以将前面的代码重写为如下形式：
+
+\begin{cpp}
+auto v = n | views::trim(is_odd);
+rg::copy(v, std::ostream_iterator<int>(std::cout, " "));
+for(auto i : n | views::trim(is_odd) | rv::reverse)
+    std::cout << i << ' ';
+\end{cpp}
+
+需要注意的是，range-v3 库确实包含一个名为 trim 的范围视图，但没有移植到 C++20 范围库中。这可能会在未来版本的标准中发生。
+
+

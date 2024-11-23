@@ -1,0 +1,313 @@
+第3章中，接扫了两个高阶函数：map，通过转换范围或将产生新范围来将函数应用于范围的元素；fold（也称为reduce），将范围的元素组合成单个值。那时都是串行实现，但在并发、线程和异步任务的上下文中，可以利用硬件运行这些函数的并行版本，以加速对大数据量范围的操作，或当转换和聚合耗时较长时。本示例中，将介绍使用线程实现map和fold的一种可能方案。
+
+\mySubsubsection{}{Getting ready}
+
+需要熟悉map和fold函数的概念。为了测量这些函数的执行时间并与串行替代方案进行比较，将使用在第6章中的引入的 \verb|perf_timer| 类型模板。
+
+\begin{myNotic}
+算法的并行版本有可能加快执行时间，但这不是在所有情况下都成立。线程之间的上下文切换和对共享数据的同步访问，可能会引入显著的开销。对于某些实现和特定的数据集，可能导致并行版本实际上比串行版本的运行时间更长。
+\end{myNotic}
+
+为了确定拆分工作的线程数量，将使用以下函数：
+
+\begin{cpp}
+unsigned get_no_of_threads()
+{
+    return std::thread::hardware_concurrency();
+}
+\end{cpp}
+
+接下来，将介绍map和fold函数并行版本的第一种可能实现。
+
+\mySubsubsection{}{How to do it...}
+
+要实现map函数的并行版本，请执行以下步骤：
+
+\begin{enumerate}
+\item
+定义一个函数模板，接受范围的开始和结束迭代器，以及要应用到所有元素上的函数：
+
+\begin{cpp}
+template <typename Iter, typename F>
+void parallel_map(Iter begin, Iter end, F&& f)
+{
+}
+\end{cpp}
+
+\item
+检查范围的大小。如果元素的数量小于预定义的阈值（对于本实现，阈值为10,000），则以串行方式执行映射：
+
+\begin{cpp}
+auto size = std::distance(begin, end);
+if(size <= 10000)
+    std::transform(begin, end, begin, std::forward<F>(f));
+\end{cpp}
+
+\item
+对于更大的范围，将工作分配到多个线程上，让每个线程映射范围的一部分。这些部分不应该重叠，以避免同步共享数据的访问：
+
+\begin{cpp}
+else
+{
+    auto no_of_threads = get_no_of_threads();
+    auto part = size / no_of_threads;
+    auto last = begin;
+    // continued at 4. and 5.
+}
+\end{cpp}
+
+\item
+启动线程，并在每个线程上运行映射的串行版本：
+
+\begin{cpp}
+std::vector<std::thread> threads;
+for(unsigned i = 0; i < no_of_threads; ++i)
+{
+    if(i == no_of_threads - 1) last = end;
+    else std::advance(last, part);
+    threads.emplace_back(
+        [=,&f]{std::transform(begin, last,
+                              begin, std::forward<F>(f));});
+    begin = last;
+}
+\end{cpp}
+
+\item
+等待所有线程完成执行：
+
+\begin{cpp}
+for(auto & t : threads) t.join();
+\end{cpp}
+\end{enumerate}
+
+将上述步骤合并后，得到以下实现：
+
+\begin{cpp}
+template <typename Iter, typename F>
+void parallel_map(Iter begin, Iter end, F&& f)
+{
+    auto size = std::distance(begin, end);
+    if(size <= 10000)
+    std::transform(begin, end, begin, std::forward<F>(f));
+    else
+    {
+        auto no_of_threads = get_no_of_threads();
+        auto part = size / no_of_threads;
+        auto last = begin;
+        std::vector<std::thread> threads;
+        for(unsigned i = 0; i < no_of_threads; ++i)
+        {
+            if(i == no_of_threads - 1) last = end;
+            else std::advance(last, part);
+            threads.emplace_back(
+                [=,&f]{std::transform(begin, last,
+                                      begin, std::forward<F>(f));});
+            begin = last;
+        }
+        for(auto & t : threads) t.join();
+    }
+}
+\end{cpp}
+
+要实现左折叠函数的并行版本，请执行以下步骤：
+
+\begin{enumerate}
+\item
+定义一个函数模板，接受范围的开始和结束迭代器、初始值以及应用于范围元素的二元函数：
+
+\begin{cpp}
+template <typename Iter, typename R, typename F>
+auto parallel_fold(Iter begin, Iter end, R init, F&& op)
+{
+}
+\end{cpp}
+
+\item
+检查范围的大小。如果元素的数量小于预定义的阈值（对于本实现，阈值为10,000），则以串行方式执行折叠：
+
+\begin{cpp}
+auto size = std::distance(begin, end);
+if(size <= 10000)
+    return std::accumulate(begin, end,
+                           init, std::forward<F>(op));
+\end{cpp}
+
+\item
+对于更大的范围，将工作拆分为多个线程，让每个线程折叠范围的一部分。这些部分不应重叠，以避免对共享数据的线程同步。结果可以通过传递给线程函数的引用返回，以避免数据同步：
+
+\begin{cpp}
+else
+{
+    auto no_of_threads = get_no_of_threads();
+    auto part = size / no_of_threads;
+    auto last = begin;
+    // continued with 4. and 5.
+}
+\end{cpp}
+
+\item
+启动线程，在每个线程上执行折叠的串行版本：
+
+\begin{cpp}
+std::vector<std::thread> threads;
+std::vector<R> values(no_of_threads);
+for(unsigned i = 0; i < no_of_threads; ++i)
+{
+    if(i == no_of_threads - 1) last = end;
+    else std::advance(last, part);
+    threads.emplace_back(
+        [=,&op](R& result){
+            result = std::accumulate(begin, last, R{},
+                                     std::forward<F>(op));},
+    std::ref(values[i]));
+    begin = last;
+}
+\end{cpp}
+
+\item
+等待所有线程完成执行，并将部分结果折叠成最终结果：
+
+\begin{cpp}
+for(auto & t : threads) t.join();
+return std::accumulate(std::begin(values), std::end(values),
+                       init, std::forward<F>(op));
+\end{cpp}
+\end{enumerate}
+
+将上述步骤合并后，得到以下实现：
+
+\begin{cpp}
+template <typename Iter, typename R, typename F>
+auto parallel_fold(Iter begin, Iter end, R init, F&& op)
+{
+    auto size = std::distance(begin, end);
+    if(size <= 10000)
+        return std::accumulate(begin, end, init, std::forward<F>(op));
+    else
+    {
+        auto no_of_threads = get_no_of_threads();
+        auto part = size / no_of_threads;
+        auto last = begin;
+        std::vector<std::thread> threads;
+        std::vector<R> values(no_of_threads);
+        for(unsigned i = 0; i < no_of_threads; ++i)
+        {
+            if(i == no_of_threads - 1) last = end;
+            else std::advance(last, part);
+            threads.emplace_back(
+                [=,&op](R& result){
+                    result = std::accumulate(begin, last, R{},
+                                             std::forward<F>(op));},
+            std::ref(values[i]));
+            begin = last;
+        }
+        for(auto & t : threads) t.join();
+        return std::accumulate(std::begin(values), std::end(values),
+                               init, std::forward<F>(op));
+    }
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+map和fold的这些并行实现有几个相似之处：
+
+\begin{itemize}
+\item
+如果范围内的元素数量小于10,000，都会回退到串行版本。
+
+\item
+都启动相同数量的线程。这些线程的数量是通过静态函数 \verb|std::thread::hardware_concurrency()| 确定的，该函数返回实现支持的并发线程数。不过，这个值更多是一个提示而不是准确值，应谨慎使用。
+
+\item
+为了避免访问同步，不使用共享数据。即使所有线程都在同一范围的元素上工作，处理的范围部分也不会重叠。
+
+\item
+这两个函数都是作为函数模板实现的，接受开始和结束迭代器以定义要处理的范围。为了将范围拆分为多个部分以便由不同线程独立处理，在范围内使用迭代器。为此，使用 \verb|std::advance()| 将迭代器向前移动特定的位置。这适用于vector或array，但对于list等容器来说非常低效。因此，这种实现只适合具有随机访问迭代器的范围。
+\end{itemize}
+
+map和fold的串行版本，可以用C++中的 \verb|std::transform()| 和 \verb|std::accumulate()| 实现。为了验证并行算法的正确性，并检查是否提供了任何执行速度提升，可以将它们与这些通用算法的执行情况进行比较。
+
+为了测试，将在一个大小从10,000到5000万元素的向量上使用map和fold。首先对范围进行映射（即转换），将每个元素的值翻倍，然后通过将范围内的所有元素相加来折叠结果。为了简化，范围中的每个元素等于其基于1的索引（第一个元素为1，第二个元素为2，以此类推）。以下示例运行不同大小向量的map和fold的串行和并行版本，并以表格格式打印执行时间：
+
+\begin{myNotic}
+作为一个练习，可以改变元素的数量，以及线程的数量，看看并行版本相对于串行版本的表现如何。
+\end{myNotic}
+
+\begin{cpp}
+std::vector<int> sizes
+{
+    10000, 100000, 500000,
+    1000000, 2000000, 5000000,
+    10000000, 25000000, 50000000
+};
+std::cout
+    << std::right << std::setw(8) << std::setfill(' ') << "size"
+    << std::right << std::setw(8) << "s map"
+    << std::right << std::setw(8) << "p map"
+    << std::right << std::setw(8) << "s fold"
+    << std::right << std::setw(8) << "p fold"
+    << '\n';
+for (auto const size : sizes)
+{
+    std::vector<int> v(size);
+    std::iota(std::begin(v), std::end(v), 1);
+    auto v1 = v;
+    auto s1 = 0LL;
+    auto tsm = perf_timer<>::duration([&] {
+        std::transform(std::begin(v1), std::end(v1), std::begin(v1),
+        [](int const i) {return i + i; }); });
+    auto tsf = perf_timer<>::duration([&] {
+        s1 = std::accumulate(std::begin(v1), std::end(v1), 0LL,
+                             std::plus<>()); });
+    auto v2 = v;
+    auto s2 = 0LL;
+    auto tpm = perf_timer<>::duration([&] {
+        parallel_map(std::begin(v2), std::end(v2),
+        [](int const i) {return i + i; }); });
+    auto tpf = perf_timer<>::duration([&] {
+        s2 = parallel_fold(std::begin(v2), std::end(v2), 0LL,
+                           std::plus<>()); });
+    assert(v1 == v2);
+    assert(s1 == s2);
+    std::cout
+        << std::right << std::setw(8) << std::setfill(' ') << size
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tsm).count()
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tpm).count()
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tsf).count()
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tpf).count()
+        << '\n';
+}
+\end{cpp}
+
+此程序的一个可能输出如下面的图表所示（在Windows 64位操作系统的机器上执行，该机器配备Intel Core i7处理器和4个物理核心，及8个逻辑核心）。并行版本，特别是fold实现，表现优于串行版本。但只有当vector长度超过一定大小时，这一结论才成立。下表显示，对于最多1百万个元素，串行版本仍然更快。当vector中有2百万个或更多元素时，并行版本执行得更快。注意，即使在同一台机器上，每次运行的实际时间也会略有不同。而在不同的机器上，时间差异会更大：
+
+\begin{shell}
+    size   s map   p map  s fold  p fold
+   10000      11      10       7      10
+  100000     108    1573      72     710
+  500000     547    2006     361     862
+ 1000000    1146    1163     749     862
+ 2000000    2503    1527    1677    1289
+ 5000000    5937    3000    4203    2314
+10000000   11959    6269    8269    3868
+25000000   29872   13823   20961    9156
+50000000   60049   27457   41374   19075
+\end{shell}
+
+为了更好地可视化这些结果，可以用柱状图表示并行版本的速度提升。下面的图表中，蓝色条形代表并行map实现的速度提升，而橙色条形显示并行fold实现的速度提升。正值表明并行版本更快；负值表明串行版本更快：
+
+\myGraphic{1.0}{content/chapter8/images/1.png}{图8.1: 对于不同处理元素数量，map（蓝色）和fold（橙色）并行实现的速度提升}
+
+该图表使更容易看出，只有当元素数量超过某个阈值（基准测试中大约是2百万）时，并行实现才会比串行版本更快。
+
+
+
+
+
+
+

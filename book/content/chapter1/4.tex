@@ -1,0 +1,196 @@
+
+构造函数是进行非静态类成员初始化的地方，许多开发者倾向于在构造函数体内使用赋值语句进行初始化。除了少数确实必要的特殊情况外，非静态成员的初始化应该在构造函数的初始化列表中完成，或者从 C++11 开始，可以在类中声明成员时使用默认成员初始化。在 C++11 之前，类中的常量和非常量非静态数据成员必须在构造函数中初始化。只有静态常量可以在类中声明时初始化。正如我们将在下面看到的，这一限制在 C++11 中移除，允许在类声明中初始化非静态成员。这种初始化称为默认成员初始化，将在接下来的部分中解释。
+
+本教程将探讨非静态成员初始化应采取的方法。为每个成员选择适当的初始化方法不仅能使代码更高效，还能使代码组织得更好，更具可读性。
+
+\mySubsubsection{}{How to do it...}
+
+为了初始化类的非静态成员，应该：
+
+\begin{itemize}
+\item
+对于常量成员，无论是静态还是非静态，使用默认成员初始化（参见下面代码中的 [1] 和 [2]）。
+
+\item
+对于具有多个构造函数的类成员，如果这些构造函数将使用相同的初始化器，使用默认成员初始化提供默认值（参见下面代码中的 [3] 和 [4]）。
+
+\item
+对于没有默认值但依赖于构造函数参数的成员，使用构造函数初始化列表进行初始化（参见下面代码中的 [5] 和 [6]）。
+
+\item
+当其他选项不可行时，在构造函数内使用赋值语句，例如：使用指针 this 初始化数据成员、检查构造函数参数值、在初始化成员之前抛出异常或两个非静态数据成员之间的相互引用。
+\end{itemize}
+
+以下示例展示了这些初始化形式：
+
+\begin{cpp}
+struct Control
+{
+    const int DefaultHeight = 14;                                // [1]
+    const int DefaultWidth  = 80;                                // [2]
+    std::string text;
+        TextVerticalAlignment valign = TextVerticalAlignment::Middle;   // [3]
+        TextHorizontalAlignment halign = TextHorizontalAlignment::Left; // [4]
+    Control(std::string const & t) : text(t)      // [5]
+    {}
+    Control(std::string const & t,
+        TextVerticalAlignment const va,
+        TextHorizontalAlignment const ha):
+        text(t), valign(va), halign(ha)             // [6]
+    {}
+};
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+非静态数据成员应该在构造函数的初始化列表中初始化：
+
+\begin{cpp}
+struct Point
+{
+    double x, y;
+    Point(double const x = 0.0, double const y = 0.0) : x(x), y(y)  {}
+};
+\end{cpp}
+
+许多开发者并不使用初始化列表，而是偏好在构造函数体中使用赋值语句，甚至混合使用赋值和初始化列表。对于拥有大量成员的大型类来说，构造函数内的赋值可能比长的初始化列表更容易阅读，尤其是当初始化列表拆分成多行时；或者是由于这些开发者熟悉不支持初始化列表的其他编程语言。
+
+\begin{myNotic}
+非静态数据成员的初始化顺序是在类型定义中声明的顺序，而不是在构造函数初始化列表中的顺序。相反，非静态数据成员销毁的顺序则是构造顺序的逆序。
+\end{myNotic}
+
+构造函数中使用赋值语句效率不高，这可能会创建临时对象。如果不在初始化列表中初始化，非静态成员会通过其默认构造函数初始化，再在构造函数体内赋值时调用赋值操作符。如果默认构造函数分配了资源（如内存或文件），而在赋值操作符中又必须释放并重新分配这些资源，这可能会导致效率低下：
+
+\begin{cpp}
+struct foo
+{
+    foo()
+    { std::cout << "default constructor\n"; }
+    foo(std::string const & text)
+    { std::cout << "constructor '" << text << "\n"; }
+    foo(foo const & other)
+    { std::cout << "copy constructor\n"; }
+    foo(foo&& other)
+    { std::cout << "move constructor\n"; };
+    foo& operator=(foo const & other)
+    { std::cout << "assignment\n"; return *this; }
+    foo& operator=(foo&& other)
+    { std::cout << "move assignment\n"; return *this;}
+    ~foo()
+    { std::cout << "destructor\n"; }
+};
+struct bar
+{
+    foo f;
+    bar(foo const & value)
+    {
+        f = value;
+    }
+};
+foo f;
+bar b(f);
+\end{cpp}
+
+上述代码产生了如下输出，展示了数据成员 f 首先默认初始化，然后赋予了新值：
+
+\begin{shell}
+default constructor
+default constructor
+assignment
+destructor
+destructor
+\end{shell}
+
+如果想要跟踪哪些对象被创建和销毁，可以修改上面的 foo 类，并在每个特殊成员函数中打印 this 指针的值。可以将其作为一个后续练习来做。
+
+将构造函数体内的赋值改为初始化列表中的初始化，可以将默认构造函数加赋值操作符的调用替换为对复制构造函数的一次调用：
+
+\begin{cpp}
+bar(foo const & value) : f(value) { }
+\end{cpp}
+
+添加上述代码后，会产生的输出如下：
+
+\begin{shell}
+default constructor
+copy constructor
+destructor
+destructor
+\end{shell}
+
+因此，至少对于内置类型（如 bool、char、int、float、double 或指针）以外的类型，应该优先使用构造函数初始化列表。但为了保持初始化风格的一致性，应该始终优先使用构造函数初始化列表。使用初始化列表的情况有几种是不可能的，包括但不限于以下情况：
+
+\begin{itemize}
+\item
+如果一个成员需要用指向包含它的对象的指针或引用初始化，则在初始化列表中使用 this 指针可能会触发某些编译器的警告，提示在对象构建前使用了 this 指针。
+
+\item
+如果有两个数据成员必须互相引用。
+
+\item
+如果想在用参数值初始化非静态数据成员之前测试输入参数并抛出异常。
+\end{itemize}
+
+从 C++11 开始，非静态数据成员可以在类中声明时初始化。这称为默认成员初始化，代表了使用默认值的初始化。默认成员初始化旨在用于常量和不构造函数参数初始化的成员（成员的值不依赖于对象的构建方式）：
+
+\begin{cpp}
+enum class TextFlow { LeftToRight, RightToLeft };
+struct Control
+{
+    const int DefaultHeight = 20;
+    const int DefaultWidth = 100;
+    TextFlow textFlow = TextFlow::LeftToRight;
+    std::string text;
+    Control(std::string const & t) : text(t)
+    {}
+};
+\end{cpp}
+
+上述示例中，DefaultHeight 和 DefaultWidth 都是常量，它们的值不依赖于对象的构建方式，所以在声明时初始化。textFlow 对象是非常量非静态数据成员，其值也不依赖于对象的初始化方式（可以通过其他成员函数改变），也在声明时使用默认成员初始化。相反，text 也是一个非常量非静态数据成员，但其初始值依赖于对象的构建方式。
+
+因此，在构造函数的初始化列表中使用作为参数传递的值进行初始化。
+
+如果一个数据成员既使用了默认成员初始化，又使用了构造函数初始化列表初始化，则为后者优先，将丢弃默认值。为了举例说明这一点，再次看看前面提到的 foo 类型和以下使用其 bar 类型：
+
+\begin{cpp}
+struct bar
+{
+    foo f{"default value"};
+    bar() : f{"constructor initializer"}
+    {
+    }
+};
+bar b;
+\end{cpp}
+
+输出有所不同：
+
+\begin{shell}
+constructor 'constructor initializer'
+destructor
+\end{shell}
+
+不同行为的原因在于，丢弃了默认初始化列表的值，对象不会初始化两次。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,283 @@
+
+与其它测试框架不同，Catch2 并未提供大量断言宏。主要提供了两个宏：REQUIRE，在失败时产生致命错误并停止测试用例的执行；CHECK，在失败时产生非致命错误并继续执行测试用例。本示例中，还会介绍一些附加宏的使用。
+
+\mySubsubsection{}{How to do it...}
+
+下面列出了使用 Catch2 框架进行断言的可用选项：
+
+\begin{itemize}
+\item
+使用 CHECK(expr) 检查 expr 是否为真，即使失败也会继续执行；使用 REQUIRE(expr) 确保 expr 为真，若失败则停止测试用例的执行：
+
+\begin{cpp}
+int a = 42;
+CHECK(a == 42);
+REQUIRE(a == 42);
+\end{cpp}
+
+\item
+使用 \verb|CHECK_FALSE(expr)| 和 \verb|REQUIRE_FALSE(expr)| 确保 expr 为假，并在失败时产生非致命或致命错误：
+
+\begin{cpp}
+int a = 42;
+CHECK_FALSE(a > 100);
+REQUIRE_FALSE(a > 100);
+\end{cpp}
+
+\item
+使用浮点数匹配器 WithinAbs、WithinRel 和 WithinUPL 比较浮点数（推荐替代已废弃的 Approx 类型）：
+
+\begin{cpp}
+double a = 42.5;
+CHECK_THAT(42.0, Catch::Matchers::WithinAbs(a, 0.5));
+REQUIRE_THAT(42.0, Catch::Matchers::WithinAbs(a, 0.5));
+CHECK_THAT(42.0, Catch::Matchers::WithinRel(a, 0.02));
+REQUIRE_THAT(42.0, Catch::Matchers::WithinRel(a, 0.02));
+\end{cpp}
+
+\item
+使用 \verb|CHECK_NOTHROW(expr)|/\verb|REQUIRE_NOTHROW(expr)| 验证 expr 不抛出异常，\verb|CHECK_THROWS(expr)|/\verb|REQUIRE_THROWS(expr)| 验证 expr 会抛出异常，\verb|CHECK_THROWS_AS(expr, exctype)|/\verb|REQUIRE_THROWS_AS(expr, exctype)| 验证 expr 抛出的 exctype 类型异常，或者 \verb|CHECK_THROWS_WITH(expression, string or string matcher)|/\\\verb|REQUIRE_THROWS_WITH(expression, string or string matcher)| 验证 expr 抛出一个其描述与指定字符串匹配的表达式：
+
+\begin{cpp}
+void function_that_throws()
+{
+    throw std::runtime_error("error");
+}
+void function_no_throw()
+{
+}
+SECTION("expressions")
+{
+    CHECK_NOTHROW(function_no_throw());
+    REQUIRE_NOTHROW(function_no_throw());
+
+    CHECK_THROWS(function_that_throws());
+    REQUIRE_THROWS(function_that_throws());
+
+    CHECK_THROWS_AS(function_that_throws(), std::runtime_error);
+    REQUIRE_THROWS_AS(function_that_throws(), std::runtime_error);
+
+    CHECK_THROWS_WITH(function_that_throws(), "error");
+    REQUIRE_THROWS_WITH(function_that_throws(),
+    Catch::Matchers::ContainsSubstring("error"));
+}
+\end{cpp}
+
+\item
+使用 \verb|CHECK_THAT(value, matcher expression)|/\verb|REQUIRE_THAT(expr, matcher expression)| 检查指定值是否使给定的匹配器表达式为真：
+
+\begin{cpp}
+std::string text = "this is an example";
+CHECK_THAT(
+    text,
+    Catch::Matchers::ContainsSubstring("EXAMPLE", Catch::CaseSensitive::No));
+REQUIRE_THAT(
+    text,
+    Catch::Matchers::StartsWith("this") &&
+    Catch::Matchers::ContainsSubstring("an"));
+\end{cpp}
+
+\item
+使用 FAIL(message) 报告消息并使测试用例失败，WARN(message) 记录消息但不停止测试用例的执行，INFO(message) 将消息记录到缓冲区并在下一个断言失败时报告该消息。
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+REQUIRE/CHECK 宏族将表达式分解为其左侧和右侧项，并在失败时报告失败的位置（源文件和行号）、表达式及左右两侧的值：
+
+\begin{shell}
+f:\chapter11ca_03\main.cpp(19): FAILED:
+    REQUIRE( a == 1 )
+with expansion:
+    42 == 1
+\end{shell}
+
+然而，这些宏不支持使用逻辑操作符（如 \verb|&&| 和 ||）组成的复杂表达式。以下是一个错误的例子：
+
+\begin{cpp}
+REQUIRE(a < 10 || a %2 == 0);   // error
+\end{cpp}
+
+解决这个问题的方法是创建一个变量来保存表达式的计算结果，并在断言宏中使用。不过，这样就会失去输出表达式元素展开的能力：
+
+\begin{cpp}
+auto expr = a < 10 || a % 2 == 0;
+REQUIRE(expr);
+\end{cpp}
+
+另一种方法是使用另一组括号，这样做也会阻止表达式的分解：
+
+\begin{cpp}
+REQUIRE((a < 10 || a %2 == 0)); // OK
+\end{cpp}
+
+两组断言，即 \verb|CHECK_THAT|/\verb|REQUIRE_THAT| 和 \verb|CHECK_THROWS_WITH|/\verb|REQUIRE_THROWS_WITH|，可以与匹配器一起工作。匹配器是可扩展和可组合的组件，用于执行值匹配。该框架提供了多种匹配器：
+
+\begin{itemize}
+\item
+字符串: StartsWith, EndsWith, ContainsSubstring, Equals和 Matches
+
+\item
+std::vector: Contains, VectorContains, Equals, UnorderedEquals和 Approx
+
+\item
+浮点值: WithinAbs, WithinULP, WithinRel和 IsNaN
+
+\item
+范围类型（从版本 3.0.1 开始包含）：IsEmpty、SizeIs、Contains、AllMatch、AnyMatch、NoneMatch、AllTrue、AnyTrue、NoneTrue、RangeEquals 和 UnorderedRangeEquals
+
+\item
+异常：Message 和 MessageMatches
+\end{itemize}
+
+\begin{myTip}
+Contains() 和 VectorContains() 的区别在于 Contains() 在另一个vecotr中搜索vector，而 VectorContains() 是在vector中搜索单个元素。
+\end{myTip}
+
+正如前面列表中提到的，有几个匹配器针对浮点数。这些匹配器包括：
+
+\begin{itemize}
+\item
+\verb|WithinAbs()|：接受小于或等于目标数值并具有指定误差范围（介于 0 和 1 之间的百分比）的浮点数的匹配器：
+
+\begin{cpp}
+REQUIRE_THAT(42.0, WithinAbs(42.5, 0.5));
+\end{cpp}
+
+\item
+\verb|WithinRel()|：接受大约等于目标值并具有给定容差的浮点数的匹配器：
+
+\begin{cpp}
+REQUIRE_THAT(42.0, WithinRel(42.4, 0.01));
+\end{cpp}
+
+\item
+\verb|WithinULP()|：接受与目标值相差不超过给定 ULP 的浮点数的匹配器：
+
+\begin{cpp}
+REQUIRE_THAT(42.0, WithinRel(target, 4));
+\end{cpp}
+
+\end{itemize}
+
+这些匹配器也可以组合在一起使用：
+
+\begin{cpp}
+REQUIRE_THAT(a,
+    Catch::Matchers::WithinRel(42.0, 0.001) ||
+    Catch::Matchers::WithinAbs(42.0, 0.000001));
+\end{cpp}
+
+比较浮点数的一种过时的方式是使用 Catch 命名空间中的 Approx类型，通过构造 double 值的值重载等式/不等式和比较操作符。可以指定两个值之间的差异或被视为相等的最大误差，作为给定值的百分比。这通过成员函数 epsilon() 设置。值必须在 0 和 1 之间（例如，值 0.05 表示 5\%），epsilon 的默认值设置为 \verb|std::numeric_limits<float>::epsilon()*100|。
+
+可以创建自己的匹配器，无论是为了扩展现有框架的功能还是为了与自定义类型一起工作。有两种方式可以创建自定义匹配器：旧版 v2 方式和新版 v3 方式。
+
+以旧方式创建自定义匹配器需要两个步骤：
+
+\begin{enumerate}
+\item
+从 Catch::MatcherBase<T> 派生的匹配器类，其中 T 是正在比较的类型。有两个虚函数必须重写：match()，接收一个值以匹配并返回一个布尔值指示匹配是否成功；describe()，不接收参数但返回一个描述匹配器的字符串。
+
+\item
+从测试代码中调用的构建函数。
+\end{enumerate}
+
+下面的例子定义了一个针对本章中多次出现的 point3d 类的匹配器，用于检查给定的三维点是否位于三维空间的一条直线上：
+
+\begin{cpp}
+class OnTheLine : public Catch::Matchers::MatcherBase<point3d>
+{
+    point3d const p1;
+    point3d const p2;
+public:
+    OnTheLine(point3d const & p1, point3d const & p2):
+        p1(p1), p2(p2)
+    {}
+    virtual bool match(point3d const & p) const override
+    {
+        auto rx = p2.x() - p1.x() != 0 ?
+                  (p.x() - p1.x()) / (p2.x() - p1.x()) : 0;
+        auto ry = p2.y() - p1.y() != 0 ?
+                  (p.y() - p1.y()) / (p2.y() - p1.y()) : 0;
+        auto rz = p2.z() - p1.z() != 0 ?
+                  (p.z() - p1.z()) / (p2.z() - p1.z()) : 0;
+        return
+            Catch::Approx(rx).epsilon(0.01) == ry &&
+            Catch::Approx(ry).epsilon(0.01) == rz;
+    }
+protected:
+    virtual std::string describe() const
+    {
+        std::ostringstream ss;
+        ss << "on the line between " << p1 << " and " << p2;
+        return ss.str();
+    }
+};
+inline OnTheLine IsOnTheLine(point3d const & p1, point3d const & p2)
+{
+    return OnTheLine {p1, p2};
+}
+\end{cpp}
+
+以新方式创建自定义匹配器需要以下步骤：
+
+\begin{enumerate}
+\item
+从 Catch::Matchers::MatcherGenericBase 派生的匹配器类。这个类必须实现两个方法：bool match(…) const，执行匹配；以及虚函数 string describe() const 的重写，不接收参数但返回一个描述匹配器的字符串。尽管这些函数与旧风格中使用的函数非常相似，但有一个关键区别：match() 函数对参数传递方式没有要求。所以它可以按值或可变引用接收参数，也可以是一个函数模板。这一优势使得编写更复杂的匹配器成为可能，比如能够比较类似范围的类型的匹配器。
+
+\item
+一个从测试代码中调用的构建函数。
+\end{enumerate}
+
+用新风格编写的同一个比较 point3d 值的匹配器：
+
+\begin{cpp}
+class OnTheLine : public Catch::Matchers::MatcherGenericBase
+{
+    point3d const p1;
+    point3d const p2;
+public:
+    OnTheLine(point3d const& p1, point3d const& p2) :
+        p1(p1), p2(p2)
+    {
+    }
+    bool match(point3d const& p) const
+    {
+        auto rx = p2.x() - p1.x() != 0 ?
+                  (p.x() - p1.x()) / (p2.x() - p1.x()) : 0;
+        auto ry = p2.y() - p1.y() != 0 ?
+                  (p.y() - p1.y()) / (p2.y() - p1.y()) : 0;
+        auto rz = p2.z() - p1.z() != 0 ?
+                  (p.z() - p1.z()) / (p2.z() - p1.z()) : 0;
+        return
+            Catch::Approx(rx).epsilon(0.01) == ry &&
+            Catch::Approx(ry).epsilon(0.01) == rz;
+    }
+protected:
+    std::string describe() const override
+    {
+#ifdef __cpp_lib_format
+        return std::format("on the line between ({},{},{}) and ({},{},{})", p1.x(), p1.y(), p1.z(), p2.x(), p2.y(), p2.z());
+#else
+        std::ostringstream ss;
+        ss << "on the line between " << p1 << " and " << p2;
+        return ss.str();
+#endif
+    }
+};
+\end{cpp}
+
+以下测试用例包含了如何使用此自定义匹配器：
+
+\begin{cpp}
+TEST_CASE("matchers")
+{
+    SECTION("point origin")
+    {
+        point3d p { 2,2,2 };
+        REQUIRE_THAT(p, IsOnTheLine(point3d{ 0,0,0 }, point3d{ 3,3,3 }));
+    }
+}
+\end{cpp}
+
+这个测试确保点 \verb|{2,2,2}| 位于由点 \verb|{0,0,0}| 和 \verb|{3,3,3}| 定义的直线上，方法是使用之前实现的 IsOnTheLine() 自定义匹配器。

@@ -1,0 +1,292 @@
+
+上一个示例中，了解了 C++20 引入的一个名为 \verb|std::span| 的类型，表示对连续元素序列的视图（非拥有的封装器）。类似于 C++17 中的 \verb|std::string_view| 类型，后者对字符序列做同样的事情。这两个都是对一维序列的视图。然而，有时需要处理多维序列。这些可以以多种方式实现，比如 C 风格数组（int[2][3][4]）、指针数组（int** 或 int***）、数组的数组（或vector的vector，如 \verb|vector<vector<vector<int>>>|）。另一种方法是使用一维对象序列，但定义操作使其呈现为逻辑上的多维序列。这就是 C++23 中的 \verb|std::mdspan| 类型：表示一个多维序列的非拥有视图，底层实际上是一维的连续对象序列。可以说 \verb|std::mdspan| 是 \verb|std::span| 类对多维扩展。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将参考以下简单的二维矩阵实现（其大小在编译时已知）：
+
+\begin{cpp}
+template <typename T, std::size_t ROWS, std::size_t COLS>
+struct matrix
+{
+    T&
+    #ifdef __cpp_multidimensional_subscript
+    operator[] // C++23
+    #else
+    operator() // previously
+    #endif
+    (std::size_t const r, std::size_t const c)
+    {
+        if (r >= ROWS || c >= COLS)
+            throw std::runtime_error("Invalid index");
+        return data[r * COLS + c];
+    }
+    T const &
+    #ifdef __cpp_multidimensional_subscript
+    operator[] // C++23
+    #else
+    operator() // previously
+    #endif
+    (std::size_t const r, std::size_t const c) const
+    {
+        if (r >= ROWS || c >= COLS)
+            throw std::runtime_error("Invalid index");
+        return data[r * COLS + c];
+    }
+    std::size_t size() const { return data.size(); }
+    std::size_t empty() const { return data.empty(); }
+    template <std::size_t dimension>
+    std::size_t extent() const
+    {
+        static_assert(dimension <= 1,
+                      "The matrix only has two dimensions.");
+        if constexpr (dimension == 0) return ROWS;
+        else if constexpr(dimension == 1) return COLS;
+    }
+    private:
+    std::array<T, ROWS* COLS> data;
+};
+\end{cpp}
+
+\begin{myTip}
+C++23 中，建议使用 \verb|operator[]| 而非 \verb|operator()| 来访问多维数据结构的元素。
+\end{myTip}
+
+\mySubsubsection{}{How to do it...}
+
+优先使用 \verb|std::mdspan| 而不是多维 C 风格数组、指针数组或vector/array的数组实现：
+
+\begin{cpp}
+void f(int data[2][3]) { /* … */ }
+void g(int** data, size_t row, size_t cols) { /* … */ }
+void h(std::vector<std::vector<int>> dat, size_t row, size_t cols)
+{ /* … */ }
+\end{cpp}
+
+替换为：
+
+\begin{cpp}
+void f(std::mdspan<int,std::extents<size_t, 2, 3>> data)
+{ /* … */ }
+\end{cpp}
+
+当使用 \verb|std::mdspan| 时，可以做以下事情：
+
+\begin{itemize}
+\item
+使用编译时常量长度（称为静态范围）创建一个 mdspan，方法是指定 span 中每个维度的元素数量：
+
+\begin{cpp}
+int* data = get_data();
+std::mdspan<int, std::extents<size_t, 2, 3>> m(data);
+\end{cpp}
+
+\item
+使用运行时常量长度（称为动态范围）创建 mdspan，方法是不在编译时指定 span 中某个维度的元素数量，而是在运行时提供：
+
+\begin{cpp}
+int* data = get_data();
+std::mdspan<int, std::extents<size_t,
+                              2,
+                              std::dynamic_extent>> mv{v.data(), 3};
+\end{cpp}
+
+或
+
+\begin{cpp}
+int* data = get_data();
+std::mdspan<int, std::extents<size_t,
+                              std::dynamic_extent,
+                              std::dynamic_extent>>
+m(data, 2, 3);
+\end{cpp}
+
+或
+
+\begin{cpp}
+int* data = get_data();
+std::mdspan m(data, 2, 3);
+\end{cpp}
+
+\item
+为了控制 mdspan 的多维索引映射到底层（连续）数据序列的一维索引，可以使用布局策略，这是第三个模板参数：
+
+\begin{cpp}
+std::mdspan<int,
+            std::extents<size_t, 2, 3>,
+            std::layout_right> mv{ data };
+\end{cpp}
+
+或
+
+\begin{cpp}
+std::mdspan<int,
+            std::extents<size_t, 2, 3>,
+            std::layout_left> mv{ data };
+\end{cpp}
+
+或
+
+\begin{cpp}
+std::mdspan<int,
+            std::extents<size_t, 2, 3>,
+            std::layout_stride> mv{ data };
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+mdspan 是一个多维 span，即是一个对一维值序列的非拥有视图，该序列被投射为逻辑上的多维结构，这正是 matrix 类型所做的事情，其定义的操作（如 C++23 中的 \verb|operator[]| 和之前的 \verb|operator()|）是针对二维数据结构的。然而，内部数据是以连续序列的形式排列的，的实现中使用的是 \verb|std::array|：
+
+\begin{cpp}
+matrix<int, 2, 3> m;
+for (std::size_t r = 0; r < m.extent<0>(); r++)
+{
+    for (std::size_t c = 0; c < m.extent<1>(); c++)
+    {
+        m[r, c] = r * m.extent<1>() + c + 1; // m[r,c] in C++23
+        // m(r, c) previously
+    }
+}
+\end{cpp}
+
+这段 for-in-for 语句将矩阵元素的值设置为以下内容：
+
+\begin{shell}
+1 2 3
+4 5 6
+\end{shell}
+
+C++23 中，可以直接用 \verb|std::mdspan| 替换整个类型：
+
+\begin{cpp}
+std::array<int, 6> arr;
+std::mdspan m{arr.data(), std::extents{2, 3}};
+for (std::size_t r = 0; r < m.extent(0); r++)
+{
+    for (std::size_t c = 0; c < m.extent(1); c++)
+    {
+        m[r, c] = r * m.extent(1) + c + 1;
+    }
+}
+\end{cpp}
+
+这里唯一改变的是使用了 extent() 方法，以前这是 matrix 类型的一个成员函数模板。实际上，可以将 matrix 定义为 \verb|std::mdspan| 的别名模板：
+
+\begin{cpp}
+template <typename T, std::size_t ROWS, std::size_t COLS>
+using matrix = std::mdspan<T, std::extents<std::size_t, ROWS, COLS>>;
+std::array<int, 6> arr;
+matrix<int, 2, 3> ma {arr.data()};
+\end{cpp}
+
+这个例子中，mdspan 是二维的，但可以定义为任意数量的维度。mdspan 类型的接口包括以下成员：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{名称} & \textbf{描述}                                    \\ \hline
+\endfirsthead
+%
+\endhead
+%
+operator[]    & 提供对底层数据元素的访问。 \\ \hline
+size()        & 返回元素数量。                         \\ \hline
+empty()       & 表明元素数量是否为零。       \\ \hline
+stride() & 返回指定维度的步长。除非明确自定义，否则默认为 1。 \\ \hline
+extents()     & 返回指定维度的大小（范围）。   \\ \hline
+\end{longtable}
+
+\begin{center}
+表 6.5: mdspan 的一些成员函数列表
+\end{center}
+
+如果查看 \verb|std::mdspan| 的定义，会看到以下内容：
+
+\begin{cpp}
+template<class T,
+         class Extents,
+         class LayoutPolicy = std::layout_right,
+         class AccessorPolicy = std::default_accessor<T>>
+class mdspan;
+\end{cpp}
+
+前两个模板参数是元素的类型和每个维度的范围（大小），而后两个是定制点：
+
+\begin{itemize}
+\item
+布局策略控制 mdspan 的多维索引如何映射到底层一维数据的偏移量。有几个选项可用：\verb|layout_right|（默认值），其中最右边的索引提供对底层内存的步长为一的访问（C/C++ 风格）；\verb|layout_left|，其中最左边的索引提供对底层内存的步长为一的访问（Fortran 和 Matlab 风格）；以及 \verb|layout_stride|，概括了前两者并允许自定义每个维度的步长。布局策略的原因是为了与其他语言的互操作性，以及在不改变循环结构的情况下更改算法的数据访问模式。
+
+\item
+访问策略定义了底层序列，如何存储其元素，以及如何使用布局策略提供的偏移量，来获取对存储元素的引用。这些主要是为第三方库设计的，就像不可能需要为 \verb|std::vector| 定义分配器一样，也不需要为 \verb|std::mdspan| 实现访问策略。
+\end{itemize}
+
+举例说明布局策略以理解其工作原理，默认布局策略是 \verb|std::layout_right|。可以考虑以下示例：
+
+\begin{cpp}
+std::vector v {1,2,3,4,5,6,7,8,9};
+std::mdspan<int,
+            std::extents<size_t, 2, 3>,
+            std::layout_right> mv{v.data()};
+\end{cpp}
+
+这里定义的二维矩阵包含以下内容：
+
+\begin{shell}
+1 2 3
+4 5 6
+\end{shell}
+
+如果把布局策略改为 \verb|std::layout_left|，内容也会相应变化为：
+
+\begin{shell}
+1 3 5
+2 4 6
+\end{shell}
+
+可以使用 \verb|std::layout_stride| 自定义每个维度的步长。以下代码段定义了一个步长等同于 \verb|std::layout_right| 的步长，适用于 2x3 的矩阵：
+
+\begin{cpp}
+std::mdspan<int,
+            std::extents<size_t,
+                        std::dynamic_extent,
+                        std::dynamic_extent>,
+            std::layout_stride>
+mv{ v.data(), { std::dextents<size_t,2>{2, 3},
+                std::array<std::size_t, 2>{3, 1}}};
+\end{cpp}
+
+不同的步长提供了不同的结果。下表展示了几个例子：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{步长} & \textbf{矩阵}                                       \\ \hline
+\endfirsthead
+%
+\endhead
+%
+{0, 0}           & \begin{tabular}[c]{@{}l@{}}1 1 1\\ 1 1 1\end{tabular} \\ \hline
+{0, 1}           & \begin{tabular}[c]{@{}l@{}}1 2 3\\ 1 2 3\end{tabular} \\ \hline
+{1, 0}           & \begin{tabular}[c]{@{}l@{}}1 1 1\\ 2 2 2\end{tabular} \\ \hline
+{1, 1}           & \begin{tabular}[c]{@{}l@{}}1 2 3\\ 2 3 4\end{tabular} \\ \hline
+{2, 1}           & \begin{tabular}[c]{@{}l@{}}1 2 3\\ 3 4 5\end{tabular} \\ \hline
+{1, 2}           & \begin{tabular}[c]{@{}l@{}}1 3 5\\ 2 4 6\end{tabular} \\ \hline
+{2, 3}           & \begin{tabular}[c]{@{}l@{}}1 4 7\\ 3 6 9\end{tabular} \\ \hline
+\end{longtable}
+
+\begin{center}
+表 6.6: 自定义步长及其导致视图内容的例子
+\end{center}
+
+让讨论最后一个例子，这可能稍微普遍一点。第一个维度的步长表示行之间的偏移增量。底层序列中的第一个元素位于索引 0 处。这时，步长为 2 表示行从索引 0, 2, 4 等读取。第二个维度的步长表示列之间的偏移增量。第一个元素位于对应行的索引处。这个例子中，第一行的索引是 0，所以列的步长为 3 ，所以第一行的元素将从索引 0, 3 和 6 读取。第二行从索引 2 开始，所以第二行的元素将从索引 2, 5 和 8 读取。这就是上表中显示的最后一个例子。
+
+\mySubsubsection{}{there's more}
+
+mdspan 的原始提案中包含了一个名为 \verb|submdspan()| 的独立函数。此函数创建了 mdspan 的切片，也就是 mdspan 的子集视图。为了使 mdspan 能够纳入 C++23，此函数移除并推迟到 C++26。本书撰写之时，已经纳入 C++26(还没有编译器支持)。
+
+

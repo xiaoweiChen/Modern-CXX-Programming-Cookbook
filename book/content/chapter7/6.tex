@@ -1,0 +1,117 @@
+上一个示例中，研究了一些可以用来控制输入输出流的操纵符，了解了操纵符与数值和文本值有关。本示例中，将介绍如何使用标准操纵符来写入和读取货币值。
+
+\mySubsubsection{}{Getting ready}
+
+现在应该熟悉区域设置，以及如何设置。
+
+本示例中讨论的操纵符可在 std 命名空间中的 <iomanip> 头文件中找到。
+
+\mySubsubsection{}{How to do it...}
+
+要将货币值写入输出流，应该执行以下操作：
+
+\begin{itemize}
+\item
+设置所需的区域设置以控制货币格式：
+
+\begin{cpp}
+std::cout.imbue(std::locale("en_GB.utf8"));
+\end{cpp}
+
+\item
+使用 long double 或 \verb|std::basic_string| 类型的变量表示金额：
+
+\begin{cpp}
+long double mon = 12345.67;
+std::string smon = "12345.67";
+\end{cpp}
+
+\item
+使用带有单个参数（货币值）的 \verb|std::put_money 操纵符| 显示使用货币符号（如果有的话）的值：
+
+\begin{cpp}
+std::cout << std::showbase << std::put_money(mon)
+          << '\n'; // £123.46
+std::cout << std::showbase << std::put_money(smon)
+          << '\n'; // £123.46
+\end{cpp}
+
+\item
+使用带有两个参数（货币值和一个布尔标志设为 true）的 \verb|std::put_money| 表示使用国际货币字符串：
+
+\begin{cpp}
+std::cout << std::showbase << std::put_money(mon, true)
+          << '\n'; // GBP 123.46
+std::cout << std::showbase << std::put_money(smon, true)
+          << '\n'; // GBP 123.46
+\end{cpp}
+\end{itemize}
+
+要从输入流读取货币值，应该执行以下操作：
+
+\begin{itemize}
+\item
+设置所需的区域设置以控制货币格式：
+
+\begin{cpp}
+std::istringstream stext("$123.45 567.89 USD");
+stext.imbue(std::locale("en_US.utf8"));
+\end{cpp}
+
+\item
+使用 long double 或 \verb|std::basic_string| 类型的变量从输入流读取金额：
+
+\begin{cpp}
+long double v1 = 0;
+std::string v2;
+\end{cpp}
+
+\item
+如果输入流中可能使用了货币符号，则使用带有单个参数（用于写入货币值的变量）的 \verb|std::get_money()|：
+
+\begin{cpp}
+stext >> std::get_money(v1) >> std::get_money(v2);
+// v1 = 12345, v2 = "56789"
+\end{cpp}
+
+\item
+使用带有两个参数（用于写入货币值的变量和一个布尔标志设为 true）的 \verb|std::get_money()| 表示存在国际货币字符串：
+
+\begin{cpp}
+std::istringstream stext("123.45 567.89");
+stext.imbue(std::locale("en_US.utf8"));
+long double v1 = 0;
+std::string v2;
+stext >> std::get_money(v1, true) >> std::get_money(v2, true);
+// v1 = 12345, v2 = "56789"
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+\verb|put_money()| 和 \verb|get_money()| 操纵符非常相似，都是接受一个表示要写入输出流的货币值或用于保存从输入流读取货币值变量参数的函数模板，以及第二个可选参数来指示是否使用国际货币字符串。默认情况下是使用货币符号，如果可用的话。\verb|put_money()| 使用 \verb|std::money_put()| 面向对象特性来输出货币值，而 \verb|get_money()| 使用 \verb|std::money_get()| 面向对象特性来解析货币值。这两个操纵符函数模板都返回一个未指定类型的实例，并且这些函数不会抛出异常：
+
+\begin{cpp}
+template <class MoneyT>
+/*unspecified*/ put_money(const MoneyT& mon, bool intl = false);
+template <class MoneyT>
+/*unspecified*/ get_money(MoneyT& mon, bool intl = false);
+\end{cpp}
+
+这两个操纵符函数都需要货币值是 long double 或 \verb|std::basic_string| 类型。
+
+\begin{myTip}
+货币值是当前使用区域定义的货币最小单位，以整数形式存储。以美元为例，\$100.00 存储为 10000.0（单位为美分），而 1 美分（即 \$0.01）存储为 1.0。
+\end{myTip}
+
+当将货币值写入输出流时，如果希望显示货币符号或国际货币字符串，可使用 std::showbase 操纵符。其用于表示数字基数的前缀（如十六进制的 0x），对于货币值，用于指示是否应显示货币符号/字符串：
+
+\begin{cpp}
+std::cout << std::put_money(12345.67) << '\n';
+// prints 123.46
+std::cout << std::showbase << std::put_money(12345.67) << '\n';
+// prints £123.46
+\end{cpp}
+
+第一行只会打印表示货币金额的数字值，即 123.46，而第二行会打印相同的数字值，但在其前面加上货币符号。
+

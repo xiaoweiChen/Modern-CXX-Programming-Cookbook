@@ -1,0 +1,363 @@
+线程支持库提供了管理线程和使用互斥锁和锁同步访问共享数据的功能，C++20 还提供了闩锁、栅栏和信号量的支持。标准库还提供了底层原子操作，可以从不同线程并发地执行在共享数据上，不会产生竞争条件，也不需要锁。提供的支持包括原子类型、原子操作和内存同步顺序。本示例中，将介绍如何使用其中的一些类型和函数。
+
+\mySubsubsection{}{Getting ready}
+
+所有的原子类型和操作都在 <atomic> 头文件的 std 命名空间中定义。
+
+\mySubsubsection{}{How to do it...}
+
+以下是使用原子类型的一系列典型操作：
+
+\begin{itemize}
+\item
+使用 std::atomic 类型模板创建支持原子操作（如加载、存储或执行算术或位运算）的原子类型实例：
+
+\begin{cpp}
+std::atomic<int> counter {0};
+std::vector<std::thread> threads;
+for(int i = 0; i < 10; ++i)
+{
+    threads.emplace_back([&counter](){
+        for(int j = 0; j < 10; ++j)
+        ++counter;
+    });
+}
+for(auto & t : threads) t.join();
+std::cout << counter << '\n'; // prints 100
+\end{cpp}
+
+\item
+C++20使用 \verb|std::atomic_ref| 类型模板对引用的实例应用原子操作，该实例可以为整型、浮点型或用户定义类型的引用或指针：
+
+\begin{cpp}
+void do_count(int& c)
+{
+    std::atomic_ref<int> counter{ c };
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 10; ++i)
+    {
+        threads.emplace_back([&counter]() {
+            for (int j = 0; j < 10; ++j)
+                ++counter;
+        });
+    }
+    for (auto& t : threads) t.join();
+}
+int main()
+{
+    int c = 0;
+    do_count(c);
+    std::cout << c << '\n'; // prints 100
+}
+\end{cpp}
+
+\item
+使用 \verb|std::atomic_flag| 类型作为原子布尔类型：
+
+\begin{cpp}
+std::atomic_flag lock = ATOMIC_FLAG_INIT;
+int counter = 0;
+std::vector<std::thread> threads;
+for(int i = 0; i < 10; ++i)
+{
+    threads.emplace_back([&](){
+        while(lock.test_and_set(std::memory_order_acquire));
+            ++counter;
+        lock.clear(std::memory_order_release);
+    });
+}
+for(auto & t : threads) t.join();
+std::cout << counter << '\n'; // prints 10
+\end{cpp}
+
+\item
+使用原子类型的成员函数 – load(), store() 和 exchange() – 或非成员函数 – \verb|atomic_load()/atomic_load_explicit()|, \verb|atomic_store()/atomic_store_explicit()|, 和 \verb|atomic_exchange()/atomic_exchange_explicit()| – 来原子地读取、设置或交换原子实例的值。
+
+\item
+使用其成员函数 \verb|fetch_add()| 和 \verb|fetch_sub()| 或非成员函数 \verb|atomic_fetch_add()/atomic_fetch_add_explicit()| 和 \verb|atomic_fetch_sub()/atomic_fetch_sub_explicit()| 来原子地增加或减少原子类型实例的值，并返回操作前的值：
+
+\begin{cpp}
+std::atomic<int> sum {0};
+std::vector<int> numbers = generate_random();
+size_t size = numbers.size();
+std::vector<std::thread> threads;
+for(int i = 0; i < 10; ++i)
+{
+    threads.emplace_back([&sum, &numbers](size_t const start,
+    size_t const end) {
+        for(size_t j = start; j < end; ++j)
+        {
+            std::atomic_fetch_add_explicit(
+                &sum, numbers[j],
+                std::memory_order_acquire);
+            // same as
+            // sum.fetch_add(numbers[i], std::memory_order_acquire);
+    }},
+    i*(size/10),
+    (i+1)*(size/10));
+}
+for(auto & t : threads) t.join();
+\end{cpp}
+
+\item
+使用其成员函数 \verb|fetch_and()|, \verb|fetch_or()| 和 \verb|fetch_xor()| 或非成员函数 \verb|atomic_fetch_and()/atomic_fetch_and_explicit()|, \verb|atomic_fetch_or()/atomic_fetch_or_explicit()| 和\\ \verb|atomic_fetch_xor()/atomic_fetch_xor_explicit()| 分别与指定参数执行 AND、OR 和 XOR 原子操作，并返回操作前的值。
+
+\item
+使用 \verb|std::atomic_flag| 的成员函数 \verb|test_and_set()| 和 \verb|clear()| 或非成员函数 \verb|atomic_flag_test_and_set()/atomic_flag_test_and_set_explicit()| 和 \verb|atomic_flag_clear()/atomic_flag_clear_explicit()| 来设置或重置原子标志。C++20 还可以使用成员函数 test() 和非成员函数 \verb|atomic_flag_test()/atomic_flag_test_explicit()| 来原子地返回标志值。
+
+\item
+C++20使用成员函数 \verb|wait()|, \verb|notify_one()| 和 \verb|notify_all()|，以及非成员函数 \verb|atomic_wait()/atomic_wait_explicit()|, \verb|atomic_notify_one()| 和 \verb|atomic_notify_all()| 来进行线程同步。这些函数提供了比轮询更有效的机制，用于等待原子实例值发生变化。
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::atomic 是一个定义了（包括其特化）原子类型的类模板。当一个线程写入对象而另一个线程读取数据时，不使用锁来保护访问，原子类型实例行为明确定义。原子变量上的操作视为单一、不可中断的动作。如果两个线程想要写同一个原子变量，先获得该变量的线程将写入，而另一个线程将在原子写入完成后写入。这是一种确定性的行为，不需要锁。
+
+std::atomic 类提供了几个特化：
+
+\begin{itemize}
+\item
+bool 的全特化，为 \verb|atomic_bool| 的类型别名。
+
+\item
+所有整数类型的完全特化，带有类型别名（类型定义），如 \verb|atomic_bool|（ \verb|std::atomic<bool>|）、\verb|atomic_int|（ \verb|std::atomic<int>|）、\verb|atomic_long|（ \verb|std::atomic<long>|）、\verb|atomic_char|（ \verb|std::atomic<char>|）、\verb|atomic_size_t|（ \verb|std::atomic<std::size_t>|）等许多其他别名。
+
+\item
+指针类型的偏特化。
+
+\item
+C++20 浮点类型 float、double 和 long double 的全特化。
+
+\item
+C++20中，如 \verb|std::atomic<std::shared_ptr<U>>|（\verb|std::shared_ptr|）和 \verb|std::atomic<std::weak_ptr<U>>|（\verb|std::weak_ptr|）的偏特化。
+\end{itemize}
+
+原子类模板有多种执行原子操作的成员函数：
+
+\begin{itemize}
+\item
+load() 原子地加载并返回实例的值。
+
+\item
+store() 原子地在实例中存储一个非原子值；此函数不返回任何值。
+
+\item
+exchange() 原子地在实例中存储一个非原子值，并返回之前的值。
+
+\item
+operator= 具有与 store(arg) 相同的效果。
+
+\item
+fetch\_add() 原子地将一个非原子参数加到原子值上，并返回之前存储的值。
+
+\item
+fetch\_sub() 原子地从原子值中减去一个非原子参数，并返回之前存储的值。
+
+\item
+fetch\_and(), fetch\_or()和 fetch\_xor() 原子地在参数和原子值之间执行按位 AND、OR 或 XOR 操作；原子实例中存储新值；并返回之前的值。
+
+\item
+前缀和后缀的 operator++ 和 operator-{}- 原子地将原子对象的值增减 1。这些操作等同于使用 fetch\_add() 或 fetch\_sub()。
+
+\item
+operator +=, -= , \&=, |= 和 \verb|^=| 在参数和原子值之间执行加法、减法或按位 AND、OR、XOR 操作，并在原子实例中存储新值。这些操作等同于使用 fetch\_add(), fetch\_sub(), fetch\_and(), fetch\_or() 和 fetch\_xor()。
+\end{itemize}
+
+假设有一个原子变量，如 \verb|std::atomic<int> a;|以下不是原子操作：
+
+\begin{cpp}
+a = a + 42;
+\end{cpp}
+
+这涉及到一系列操作，其中一些是原子的：
+
+\begin{itemize}
+\item
+原子地加载原子实例的值
+
+\item
+将加载的值加上 42（这不是原子操作）
+
+\item
+原子地将结果存储在原子实例 a 中
+\end{itemize}
+
+另一方面，以下使用成员操作符 += 为原子操作：
+
+\begin{cpp}
+a += 42;
+\end{cpp}
+
+此操作的效果等同于以下任一操作：
+
+\begin{cpp}
+a.fetch_add(42);               // 使用成员函数
+std::atomic_fetch_add(&a, 42); // 使用非成员函数
+\end{cpp}
+
+尽管 std::atomic 对 bool 类型有名为 std::atomic<bool> 的全特化，标准中还定义了另一种称为 \verb|std::atomic_flag| 的原子类型，保证无锁。然而，这个原子类型与 std::atomic<bool> 非常不同，其只有以下成员函数：
+
+\begin{itemize}
+\item
+\verb|test_and_set()| 原子地将值设为 true 并返回之前的值。
+
+\item
+\verb|clear()| 原子地将值设为 false。
+
+\item
+C++20有 \verb|test()|，原子地返回标志的值。
+\end{itemize}
+
+C++20 之前，初始化 \verb|std::atomic_flag| 到确定值的唯一方法是使用 \verb|ATOMIC_FLAG_INIT| 宏。这会将原子标志初始化为清除（false）值：
+
+\begin{cpp}
+std::atomic_flag lock = ATOMIC_FLAG_INIT;
+\end{cpp}
+
+C++20 中，由于 \verb|std::atomic_flag| 的默认构造函数已将其初始化为清除状态，所以这个宏已弃用。
+
+前面提到的所有 \verb|std::atomic| 和 \verb|std::atomic_flag| 的成员函数都有对应的非成员函数，这些非成员函数根据引用的类型以 \verb|atomic_| 或 \verb|atomic_flag_| 开头。例如，\verb|std::atomic::fetch_add()| 的等价非成员函数是 \verb|std::atomic_fetch_add()|，这些非成员函数的第一个参数总是指向 \verb|std::atomic| 实例的指针。内部，非成员函数会在提供的 std::atomic 参数上调用相应的成员函数。同样，\verb|std::atomic_flag::test_and_set()| 的等价非成员函数是 \verb|std::atomic_flag_test_and_set()|，其第一个参数是指向 \verb|std::atomic_flag| 实例的指针。
+
+所有这些 \verb|std::atomic| 和 \verb|std::atomic_flag| 成员函数都有两组重载函数；其中一组多了一个表示内存序的参数。所有非成员函数，如 \verb|std::atomic_load()|、\verb|std::atomic_fetch_add()| 和 \verb|std::atomic_flag_test_and_set()| 都有一个带有 \verb|_explicit| 后缀的同伴函数——\verb|std::atomic_load_explicit()|、\verb|std::atomic_fetch_add_explicit()| 和 \verb|std::atomic_flag_test_and_set_explicit()|；这些函数多了一个表示内存序的参数。
+
+内存序指定了非原子内存访问，如何围绕原子操作排序。默认情况下，所有原子类型和操作的内存顺序一致。
+
+枚举 \verb|std::memory_order| 中定义了内存序的类别，可以作为参数传递给 std::atomic 和 \verb|std::atomic_flag| 的成员函数，或者带有 \verb|_explicit()| 后缀的非成员函数。
+
+\begin{myNotic}
+顺序一致性是一致性模型，要求在多处理器系统中，所有指令都按照某种顺序执行，并且所有写入都会立即在整个系统中可见。这种模型最早由 Leslie Lamport 在 70 年代提出，描述如下：
+
+\textit{“任何执行的结果都与处理器的操作按照某种顺序执行相同，而且每个单独处理器的操作在这个序列中按照其程序指定的顺序出现。”}
+\end{myNotic}
+
+下表列出了各种类型的内存排序函数，摘自 C++ 参考网站 (\url{http://en.cppreference.com/w/cpp/atomic/memory_order})。每种工作方式的具体细节超出了本书的范围，可以在标准 C++ 参考资料中查找（见上述链接）：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{模型} &
+\textbf{解释} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+memory\_order\_relaxed &
+宽松的操作。没有同步或排序约束；仅要求此操作具有原子性。 \\ \hline
+memory\_order\_consume &
+\begin{tabular}[c]{@{}l@{}}
+使用此内存序的加载操作，对受影响的内存位置执行消费操作；当\\前线程中依赖于当前加载值的读取或写入，都不能重新排序到此加\\载操作之前。其他线程中释放相同原子变量的数据依赖的写入在当\\前线程中可见。大多数平台上，这仅影响编译器优化。
+\end{tabular}
+\\ \hline
+memory\_order\_acquire &
+\begin{tabular}[c]{@{}l@{}}
+使用此内存序的加载操作，对受影响的内存位置执行获取操作；当\\前线程中的读取或写入，都不能重新排序到此加载操作之前。其他\\线程中释放相同原子变量的所有写入在当前线程中可见。
+\end{tabular}
+\\ \hline
+memory\_order\_release &
+\begin{tabular}[c]{@{}l@{}}
+使用此内存顺序的存储操作执行释放操作；当前线程中的任何读取\\或写入都不能重新排序到此存储操作之后。当前线程中的所有写入\\在其他获取相同原子变量的线程中可见，而对原子变量有依赖关系\\的写入在其他消费相同原子变量的线程中可见。
+\end{tabular}
+\\ \hline
+memory\_order\_acq\_rel &
+\begin{tabular}[c]{@{}l@{}}
+使用此内存序的“读-改-写”操作，既是获取操作，也是释放操作。\\当前线程中的内存读取或写入，都不能重新排序到此存储操作之前\\或之后。其他线程中释放相同原子变量的所有写入在此修改之前可\\见，而此修改在其他获取相同原子变量的线程中可见。
+\end{tabular}
+\\ \hline
+memory\_order\_seq\_cst &
+\begin{tabular}[c]{@{}l@{}}
+使用此内存序的操作。既是获取操作，也是释放操作；存在一个总\\顺序，所有线程观察到的所有修改都遵循相同顺序。
+\end{tabular}
+\\ \hline
+\end{longtable}
+
+\begin{center}
+表 8.1: 描述原子操作中内存访问排序的 std::memory\_order
+\end{center}
+
+"How to do it..." 的第一个例子中，展示了多个线程通过并发递增来重复修改共享资源——计数器。可以通过实现一个表示原子计数器的类进一步改进，包含如 increment() 和 decrement() 方法来修改计数器的值，以及 get() 方法来检索其当前值：
+
+\begin{cpp}
+template <typename T,
+          typename I =
+            typename std::enable_if<std::is_integral_v<T>>::type>
+class atomic_counter
+{
+    std::atomic<T> counter {0};
+    public:
+    T increment()
+    {
+        return counter.fetch_add(1);
+    }
+    T decrement()
+    {
+        return counter.fetch_sub(1);
+    }
+    T get()
+    {
+        return counter.load();
+    }
+};
+\end{cpp}
+
+使用此类模板，第一个示例可以改写成以下形式，结果相同：
+
+\begin{cpp}
+atomic_counter<int> counter;
+std::vector<std::thread> threads;
+for(int i = 0; i < 10; ++i)
+{
+    threads.emplace_back([&counter](){
+        for(int j = 0; j < 10; ++j)
+        counter.increment();
+    });
+}
+for(auto & t : threads) t.join();
+std::cout << counter.get() << '\n'; // prints 100
+\end{cpp}
+
+如果需要对引用执行原子操作，则不能使用 \verb|std::atomic|。C++20 中可以使用 \verb|std::atomic_ref| 类型。这是一个应用于所引用的对象的原子操作的类模板。该实例必须比 \verb|std::atomic_ref| 实例存在周期更久，并且只要存在引用该实例的 \verb|std::atomic_ref|，就必须仅通过这些 \verb|std::atomic_ref| 访问该实例。
+
+\verb|std::atomic_ref| 类型具有以下特化：
+
+\begin{itemize}
+\item
+主模板可以实例化为简单可复制类型 T，包括布尔型。
+
+\item
+所有指针类型的偏特化。
+
+\item
+整数类型（字符类型、有符号和无符号整数类型，以及 <cstdint> 头文件中的类型定义所需的任何其他整数类型）的特化。
+
+\item
+浮点类型 float、double 和 long double 的特化。
+\end{itemize}
+
+使用 \verb|std::atomic_ref| 时需要注意：
+
+\begin{itemize}
+\item
+访问 \verb|std::atomic_ref| 引用实例的子对象都不是线程安全的。
+
+\item
+即使通过 const 的 \verb|std::atomic_ref| 实例也可以修改引用值。
+\end{itemize}
+
+从 C++20 开始，提供了一些新的成员和非成员函数，可用于高效的线程同步机制：
+
+\begin{itemize}
+\item
+成员函数 \verb|wait()| 和非成员函数 \verb|atomic_wait()/atomic_wait_explicit()|，以及 \verb|atomic_flag_wait()/atomic_flag_wait_explicit()| 执行原子等待操作，阻止线程直到接收到通知并且原子值发生变化。其行为类似于反复比较提供的参数与 load() 返回的值，相等则阻塞至 \verb|notify_one()| 或 \verb|notify_all()| 通知，或者线程因意外原因解除阻塞。如果比较的值不相等，则函数不解阻塞而直接返回。
+
+\item
+成员函数 \verb|notify_one()| 和非成员函数 \verb|atomic_notify_one()| 以及 \verb|atomic_flag_notify_one()| 原子地通知，至少一个处于原子等待操作阻塞状态的线程。如果没有这样的阻塞线程，函数什么也不做。
+
+\item
+成员函数 \verb|notify_all()| 和非成员函数 \verb|atomic_notify_all()| 以及 \verb|atomic_flag_notify_all()| 解除，所有处于原子等待操作阻塞状态的线程的阻塞，或者如果没有这样的线程存在则什么也不做。
+\end{itemize}
+
+最后，标准原子操作库中的所有原子实例——\verb|std::atomic|、\verb|std::atomic_ref| 和 \verb|std::atomic_flag|——均无数据竞争。
+
+

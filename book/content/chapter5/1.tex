@@ -1,0 +1,311 @@
+标准库提供了多种类型的容器，用于存储对象集合；库中包含序列容器（如 vector、array 和 list）、有序和无序关联容器（如 set 和 map），以及不存储数据但提供面向容器适配接口的容器适配器（如 stack 和 queue）。它们都以类型模板进行实现，所以可以与任何类型一起使用（前提是满足容器的要求）。一般来说，应该使用最适合解决问题的容器，这不仅能在插入、删除、访问元素的速度和内存使用方面提供良好的性能，还能使代码易于阅读和维护。然而，默认的选择应该是 vector。这个示例中，将了解到为什么在许多情况下 vector 应该作为首选容器，并且会介绍 vector 最常见的操作。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例，需要熟悉数组，无论是静态分配还是动态分配。这里提供了一些例子：
+
+\begin{cpp}
+double d[3];           // a statically allocated array of 3 doubles
+int* arr = new int[5]; // a dynamically allocated array of 5 ints
+\end{cpp}
+
+vector 类模板在 <vector> 头文件中可用，位于 std 命名空间下。
+
+\mySubsubsection{}{How to do it...}
+
+要初始化一个 std::vector 类模板，可以使用以下任意方法：
+
+\begin{itemize}
+\item
+从初始化列表初始化：
+
+\begin{cpp}
+std::vector<int> v1 { 1, 2, 3, 4, 5 };
+\end{cpp}
+
+\item
+从数组初始化：
+
+\begin{cpp}
+int arr[] = { 1, 2, 3, 4, 5 };
+std::vector<int> v21(arr, arr + 5); // v21 = { 1, 2, 3, 4, 5 }
+std::vector<int> v22(arr+1, arr+4); // v22 = { 2, 3, 4 }
+\end{cpp}
+
+\item
+从另一个容器初始化：
+
+\begin{cpp}
+std::list<int> l{ 1, 2, 3, 4, 5 };
+std::vector<int> v3(l.begin(), l.end()); //{ 1, 2, 3, 4, 5 }
+\end{cpp}
+
+\item
+从计数和值初始化：
+
+\begin{cpp}
+std::vector<int> v4(5, 1); // {1, 1, 1, 1, 1}
+\end{cpp}
+
+\end{itemize}
+
+要修改 std::vector 的内容，可以使用以下方法（同样不限于这些方法）：
+
+\begin{itemize}
+\item
+使用 \verb|push_back()| 在 vector 的末尾添加一个元素：
+
+\begin{cpp}
+std::vector<int> v1{ 1, 2, 3, 4, 5 };
+v1.push_back(6); // v1 = { 1, 2, 3, 4, 5, 6 }
+\end{cpp}
+
+\item
+使用 \verb|pop_back()| 从 vector 的末尾移除一个元素：
+
+\begin{cpp}
+v1.pop_back();   // v1 = { 1, 2, 3, 4, 5 }
+\end{cpp}
+
+\item
+使用 \verb|insert()| 在 vector 的任意位置插入：
+
+\begin{cpp}
+int arr[] = { 1, 2, 3, 4, 5 };
+std::vector<int> v21;
+v21.insert(v21.begin(), arr, arr + 5); // v21 = { 1, 2, 3, 4, 5 }
+std::vector<int> v22;
+v22.insert(v22.begin(), arr, arr + 3); // v22 = { 1, 2, 3 }
+\end{cpp}
+
+\item
+使用 \verb|emplace_back()| 创建并添加一个元素到 vector 的末尾：
+
+\begin{cpp}
+struct foo
+{
+    int a;
+    double b;
+    std::string c;
+    foo(int a, double b, std::string const & c) :
+    a(a), b(b), c(c) {}
+};
+std::vector<foo> v3;
+v3.emplace_back(1, 1.0, "one"s);
+// v3 = { foo{1, 1.0, "one"} }
+\end{cpp}
+
+\item
+使用 \verb|emplace()| 创建并插入一个元素到 vector 的任意位置：
+
+\begin{cpp}
+v3.emplace(v3.begin(), 2, 2.0, "two"s);
+// v3 = { foo{2, 2.0, "two"}, foo{1, 1.0, "one"} }
+\end{cpp}
+\end{itemize}
+
+要修改 vector 的全部内容，可以使用以下任意方法：
+
+\begin{itemize}
+\item
+使用赋值operator=从另一个 vector 赋值；这将替换容器的内容：
+
+\begin{cpp}
+std::vector<int> v1{ 1, 2, 3, 4, 5 };
+std::vector<int> v2{ 10, 20, 30 };
+v2 = v1; // v2 = { 1, 2, 3, 4, 5 }
+\end{cpp}
+
+\item
+使用 assign() 方法从由开始和结束迭代器定义的另一个序列赋值；这将替换容器的内容：
+
+\begin{cpp}
+int arr[] = { 1, 2, 3, 4, 5 };
+std::vector<int> v31;
+v31.assign(arr, arr + 5);     // v31 = { 1, 2, 3, 4, 5 }
+std::vector<int> v32;
+v32.assign(arr + 1, arr + 4); // v32 = { 2, 3, 4 }
+\end{cpp}
+
+\item
+使用 swap() 方法交换两个 vector 的内容：
+
+\begin{cpp}
+std::vector<int> v4{ 1, 2, 3, 4, 5 };
+std::vector<int> v5{ 10, 20, 30 };
+v4.swap(v5); // v4 = { 10, 20, 30 }, v5 = { 1, 2, 3, 4, 5 }
+\end{cpp}
+
+\item
+使用 clear() 方法移除所有元素：
+
+\begin{cpp}
+std::vector<int> v6{ 1, 2, 3, 4, 5 };
+v6.clear(); // v6 = { }
+\end{cpp}
+
+\item
+使用 erase() 方法（需要一个迭代器或定义了要从 vector 中移除的元素范围的一对迭代器）移除一个或多个元素：
+
+\begin{cpp}
+std::vector<int> v7{ 1, 2, 3, 4, 5 };
+v7.erase(v7.begin() + 2, v7.begin() + 4); // v7 = { 1, 2, 5 }
+\end{cpp}
+
+\item
+使用 \verb|std::remove_if()| 函数和 erase() 方法移除满足某个谓词的一个或多个元素：
+
+\begin{cpp}
+std::vector<int> v8{ 1, 2, 3, 4, 5 };
+auto iterToNext = v8.erase(
+    std::remove_if(v8.begin(), v8.end(),
+        [](const int n) {return n % 2 == 0; }),
+    v8.end());                            // v8 = { 1, 3, 5 }
+\end{cpp}
+
+\item
+使用 C++20 引入的 \verb|std::erase_if()| 函数移除满足某个谓词的一个或多个元素。类似的 std::erase() 函数也存在：
+
+\begin{cpp}
+std::vector<int> v9{ 1, 2, 3, 4, 5 };
+auto erasedCount = std::erase_if(v9, [](const int n) {
+    return n % 2 == 0; });                // v9 = { 1, 3, 5 }
+\end{cpp}
+\end{itemize}
+
+获取 vector 中第一个元素的地址，通常是为了将 vector 的内容传递给类似 C 的 API：
+
+\begin{itemize}
+\item
+使用 data() 方法，返回指向第一个元素的指针，提供对 vector 元素存储的底层连续内存序列的直接访问；此方法自 C++11 起可用：
+
+\begin{cpp}
+void process(int const * const arr, size_t const size)
+{ /* do something */ }
+std::vector<int> v{ 1, 2, 3, 4, 5 };
+process(v.data(), v.size());
+\end{cpp}
+
+\item
+获取第一个元素的地址：
+
+\begin{cpp}
+process(&v[0], v.size());
+\end{cpp}
+
+\item
+获取 front() 方法引用的元素的地址（空 vector 上调用此方法的行为未定义）：
+
+\begin{cpp}
+process(&v.front(), v.size());
+\end{cpp}
+
+\item
+获取 begin() 返回的迭代器所指向的元素的地址：
+
+\begin{cpp}
+process(&*v.begin(), v.size());
+\end{cpp}
+\end{itemize}
+
+C++23 中，要修改 vector 的内容，还可以使用以下范围感知的成员函数：
+
+要使用给定范围的元素副本替换 vector 的元素，使用 \verb|assign_range()|：
+
+\begin{cpp}
+std::list<int>   l{ 1, 2, 3, 4, 5 };
+std::vector<int> v;
+v.assign_range(l); // v = {1, 2, 3, 4, 5}
+\end{cpp}
+
+要在 vector 的末尾（在结束迭代器之前）追加范围的元素副本，使用 \verb|append_range()|：
+
+\begin{cpp}
+std::list<int>   l{ 3, 4, 5 };
+std::vector<int> v{ 1, 2 };
+v.append_range(l);  // v = {1, 2, 3, 4, 5}
+\end{cpp}
+
+要在 vector 的给定迭代器之前插入范围的元素副本，使用 \verb|insert_range()|：
+
+\begin{cpp}
+std::list<int>   l{ 2, 3, 4 };
+std::vector<int> v{ 1, 5 };
+v.insert_range(v.begin() + 1, l); // v = {1, 2, 3, 4, 5}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+std::vector 类设计为最接近数组且与数组兼容的 C++ 容器。vector 是一个元素数量可变的序列，保证在内存中连续存储，这使得 vector 的内容可以轻松传递给接受数组元素指针及其大小的 C 风格函数。
+
+使用 vector的好处包括：
+
+\begin{itemize}
+\item
+开发人员不需要直接管理内存，容器内部处理了内存的分配、重新分配和释放。
+
+\begin{myNotic}
+vector 旨在存储对象实例。如果需要存储指针，请不要存储原始指针而是智能指针。否则，需要处理指向对象的生命周期管理。
+\end{myNotic}
+
+\item
+能够修改 vector 的大小。
+
+\item
+两个 vector 之间可以简单地赋值或连接。
+
+\item
+两个 vector 可以直接比较。
+\end{itemize}
+
+vector 类是一个非常高效的容器，实现提供了许多大多数开发者无法通过数组实现的优化。对 vector 元素的随机访问以及在 vector 末尾的插入和删除操作是常数时间 O(1) 操作（前提是不需要重新分配内存），而在其他位置的插入和删除则是线性时间 O(n) 操作。
+
+与其他标准容器相比，vector 具有多种优势：
+
+\begin{itemize}
+\item
+与数组和 C 风格的 API 兼容。如果函数接受数组作为参数，则在将其他容器（除了 std::array 之外）的内容作为参数传递给函数之前，需要将其复制到 vector 中。
+
+\item
+对所有容器而言，对元素的访问速度最快（与 std::array 相同）。
+
+\item
+存储元素时没有每个元素的内存开销。因为元素像数组一样存储在连续的空间中，所以vector 的内存占用较小，不像其他容器，比如：list 需要额外的指针指向其他元素，或者关联容器需要哈希值。
+\end{itemize}
+
+std::vector 在语义上与数组非常相似，但其大小可变。vector 的大小可以增加也可以减少。有两个属性定义了 vector 的大小：
+
+\begin{itemize}
+\item
+容量是指在不进行额外内存分配的情况下 vector 可以容纳的元素数量；这由 capacity() 方法表示。
+
+\item
+大小是指 vector 中实际存在的元素数量；这由 size() 方法表示。
+\end{itemize}
+
+大小总是小于或等于容量。当大小等于容量并且需要添加新元素时，必须修改容量以使 vector 有足够的空间容纳更多元素。这时，vector 将分配一块新的内存，并在释放先前分配的内存之前将内容移动到新的位置。尽管听起来这很耗时——确实如此——但实现方式是每次需要更改容量时都将其指数级增加，通常是翻倍。结果是，平均来说，vector 中的每个元素只需要移动一次（因为容量增加时，所有 vector 的元素都会移动，但那之后可以添加相同数量的元素，而不会产生更多的移动，插入在 vector 末尾进行）。
+
+如果事先知道将有多少个元素会插入到 vector 中，可以首先调用 reserve() 方法来增加至少指定数量的容量（如果指定的大小小于当前容量，这个方法什么也不会做），然后再插入元素。
+
+另一方面，如果想释放多余的预留内存，可以使用 \verb|shrink_to_fit()| 方法请求这样做，但这是否释放内存是由实现决定的。从 C++11 开始，还有一个替代这种非强制方法的方式，即与一个临时的空 vector 进行交换：
+
+\begin{cpp}
+std::vector<int> v{ 1, 2, 3, 4, 5 };
+std::vector<int>().swap(v); // v.size = 0, v.capacity = 0
+\end{cpp}
+
+调用 clear() 方法只会从 vector 中移除所有元素，但不会释放内存。
+
+需要注意的是，vector 类实现了一些特定于其他类型容器的操作：
+
+\begin{itemize}
+\item
+栈（stack）：使用 \verb|push_back()| 和 \verb|emplace_back()| 在末尾添加元素，使用 \verb|pop_back()| 从末尾移除元素。注意，\verb|pop_back()| 不返回移除的最后一个元素。如果需要的话，可以在移除元素之前显式地访问，例如：使用 back() 方法。
+
+\item
+列表（list）：使用 insert() 和 emplace() 在序列中间添加元素，使用 erase() 从序列中的任何位置移除元素。
+\end{itemize}
+
+\begin{myTip}
+对于 C++ 容器的一个经验法则是，除非有充分的理由使用其他容器，否则应将 std::vector 作为默认容器。
+\end{myTip}

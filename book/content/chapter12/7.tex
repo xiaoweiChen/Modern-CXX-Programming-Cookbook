@@ -1,0 +1,488 @@
+
+
+上一个示例中，介绍了范围库如何帮助在处理集合（范围）时简化各种任务，比如枚举、过滤、转换和反转。借助范围适配器来做到这一点的，但只介绍了一小部分适配器。标准库中还有更多可用的适配器，一些是在 C++20 中加入，另一些则是在 C++23 中添加。本示例中，将介绍标准库中所有的适配器。
+
+
+\mySubsubsection{}{Getting ready}
+
+本示例展示的代码中，将使用以下命名空间别名：
+
+\begin{cpp}
+namespace rv = std::ranges::views;
+namespace rg = std::ranges;
+\end{cpp}
+
+另外，为了编译下面的代码，需要包含 <ranges> 和 <algorithm> 头文件（用于范围库）。
+
+\mySubsubsection{}{How to do it...}
+
+C++20 中，可以使用以下适配器：
+
+\begin{itemize}
+\item
+\verb|ranges::filter_view| / \verb|views::filter| 表示底层序列的一个视图，但不包括不满足指定谓词的元素：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto primes = numbers | rv::filter(is_prime);
+rg::copy(primes, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+2 3 5 13
+\end{shell}
+
+\item
+\verb|ranges::transform_view| / \verb|views::transform| 表示应用指定函数到范围中每个元素后的底层序列视图：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto letters = numbers |
+                rv::transform([](int i) {
+                    return static_cast<char>('A' + i); });
+rg::copy(letters, std::ostream_iterator<char>{ std::cout, " " })
+\end{cpp}
+
+\begin{shell}
+B B C D F I N
+\end{shell}
+
+\item
+\verb|ranges::take_view| / \verb|views::take| 表示从底层序列开始，包含指定数量元素的视图：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto some_numbers = numbers | rv::take(3);
+rg::copy(some_numbers, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+1 1 2
+\end{shell}
+
+\item
+\verb|ranges::take_while_view| / \verb|views::take_while| 表示从底层序列开始，包含所有连续满足给定谓词的元素的视图：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto some_numbers = numbers |
+                    rv::take_while([](int i) {
+                        return i < 3; });});
+rg::copy(some_numbers, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+1 1 2
+\end{shell}
+
+\item
+\verb|ranges::drop_view| / \verb|views::drop| 表示跳过指定数量元素后底层序列的视图：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto some_numbers = numbers | rv::drop(3);
+rg::copy(some_numbers, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+3 5 8 13
+\end{shell}
+
+\item
+\verb|ranges::drop_while_view| / \verb|views::drop_while| 表示跳过所有从开头开始连续满足给定谓词的元素后底层序列的视图：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto some_numbers = numbers |
+                    rv::drop_while([](int i) {
+                        return i < 3; });
+rg::copy(some_numbers, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+3 5 8 13
+\end{shell}
+
+\item
+\verb|ranges::join_view| / \verb|views::join| 展平范围的视图，表示由一系列序列组成的视图：
+
+\begin{cpp}
+std::vector<std::vector<int>> numbers{ {1, 1}, {2, 3}, {5, 8}, {13} };
+auto joined_numbers = numbers | rv::join;
+rg::copy(joined_numbers, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+1 1 2 3 5 8 13
+\end{shell}
+
+\item
+\verb|ranges::split_view| / \verb|views::split| 表示通过使用指定的分隔符分割视图获得的子范围视图。分隔符不是结果子范围的一部分：
+
+\begin{cpp}
+std::string text{ "Hello, world!" };
+auto words = text | rv::split(' ');
+for (auto const word : words)
+{
+    std::cout << std::quoted(std::string_view(word)) << ' ';
+}
+\end{cpp}
+
+\begin{shell}
+"Hello," "world!"
+\end{shell}
+
+\item
+\verb|ranges::lazy_split_view| / \verb|views::lazy_split| 类似于 split，不同之处在于它以懒模式工作，所以不会提前查找下一个分隔符，直到迭代到结果的下一个元素。其适用于常量范围，而 \verb|split_view| 不支持这些范围：
+
+\begin{cpp}
+std::string text{ "Hello, world!" };
+auto words = text | rv::lazy_split(' ');
+for (auto const word : words)
+{
+    std::cout <<
+        std::quoted(std::ranges::to<std::string>(word)) << ' ';
+}
+\end{cpp}
+
+\begin{shell}
+"Hello," "world!"
+\end{shell}
+
+\item
+\verb|ranges::reverse_view| / \verb|views::reverse| 表示底层序列中元素按相反顺序呈现的视图：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto reversed_numbers = numbers | rv::reverse;
+rg::copy(reversed_numbers,
+         std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+13 8 5 3 2 1 1
+\end{shell}
+
+\item
+\verb|ranges::elements_view| / \verb|views::elements| 表示底层序列中类似元组值的第 N 个元素的视图：
+
+\begin{cpp}
+std::vector<std::tuple<int, std::string_view>> numbers{
+    {1, "one"},
+    {1, "one"},
+    {2, "two"},
+    {3, "three"},
+    {5, "five"},
+    {8, "eight"},
+    {13, "thirteen"} };
+auto some_numbers = numbers | rv::elements<0>;
+rg::copy(some_numbers, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+1 1 2 3 5 8 13
+\end{shell}
+
+\begin{cpp}
+auto some_names = numbers | rv::elements<1>;
+rg::copy(some_names,
+std::ostream_iterator<std::string_view>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+one one two three five eight thirteen
+\end{shell}
+
+\item
+\verb|ranges::keys_view| / \verb|views::keys| 是 \verb|ranges::elements_view<R, 0>| 的别名，分别是一个类型为 \verb|views::elements<0>| 的实例。
+
+\verb|ranges::values_view| / \verb|views::values| 是 \verb|ranges::elements_view<R, 1>| 的别名，分别是一个类型为 \verb|views::elements<1>| 的实例：
+
+\begin{cpp}
+std::vector<std::pair<int, std::string_view>> numbers{
+    {1, "one"},
+    {1, "one"},
+    {2, "two"},
+    {3, "three"},
+    {5, "five"},
+    {8, "eight"},
+    {13, "thirteen"} };
+auto some_numbers = numbers | rv::keys;
+rg::copy(some_numbers, std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+1 1 2 3 5 8 13
+\end{shell}
+
+\begin{cpp}
+auto some_names = numbers | rv::values;
+rg::copy(some_names,
+         std::ostream_iterator<std::string_view>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+one one two three five eight thirteen
+\end{shell}
+\end{itemize}
+
+C++23 标准库新增了以下适配器：
+
+\begin{itemize}
+\item
+\verb|ranges::enumerate_view| / \verb|views::enumerate| 表示一个由元组组成的视图，其中第一个元素是底层序列中元素的零基索引，第二个元素是对底层元素的引用：
+
+\begin{cpp}
+std::vector<std::string> words{ "one", "two", "three",
+                                "four", "five" };
+auto enumerated_words = words | rv::enumerate;
+for (auto const [index, word] : enumerated_words)
+{
+    std::println("{} : {}", index, word);
+}
+\end{cpp}
+
+\begin{shell}
+0 : one
+1 : two
+2 : three
+3 : four
+4 : five
+\end{shell}
+
+\item
+\verb|ranges::zip_view| / \verb|views::zip| 表示从两个或多个底层视图创建的元组视图，第 N 个元组是从每个底层视图的第 N 个元素创建：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+std::vector<std::string> words{ "one", "two", "three",
+                                "four", "five" };
+auto zipped = rv::zip(numbers, words);
+for (auto const [number, word] : zipped)
+{
+    std::println("{} : {}", number, word);
+}
+\end{cpp}
+
+\begin{shell}
+1 : one
+1 : two
+2 : three
+3 : four
+5 : five
+\end{shell}
+
+\item
+\verb|ranges::zip_transform_view| / \verb|views::zip_transform| 表示通过对两个或多个视图应用给定函数生成的元素视图。结果视图的第 N 个元素是从所有指定底层视图的第 N 个元素生成：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+std::vector<std::string> words{ "one", "two", "three",
+                                "four", "five" };
+auto zipped = rv::zip_transform(
+    [](int number, std::string word) {
+        return std::to_string(number) + " : " + word;
+    },
+    numbers,
+    words);
+std::ranges::for_each(zipped,
+                      [](auto e) {std::println("{}", e); });
+\end{cpp}
+
+\begin{shell}
+1 : one
+1 : two
+2 : three
+3 : four
+5 : five
+\end{shell}
+
+\item
+\verb|ranges::adjacent_view| / \verb|views::adjacent| 表示来自底层视图的 N 元素元组视图；每个元组都是底层视图中的一个窗口，第 i 个元组包含索引范围 \verb|[i, i + N - 1]| 内的元素：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto adjacent_numbers = numbers | rv::adjacent<3>;
+    std::ranges::for_each(
+    adjacent_numbers,
+    [](auto t) {
+        auto [a, b, c] = t;
+        std::println("{},{},{}", a, b, c);
+    });
+\end{cpp}
+
+\begin{shell}
+1,1,2
+1,2,3
+2,3,5
+3,5,8
+5,8,13
+\end{shell}
+
+\item
+\verb|ranges::adjacent_transform_view| / \verb|views::adjacent_transform| 表示通过对底层视图中的 N 相邻元素应用指定函数生成的元素视图；结果视图的第 i 个元素是由应用于底层范围中索引范围 \verb|[i, i + N - 1]| 内的元素生成：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto adjacent_numbers =
+    numbers |
+    rv::adjacent_transform<3>(
+        [](int a, int b, int c) {return a * b * c; });
+std::ranges::for_each(adjacent_numbers,
+                      [](auto e) {std::print("{} ", e); });
+\end{cpp}
+
+\begin{shell}
+2 6 30 120 520
+\end{shell}
+
+\item
+\verb|ranges::join_with_view| / \verb|views::join_with| 类似于 \verb|join_view|，其将范围的视图展平为单个视图；但可以使用一个分隔符，并将其插入底层范围的元素之间：
+
+\begin{cpp}
+std::vector<std::vector<int>> numbers{ {1, 1, 2}, {3, 5, 8},
+                                       {13} };
+auto joined_numbers = numbers | rv::join_with(0);
+rg::copy(joined_numbers,
+         std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+1 1 2 0 3 5 8 0 13
+\end{shell}
+
+\item
+\verb|ranges::slide_view| / \verb|views::slide| 是一个类似于 \verb|ranges::adjacent_view| / \verb|views::adjacent| 的范围适配器，不同之处在于底层序列中的窗口大小是在运行时指定：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto slide_numbers = numbers | rv::slide(3);
+std::ranges::for_each(
+    slide_numbers,
+    [](auto r) {
+        rg::copy(r, std::ostream_iterator<int>{ std::cout, " " });
+        std::println("");
+    });
+\end{cpp}
+
+\begin{shell}
+1 1 2
+1 2 3
+2 3 5
+3 5 8
+5 8 13
+\end{shell}
+
+\item
+\verb|ranges::slide_view| / \verb|views::slide| 是一个类似于 \verb|ranges::adjacent_view| / \verb|views::adjacent| 的范围适配器，不同之处在于底层序列中的窗口大小是在运行时指定：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto chunk_numbers = numbers | rv::chunk(3);
+std::ranges::for_each(
+    chunk_numbers,
+    [](auto r) {
+        rg::copy(r, std::ostream_iterator<int>{ std::cout, " " });
+        std::println("");
+    });
+\end{cpp}
+
+\begin{shell}
+1 1 2
+3 5 8
+13
+\end{shell}
+
+\item
+\verb|ranges::chunk_by_view| / \verb|views::chunk_by| 表示底层视图的子视图视图，这些子视图是通过每次对两个相邻元素应用提供的二元谓词返回 false 时拆分底层视图生成：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto chunk_numbers =
+    numbers |
+    rv::chunk_by([](int a, int b) {return a * b % 2 == 1; });
+std::ranges::for_each(
+    chunk_numbers,
+    [](auto r) {
+        rg::copy(r, std::ostream_iterator<int>{ std::cout, " " });
+        std::println("");
+    });
+\end{cpp}
+
+\begin{shell}
+1 1
+2
+3 5
+8
+13
+\end{shell}
+
+\item
+\verb|ranges::stride_view| / \verb|views::stride| 是底层视图中一些元素的视图，从第一个元素开始，每次前进 N 个元素：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+auto stride_numbers = numbers | rv::stride(3);
+rg::copy(stride_numbers,
+         std::ostream_iterator<int>{ std::cout, " " });
+\end{cpp}
+
+\begin{shell}
+1 3 13
+\end{shell}
+
+\item
+\verb|ranges::cartesian_product_view| / \verb|views::cartesian_product| 表示作为 1 个或多个底层视图的笛卡尔积计算出的元组视图：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 2 };
+std::vector<std::string> words{ "one", "two", "three" };
+auto product = rv::cartesian_product(numbers, words);
+rg::for_each(
+    product,
+    [](auto t) {
+        auto [number, word] = t;
+        std::println("{} : {}", number, word);
+    });
+\end{cpp}
+
+\begin{shell}
+1 : one
+1 : two
+1 : three
+2 : one
+2 : two
+2 : three
+\end{shell}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+在前一个示例中，介绍了范围适配器的工作原理。这一节中，将关注一些应该注意的适配器之间的细节和差异。
+
+首先，考虑 \verb|adjacent_view| 和 \verb|slide_view|，其相似之处在于都接收一个视图并生成该底层视图的另一个子视图视图。这些子视图称为窗口，具有指定的大小 N。
+
+第一个窗口从第一个元素开始，第二个窗口从第二个元素开始，依此类推。然而，它们在两个重要方面有所不同：
+
+\begin{itemize}
+\item
+对于 \verb|adjacent_view|，窗口的大小 N 在编译时指定，而对于 \verb|slide_view|，则在运行时指定。
+
+\item
+\verb|adjacent_view| 表示的视图的元素是元组，而 \verb|slide_view| 表示的视图的元素是其他视图。
+\end{itemize}
+
+下图展示了这两种适配器的比较：
+
+\myGraphic{0.8}{content/chapter12/images/2.png}{图 12.2: adjacent\_view<3>(R) 和 slide\_view(R, 3)的比较}
+
+当窗口大小为 2 时，可以使用 \verb|views::pairwise| 和 \verb|views::pairwise_transform|，其分别是类型为 \verb|adjacent<2>| 和 \verb|adjacent_transform<2>| 的实例。
+
+接下来要考察的一对适配器是 \verb|split_view| 和 \verb|lazy_split_view|。其作用相同：根据给定的分隔符（可以是单个元素或元素的视图）将视图拆分为子范围，这两个适配器都不会在结果子范围中包含分隔符。不过，在一个关键方面有所不同：如名称所示，\verb|lazy_split_view| 适配器是惰性的，所以不会提前查找下一个分隔符，直到迭代到结果的下一个元素为止，而 \verb|split_view| 则会这样做。此外，\verb|split_view| 支持 \verb|forward_range| 类型或更高级别的范围，但不能拆分常量范围，而 \verb|lazy_split_view| 支持 \verb|input_range| 类型或更高级别的范围，并且可以拆分常量范围。
+
+随之而来的问题是何时使用哪一个？通常应该优先选择 \verb|split_view|，因为其效率高于 \verb|lazy_split_view|（后者有较不高效的迭代器递增和比较）。然而，如果需要拆分常量范围，就应使用 \verb|lazy_split_view|。
+
+有两个适配器，\verb|join_view|（C++20）和 \verb|join_with_view|（C++23），执行连接操作，将范围的范围转换为单一（展平的）范围。区别在于后者 \verb|join_with_view| 接受一个分隔符，该分隔符会插入到结果中两个连续底层范围的元素之间。
+
+关于标准范围适配器的更多详细信息，可以在在线文档中查阅，网址为 \url{https://en.cppreference.com/w/cpp/ranges}。
+

@@ -1,0 +1,234 @@
+标准容器提供了 begin() 和 end() 成员函数，来获取容器第一个和最后一个元素之后的迭代器。实际上，这些函数共有四组。除了 begin() 和 end() 之外，容器还提供了 cbegin() 和 cend() 返回常量迭代器，rbegin() 和 rend() 返回可变反向迭代器，以及 crbegin() 和 crend() 返回常量反向迭代器。C++11/C++14 中，所有这些都有非成员等价函数，可以与标准容器、数组以及对其进行特化的自定义类型一起使用。C++17 中，甚至增加了更多的非成员函数：std::data()，返回包含容器元素的内存块的指针；std::size()，返回容器或数组的大小；以及 std::empty()，返回给定容器是否为空。这些非成员函数旨在用于泛型代码，可以在代码中的任何地方使用。C++20 中，引入了 std::ssize() 非成员函数，用于返回容器或数组的大小作为带符号整数。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将使用在上一个示例中实现的 dummy\_array 类及其迭代器作为例子。
+
+非成员 begin() 和 end() 函数以及其他变体，以及非成员 data()、size() 和 empty() 函数都在 <iterator> 头文件的 std 命名空间中可用，该头文件会隐式地随着以下任何一个头文件的包含而包含：<array>、<deque>、<forward\_list>、<list>、<map>、<regex>、<set>、<string>、<unordered\_map>、<unordered\_set> 和 <vector>。
+
+本示例中，将提到 std::begin() 和 std::end() 函数，但讨论的内容同样适用于其他函数：std::cbegin() 和 std::cend()、std::rbegin() 和 std::rend()、std::crbegin() 和 std::crend()。
+
+\mySubsubsection{}{How to do it...}
+
+使用非成员 std::begin() 和 std::end() 函数及其他变体版本，以及 std::data()、std::size() 和 std::empty() 函数：
+
+\begin{itemize}
+\item
+标准容器：
+
+\begin{cpp}
+std::vector<int> v1{ 1, 2, 3, 4, 5 };
+auto sv1 = std::size(v1);  // sv1 = 5
+auto ev1 = std::empty(v1); // ev1 = false
+auto dv1 = std::data(v1);  // dv1 = v1.data()
+for (auto i = std::begin(v1); i != std::end(v1); ++i)
+    std::cout << *i << '\n';
+std::vector<int> v2;
+std::copy(std::cbegin(v1), std::cend(v1),
+          std::back_inserter(v2));
+\end{cpp}
+
+\item
+数组：
+
+\begin{cpp}
+int a[5] = { 1, 2, 3, 4, 5 };
+auto pos = std::find_if(std::crbegin(a), std::crend(a),
+                        [](int const n) {return n % 2 == 0; });
+auto sa = std::size(a);  // sa = 5
+auto ea = std::empty(a); // ea = false
+auto da = std::data(a);  // da = a
+\end{cpp}
+
+\item
+提供相应成员函数的自定义类型，即 begin() 和 end()、data()、empty() 或 size()：
+
+\begin{cpp}
+dummy_array<std::string, 5> sa;
+dummy_array<int, 5> sb;
+sa[0] = "1"s;
+sa[1] = "2"s;
+sa[2] = "3"s;
+sa[3] = "4"s;
+sa[4] = "5"s;
+std::transform(
+    std::begin(sa), std::end(sa),
+    std::begin(sb),
+    [](std::string const & s) {return std::stoi(s); });
+// sb = [1, 2, 3, 4, 5]
+auto sa_size = std::size(sa); // sa_size = 5
+\end{cpp}
+
+\item
+泛型代码，其中容器的类型未知：
+
+\begin{cpp}
+template <typename F, typename C>
+void process(F&& f, C const & c)
+{
+    std::for_each(std::begin(c), std::end(c),
+    std::forward<F>(f));
+}
+auto l = [](auto const e) {std::cout << e << '\n'; };
+process(l, v1); // std::vector<int>
+process(l, a);  // int[5]
+process(l, sa); // dummy_array<std::string, 5>
+\end{cpp}
+
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+这些非成员函数是在不同版本的标准中引入的，但在 C++17 中都修改为返回 \verb|constexpr auto|：
+
+\begin{itemize}
+\item
+C++11 引入了 std::begin() 和 std::end()
+
+\item
+C++14 引入了 std::cbegin()、std::cend()、std::rbegin()、std::rend()、std::crbegin() 和 std::crend()
+
+\item
+C++17 引入了 std::data()、std::size() 和 std::empty()
+
+\item
+C++20 引入了 std::ssize()
+\end{itemize}
+
+begin() 和 end() 函数族有针对容器类和数组的重载：
+
+\begin{itemize}
+\item
+对于容器，调用相应的成员函数并返回结果
+
+\item
+对于数组，返回指向数组第一个或最后一个元素之后位置的指针
+\end{itemize}
+
+std::begin() 和 std::end() 的实现如下：
+
+\begin{cpp}
+template<class C>
+constexpr auto inline begin(C& c) -> decltype(c.begin())
+{
+    return c.begin();
+}
+template<class C>
+constexpr auto inline end(C& c) -> decltype(c.end())
+{
+    return c.end();
+}
+template<class T, std::size_t N>
+constexpr T* inline begin(T (&array)[N])
+{
+    return array;
+}
+template<class T, std::size_t N>
+constexpr T* inline begin(T (&array)[N])
+{
+    return array+N;
+}
+\end{cpp}
+
+对于那些没有对应的 begin() 和 end() 成员但仍然可以迭代的容器，可以提供自定义特化。实际上，标准库为 std::initializer\_list 和 std::valarray 提供了这样的特化。
+
+\begin{myTip}
+特化必须定义在原始类或函数模板定义所在的同一命名空间内，如果想特化任何一组 std::begin() 和 std::end()，必须在 std 命名空间内进行。
+\end{myTip}
+
+C++17 引入的其他用于容器访问的非成员函数也有多个重载：
+
+\begin{itemize}
+\item
+std::data() 有几个重载；对于C类型，返回 c.data()；对于数组，返回数组本身；对于 std::initializer\_list<T>，返回 il.begin()：
+
+\begin{cpp}
+template <class C>
+constexpr auto data(C& c) -> decltype(c.data())
+{
+    return c.data();
+}
+template <class C>
+constexpr auto data(const C& c) -> decltype(c.data())
+{
+    return c.data();
+}
+template <class T, std::size_t N>
+constexpr T* data(T (&array)[N]) noexcept
+{
+    return array;
+}
+template <class E>
+constexpr const E* data(std::initializer_list<E> il) noexcept
+{
+    return il.begin();
+}
+\end{cpp}
+
+\item
+std::size() 有两个重载；对于C类型，返回 c.size()；对于数组，返回大小 N：
+
+\begin{cpp}
+template <class C>
+constexpr auto size(const C& c) -> decltype(c.size())
+{
+    return c.size();
+}
+template <class T, std::size_t N>
+constexpr std::size_t size(const T (&array)[N]) noexcept
+{
+    return N;
+}
+\end{cpp}
+
+\item
+std::empty() 有几个重载；对于C类型，返回 c.empty()；对于数组，返回 false；对于 std::initializer\_list<T>，返回 il.size() == 0：
+
+\begin{cpp}
+template <class C>
+constexpr auto empty(const C& c) -> decltype(c.empty())
+{
+    return c.empty();
+}
+template <class T, std::size_t N>
+constexpr bool empty(const T (&array)[N]) noexcept
+{
+    return false;
+}
+template <class E>
+constexpr bool empty(std::initializer_list<E> il) noexcept
+{
+    return il.size() == 0;
+}
+\end{cpp}
+\end{itemize}
+
+C++20 中，作为对 std::size() 的补充，引入了 std::ssize() 非成员函数，用于返回给定容器或数组中的元素数量作为带符号整数。std::size() 返回无符号整数，但在某些情况下需要带符号值。例如，C++20 类 std::span 表示对连续对象序列的视图，其 size() 成员函数返回带符号整数，而标准库容器的 size() 成员函数返回无符号整数。
+
+std::span 的 size() 成员函数返回带符号整数的原因是，值 -1 应该表示编译时未知大小的类型的哨兵。混合使用带符号和无符号算术可能导致难以发现的代码错误。std::ssize() 有两个重载：对于C类型，返回静态转换为带符号整数（通常是 std::ptrdiff\_t）的 c.size()；对于数组，返回元素的数量 N：
+
+\begin{cpp}
+template <class C>
+constexpr auto ssize(const C& c)
+    -> std::common_type_t<std::ptrdiff_t,
+                          std::make_signed_t<decltype(c.size())>>
+{
+    using R = std::common_type_t<std::ptrdiff_t,
+                        std::make_signed_t<decltype(c.size())>>;
+    return static_cast<R>(c.size());
+}
+template <class T, std::ptrdiff_t N>
+constexpr std::ptrdiff_t ssize(const T (&array)[N]) noexcept
+{
+    return N;
+}
+\end{cpp}
+
+上述片段展示了 std::ssize() 函数针对容器和数组的可能实现。
+
+\mySubsubsection{}{There's more...}
+
+这些非成员函数主要旨在用于模板代码中，当容器类型未知且可能是标准容器、数组或自定义类型时。使用这些函数的非成员版本能够编写更简单且更少的代码，这些代码可以适用于所有这些类型的容器。
+
+然而，这些函数的使用不应该仅限于泛型代码。虽然这更多是一个偏好的问题，但养成一致性的好习惯，在代码的所有地方都使用也不错。所有这些方法都有轻量级的实现，编译器很可能会进行内联，所以使用相应的成员函数将不会产生任何开销。
+

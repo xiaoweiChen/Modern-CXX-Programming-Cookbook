@@ -1,0 +1,131 @@
+
+另一种调试机制是断言（asserts），因为经常需要知道导致某个执行点的调用序列，这称为堆栈跟踪（stack trace）。C++23 标准包含了一个新的诊断工具库，可以打印堆栈跟踪。本示例中，将介绍如何使用这些诊断工具。
+
+\mySubsubsection{}{How to do it...}
+
+可以使用 C++23 的堆栈跟踪库来执行以下操作：
+
+\begin{itemize}
+\item
+打印整个堆栈跟踪的内容：
+
+\begin{cpp}
+std::cout << std::stacktrace::current() << '\n';
+\end{cpp}
+
+\item
+遍历堆栈跟踪中的每个帧并打印：
+
+\begin{cpp}
+for (auto const & frame : std::stacktrace::current())
+{
+    std::cout << frame << '\n';
+}
+\end{cpp}
+
+\item
+遍历堆栈跟踪中的每个帧并检索有关信息：
+
+\begin{cpp}
+for (auto const& frame : std::stacktrace::current())
+{
+    std::cout << frame.source_file()
+              << "("<< frame.source_line() << ")"
+              << ": " << frame.description()
+              << '\n';
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+诊断工具位于一个单独的头文件 <stacktrace> 中。该头文件包含以下两个类：
+
+\begin{itemize}
+\item
+\verb|std::basic_stacktrace|，这是一个表示堆栈跟踪条目序列容器的类模板。定义了一个类型别名 \verb|std::stacktrace|，即 \verb|std::basic_stacktrace<std::allocatorstd::stacktrace_entry>|。
+
+\item
+\verb|std::stacktrace_entry|，表示堆栈跟踪中的一个条目。
+\end{itemize}
+
+\begin{myTip}
+讨论调用序列时，有两个术语需要正确理解：调用栈（call stack）和堆栈跟踪（stack trace）。调用栈是用于存储运行程序中活动帧（调用）信息的数据结构。堆栈跟踪是在某个时刻对调用栈的快照。
+\end{myTip}
+
+尽管 \verb|std::basic_stacktrace| 是一个容器，但并不是设计让用户实例化并填充堆栈条目的。没有用于添加或删除堆栈跟踪序列元素的成员函数；但有一些用于元素访问（如 at() 和 operator[]）和检查大小（如 capacity()、size() 和 \verb|max_size()|）的成员函数。为了获取调用栈的快照，必须调用静态成员函数 current()：
+
+\begin{cpp}
+std::stacktrace trace = std::stacktrace::current();
+\end{cpp}
+
+当前的堆栈跟踪可以通过多种方式打印：
+
+\begin{itemize}
+\item
+使用重载的 \verb|operator<<| 输出到流：
+
+\begin{cpp}
+std::cout << std::stacktrace::current() << '\n';
+\end{cpp}
+
+\item
+使用\verb|to_string()|成员函数转换为std::string：
+
+\begin{cpp}
+std::cout << std::to_string(std::stacktrace::current())
+          << '\n';
+\end{cpp}
+
+\item
+使用 \verb|to_string()| 成员函数输出到 \verb|std::string|：
+
+\begin{cpp}
+auto str = std::format("{}\n", std::stacktrace::current());
+std::cout << str;
+\end{cpp}
+\end{itemize}
+
+使用格式化函数如 \verb|std::format()|(不允许使用任何格式说明符)：
+
+\begin{cpp}
+int plus_one(int n)
+{
+    std::cout << std::stacktrace::current() << '\n';
+    return n + 1;
+}
+int double_n_plus_one(int n)
+{
+    return plus_one(2 * n);
+}
+int main()
+{
+    std::cout << double_n_plus_one(42) << '\n';
+}
+\end{cpp}
+
+以下代码片段展示了如何将堆栈跟踪输出到标准输出：
+
+\begin{shell}
+0> [...]\main.cpp(24): chapter06!plus_one+0x4F
+1> [...]\main.cpp(37): chapter06!double_n_plus_one+0xE
+2> [...]\main.cpp(61): chapter06!main+0x5F
+3> D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl(78): chapter06!invoke_main+0x33
+4> D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl(288): chapter06!__scrt_common_main_seh+0x157
+5> D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_common.inl(331): chapter06!__scrt_common_main+0xD
+6> D:\a\_work\1\s\src\vctools\crt\vcstartup\src\startup\exe_main.cpp(17): chapter06!mainCRTStartup+0x8
+7> KERNEL32+0x17D59
+8> ntdll!RtlInitializeExceptionChain+0x6B
+9> ntdll!RtlClearBits+0xBF
+\end{shell}
+
+运行此程序的结果会因编译器和目标系统不同而异，以下是一个输出示例：
+
+\begin{shell}
+[...]\main.cpp(24): chapter06!main+0x5F
+-------------- --   -------------------
+source         line description
+\end{shell}
+
+这些部分可以独立获取，使用 \verb|std::stacktrace_entry| 的成员函数 \verb|source_file()|、\verb|source_line()| 和 \verb|description()|。可以从堆栈跟踪容器中使用迭代器遍历堆栈跟踪条目序列，或者使用成员函数 at() 和 operator[] 访问。
+

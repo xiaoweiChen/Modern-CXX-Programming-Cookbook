@@ -1,0 +1,347 @@
+
+C++ 语言提供了两种格式化文本的方式：\verb|printf| 函数族和 I/O 流库，\verb|printf| 函数从 C 继承而来，提供了将格式文本与参数分离的方式。流库则提供了安全性和可扩展性，通常推荐使用流库，而非 \verb|printf| 函数。一般来说，流的速度较慢。C++20 标准提出了一种新的输出格式化库，其形式类似于 \verb|printf|，但更安全且具有可扩展性，旨在补充现有的流。本示例中，将介绍如何使用新功能来代替 \verb|printf| 函数或流库。
+
+\mySubsubsection{}{Getting ready}
+
+新格式化库可以在 <format> 头文件中找到，需要包含此头文件以便以下示例能够正常工作。
+
+\mySubsubsection{}{How to do it...}
+
+\verb|std::format()| 函数根据提供的格式字符串格式化其参数，可以按照以下方式使用：
+
+\begin{itemize}
+\item
+每个参数对应的格式字符串中提供空的替换字段，用 \verb|{}| 表示：
+
+\begin{cpp}
+auto text = std::format("{} is {}", "John", 42);
+\end{cpp}
+
+\item
+替换字段内指定参数列表中每个参数的基于零的索引，例如 \verb|{0}, {1}| 等。参数的顺序不重要，但索引必须有效：
+
+\begin{cpp}
+auto text = std::format("{0} is {1}", "John", 42);
+\end{cpp}
+
+\item
+使用替换字段中的冒号 (\verb|:|) 后跟的格式说明符来控制输出文本。对于基本类型和字符串类型，这是一个标准格式说明符；对于时间类型，这是一个时间格式说明符：
+
+\begin{cpp}
+auto text = std::format("{0} hex is {0:08X}", 42);
+auto now = std::chrono::system_clock::now();
+auto date = std::format("Today is {:%Y-%m-%d}", now);
+std::cout << date << '\n';
+\end{cpp}
+\end{itemize}
+
+也可以使用迭代器以输出格式写入参数，可以使用 \verb|std::format_to()| 或 \verb|std::format_to_n()|：
+
+\begin{itemize}
+\item
+使用 \verb|std::format_to()| 和辅助函数 \verb|std::back_inserter()| 将数据写入缓冲区，如 \verb|std::string| 或 \verb|std::vector<char>|：
+
+\begin{cpp}
+std::vector<char> buf;
+std::format_to(std::back_inserter(buf), "{} is {}", "John", 42);
+\end{cpp}
+
+\item
+使用 \verb|std::formatted_size()| 获取存储参数的格式化表示所需的字符数：
+
+\begin{cpp}
+auto size = std::formatted_size("{} is {}", "John", 42);
+std::vector<char> buf(size);
+std::format_to(buf.data(), "{} is {}", "John", 42);
+\end{cpp}
+
+\item
+若要限制写入输出缓冲区的字符数，可以使用 \verb|std::format_to_n()|，其功能与 \verb|std::format_to()| 类似，但最多写入 n 个字符：
+
+\begin{cpp}
+char buf[100];
+auto result = std::format_to_n(buf, sizeof(buf), "{} is {}", "John", 42);
+\end{cpp}
+\end{itemize}
+
+从 C++23 开始，可以直接将格式化的文本写入文件流，比如标准输出控制台，使用新 <print> 头文件的函数：
+
+\begin{itemize}
+\item
+\verb|std::print| 按照格式字符串写入参数：
+
+\begin{cpp}
+std::print("The answer is {}", 42);
+\end{cpp}
+
+\item
+使用 \verb|std::println| 按照格式字符串写入参数，后面跟随一个换行符 (\verb|'\n'|)：
+
+\begin{cpp}
+std::println("The answer is {}", 42);
+std::FILE* stream = std::fopen("demo.txt", "w");
+if (stream)
+{
+    std::println(stream, "The answer is {}", 42);
+    std::fclose(stream);
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+\verb|std::format()| 函数有多个重载版本，可以指定格式字符串为字符串视图或宽字符串视图，函数返回相应的 \verb|std::string| 或 \verb|std::wstring|。此外，还可以指定第一个参数为 \verb|std::locale|，用于本地格式化。所有函数重载都是变长函数模板，可以在格式后指定任意数量的参数。
+
+格式字符串由普通字符、替换字段和转义序列组成。转义序列是 \verb|{{| 和 \verb|}}|，输出中会替换成 \verb|{| 和 \verb|}|，替换字段位于花括号 \verb|{}| 内部。可以选择包含一个非负整数，表示要格式化的参数的基于零的索引，以及一个冒号 (\verb|:|)，后跟格式说明符。如果格式说明符无效，则抛出类型为 \verb|std::format_error| 的异常。
+
+同样，\verb|std::format_to()| 也有多个重载版本，像 \verb|std::format()| 一样。两者的区别在于 \verb|std::format_to()| 总是以输出缓冲区的迭代器作为第一个参数，并返回一个指向输出范围末尾的迭代器（而不是像 \verb|std::format()| 返回字符串）。而 \verb|std::format_to_n()| 比 \verb|std::format_to()| 多一个参数，即第二个参数表示要写入缓冲区的最大字符数。
+
+下面列出了这三个函数模板最简单的重载：
+
+\begin{cpp}
+template<class... Args>
+std::string format(std::string_view fmt, const Args&... args);
+template<class OutputIt, class... Args>
+OutputIt format_to(OutputIt out,
+                   std::string_view fmt, const Args&... args);
+template<class OutputIt, class... Args>
+std::format_to_n_result<OutputIt>
+format_to_n(OutputIt out, std::iter_difference_t<OutputIt> n,
+            std::string_view fmt, const Args&... args);
+\end{cpp}
+
+当提供格式字符串时，可以提供参数标识符（基于零的索引）或省略，但同时使用两者是非法的。如果省略了索引，参数将按提供的顺序处理，替换字段的数量不得大于提供的参数数量。如果提供了索引，必须有效，才能使格式字符串有效。
+
+当使用格式说明符时：
+
+\begin{itemize}
+\item
+对于基本类型和字符串类型，可视为标准格式说明符。
+
+\item
+对于时间类型，可视为时间格式说明符。
+
+\item
+对于用户定义的类型，由用户定义的 \verb|std::formatter| 类型的特化定义。
+\end{itemize}
+
+标准格式说明符基于 Python 的格式说明符，语法如下：
+
+\begin{shell}
+fill-and-align(optional) sign(optional) #(optional) 0(optional) width(optional) precision(optional) L(optional) type(optional)
+\end{shell}
+
+这些语法部分简要描述如下：
+
+\verb|fill-and-align| 是一个可选的填充字符，后跟着一个对齐选项：
+
+\begin{itemize}
+\item
+\verb|<|: 强制字段左对齐可用空间。
+
+\item
+\verb|>|: 强制字段右对齐可用空间。
+
+\item
+\verb|^|: 强制字段居中对齐可用空间。将在左边插入 n/2 个字符，在右边也插入 n/2 个字符：
+
+\begin{cpp}
+auto t1 = std::format("{:5}", 42);    // "   42"
+auto t2 = std::format("{:5}", 'x');   // "x    "
+auto t3 = std::format("{:*<5}", 'x'); // "x****"
+auto t4 = std::format("{:*>5}", 'x'); // "****x"
+auto t5 = std::format("{:*^5}", 'x'); // "**x**"
+auto t6 = std::format("{:5}", true);  // "true "
+\end{cpp}
+
+\end{itemize}
+
+\verb|sign|, \verb|#| 和 0 只有在使用数字（无论是整数还是浮点数）时才有效。符号可以是：
+
+\begin{itemize}
+\item
++: 指定正数和负数都要显示符号。
+
+\item
+-: 指定只有负数显示符号（这是默认行为）。
+
+\item
+空格: 指定负数显示符号，非负数前显示空格：
+\end{itemize}
+
+\verb|#| 符号导致使用替代形式，可以是以下之一：
+
+\begin{itemize}
+\item
+对于整数类型，当指定二进制、八进制或十六进制表示时，替代形式会在输出中添加前缀 0b、0 或 0x。
+
+\item
+对于浮点数类型，替代形式会导致格式化值中始终存在小数点，即使后面没有数字也是如此。此外，当使用 \verb|g| 或 \verb|G| 时，不会从输出中删除尾随的零。
+\end{itemize}
+
+数字 0 指定应在字段宽度内输出前导零，但当浮点数类型的值为无穷大或 \verb|NaN| 时不适用。当与对齐选项一起出现时，将忽略0说明符：
+
+\begin{cpp}
+auto t9  = std::format("{:+05d}", 42); // "+0042"
+auto t10 = std::format("{:#05x}", 42); // "0x02a"
+auto t11 = std::format("{:<05}", -42); // "-42  "
+\end{cpp}
+
+\verb|width| 指定最小字段宽度，可以是一个正十进制数或嵌套的替换字段。\verb|precision| 字段指示浮点数类型的精度，或对于字符串类型，从字符串中使用的字符数。由点 (\verb|.|) 后跟一个非负十进制数或嵌套的替换字段指定。
+
+特定于本地化的格式化用大写的 L 指定，导致使用特定于本地化的形式。此选项仅适用于算术类型。
+
+可选的 \verb|type| 确定了数据如何在输出中呈现。可用的字符串呈现类型如下表所示：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{multirow}
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{类型} &
+\textbf{呈现类型} &
+\textbf{描述} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+字符串 &
+无, s &
+将字符串复制到输出。 \\ \hline
+\multirow{7}{*}{整数类型} &
+b &
+二进制格式，前缀为 0b \\ \cline{2-3}
+&
+B &
+二进制格式，前缀为 0B \\ \cline{2-3}
+&
+C &
+字符格式。将值作为字符类型复制到输出。 \\ \cline{2-3}
+&
+无 或 d &
+十进制格式。 \\ \cline{2-3}
+&
+O &
+八进制格式，前缀为 0（除非值为 0）。 \\ \cline{2-3}
+&
+x &
+十六进制格式，前缀为 0x。 \\ \cline{2-3}
+&
+X &
+十六进制格式，前缀为 0X。 \\ \hline
+\multirow{2}{*}{char 和 wchar\_t} &
+无 或 c &
+将字符复制到输出。\\ \cline{2-3}
+&
+b, B, c, d, o, x, X &
+整数呈现类型。 \\ \hline
+\multirow{2}{*}{bool} &
+无 或 s  &
+\begin{tabular}[c]{@{}l@{}}将 true 或 false 作为文本表示形式\\复制到输出（或其本地化形式）。\end{tabular} \\ \cline{2-3}
+&
+b, B, c, d, o, x, X &
+整数呈现类型。 \\ \hline
+\multirow{7}{*}{浮点数} &
+a &
+\begin{tabular}[c]{@{}l@{}}十六进制表示。如同调用了\\std::to\_chars(\\first, \\last, \\value, \\std::chars\_format::hex, \\precision) \\或 \\std::to\_chars(\\first, \\last, \\value, \\std::chars\_format::hex)，\\具体取决于是否指定了精度。\end{tabular} \\ \cline{2-3}
+&
+A &
+\begin{tabular}[c]{@{}l@{}}与 a 相同，只是对于大于 9 的\\数字使用大写字母，并使用 P 表示指数。 \end{tabular} \\ \cline{2-3}
+&
+e &
+\begin{tabular}[c]{@{}l@{}}科学记数法表示。如同调用了 \\std::to\_chars(\\first, \\last, \\value, \\std::chars\_format::scientific, \\precision)。\end{tabular} \\ \cline{2-3}
+&
+E &
+与 e 类似，只是使用 E 表示指数。 \\ \cline{2-3}
+&
+f, F &
+\begin{tabular}[c]{@{}l@{}}定点表示。如同调用了 \\std::to\_chars(\\first, \\last, value, \\std::chars\_format::fixed, \\precision)。\\当未指定精度时，默认值为 6。\end{tabular} \\ \cline{2-3}
+&
+g &
+\begin{tabular}[c]{@{}l@{}}一般浮点表示。如同调用了 \\std::to\_chars(\\first, last, \\value, \\std::chars\_format::general, \\precision)。\\当未指定精度时，默认值为 6。\end{tabular}  \\ \cline{2-3}
+&
+G &
+与 g 相同，只是使用 E 表示指数。\\ \hline
+指针 &
+无 或 p &
+\begin{tabular}[c]{@{}l@{}}指针表示。如同调用了 \\std::to\_chars(\\first, \\last, \\reinterpret\_cast\\\textless{}std::uintptr\_t\textgreater{}(value), \\16)，\\并在输出前加上前缀 0x。仅当定义了 \\std::uintptr\_t 时可用；\\否则，输出是实现定义的。\end{tabular} \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.16: 可用的呈现类型列表
+\end{center}
+
+时间格式说明符的形式如下：
+
+\begin{shell}
+fill-and-align(optional) width(optional) precision(optional) chrono-spec(optional)
+\end{shell}
+
+\verb|fill-and-align|, \verb|width| 和 \verb|precision| 字段的含义与之前描述的标准格式说明符相同。精度仅对 \verb|std::chrono::duration| 类型有效，当表示类型为浮点数时，其他情况下使用会抛出 \verb|std::format_error| 异常。
+
+时间格式说明符可以为空，参数将如同通过流式传输到 \verb|std::stringstream| 并复制结果字符串一样进行格式化，也可以由一系列转换说明符和普通字符组成。以下是一些常用的格式说明符：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{转换说明符} & \textbf{描述}                                                                                         \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\%\%                          & 写入字面上的 \% 字符。                                                                                 \\ \hline
+\%n                           & 写入换行符。                                                                                          \\ \hline
+\%t                           & 写入水平制表符。                                                                                      \\ \hline
+\%Y & 写入十进制数形式的年份。如果结果少于四位数字，则用 0 左填充至四位数字。                             \\ \hline
+\%m & 写入十进制数形式的月份（一月为 01）。如果结果是一位数字，则前面加 0。                                  \\ \hline
+\%d & 写入十进制数形式的日。如果结果是一位数字，则前面加 0。                                              \\ \hline
+\%w                           & 写入十进制数形式的星期几（0-6），其中周日为 0。                                                        \\ \hline
+\%D                           & 等效于 \%m/\%d/\%y。                                                                                  \\ \hline
+\%F                           & 等效于 \%Y-\%m-\%d。                                                                                  \\ \hline
+\%H                           & 写入十进制数形式的小时（24 小时制）。如果结果是一位数字，则前面加 0。                                 \\ \hline
+\%I                           & 写入十进制数形式的小时（12 小时制）。如果结果是一位数字，则前面加 0。                                 \\ \hline
+\%M                           & 写入十进制数形式的分钟。如果结果是一位数字，则前面加 0。                                                \\ \hline
+\%S & 写入十进制数形式的秒。如果秒数小于 10，则结果前面加 0。                                         \\ \hline
+\%R                           & 等效于 \%H:\%M。                                                                                      \\ \hline
+\%T                           & 等效于 \%H:\%M:\%S。                                                                                  \\ \hline
+\%X                           & 写入本地化的时间表示形式。                                                                             \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.17: 常见的时间格式说明符列表
+\end{center}
+
+时间库的所有格式说明符的完整列表可以在 \url{https://en.cppreference.com/w/cpp/chrono/system_clock/formatter} 查看。
+
+向控制台或文件流写入格式化文本需要两个步骤（将文本格式化为字符串或字符数组，然后将该缓冲区写入输出流），C++23 标准引入了几种新函数来简化这个过程。
+
+新 \verb|std::print| 和 \verb|std::println| 函数非常相似，唯一的区别是 \verb|std::println| 在格式化文本后附加了一个 \verb|\n| 字符（换行符）。这两个函数各有两个重载版本：
+
+\begin{itemize}
+\item
+接受 \verb|std::FILE*| 作为第一个参数，代表输出文件流
+
+\item
+没有这样的参数，隐式使用 C 输出流 stdout
+\end{itemize}
+
+以下两种调用 \verb|std::println| 的方式等价：
+
+\begin{cpp}
+std::println("The answer is {}", 42);
+std::println(stdout, "The answer is {}", 42);
+\end{cpp}
+
+以下两个调用 \verb|std::print| 和 \verb|std::println| 对标准输出流产生的结果相同：
+
+\begin{cpp}
+std::println("The answer is {}", 42);
+std::print("The answer is {}\n", 42);
+\end{cpp}
+
+格式字符串的规格说明与 \verb|std::format| 相同，已在前面介绍过。
+
+

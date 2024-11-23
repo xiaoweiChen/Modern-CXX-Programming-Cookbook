@@ -1,0 +1,226 @@
+移动语义是推动现代 C++ 性能提升的关键特性，使得资源或通常昂贵复制的对象能够移动而不是复制。然而，这需要类实现移动构造函数和移动赋值操作符。某些情况下，编译器会提供这些函数。但实践中，往往需要显式地编写。本示例中，将介绍如何实现移动构造函数和移动赋值操作符。
+
+\mySubsubsection{}{Getting ready}
+
+应该具备关于右值引用和特殊类函数（构造函数、赋值操作符和析构函数）的基本知识。将通过以下 Buffer 类型来演示如何实现移动构造函数和赋值操作符：
+
+\begin{cpp}
+class Buffer
+{
+    unsigned char* ptr;
+    size_t length;
+public:
+    Buffer(): ptr(nullptr), length(0)
+    {}
+    explicit Buffer(size_t const size):
+        ptr(new unsigned char[size] {0}), length(size)
+    {}
+    ~Buffer()
+    {
+        delete[] ptr;
+    }
+    Buffer(Buffer const& other):
+        ptr(new unsigned char[other.length]),
+    length(other.length)
+    {
+        std::copy(other.ptr, other.ptr + other.length, ptr);
+    }
+    Buffer& operator=(Buffer const& other)
+    {
+        if (this != &other)
+        {
+            delete[] ptr;
+            ptr = new unsigned char[other.length];
+            length = other.length;
+            std::copy(other.ptr, other.ptr + other.length, ptr);
+        }
+        return *this;
+    }
+    size_t size() const { return length;}
+    unsigned char* data() const { return ptr; }
+};
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+要为一个类型实现移动构造函数，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+编写一个接受该类类型右值引用的构造函数：
+
+\begin{cpp}
+Buffer(Buffer&& other)
+{
+}
+\end{cpp}
+
+\item
+将来自右值引用的所有数据成员分配给当前实例。这可以在构造函数体内完成，或者在初始化列表中完成，后者是首选方式：
+
+\begin{cpp}
+ptr = other.ptr;
+length = other.length;
+\end{cpp}
+
+\item
+可选地，将右值引用的数据成员分配给默认值（确保移动的实例处于可销毁状态）：
+
+\begin{cpp}
+other.ptr = nullptr;
+other.length = 0;
+\end{cpp}
+\end{enumerate}
+
+综合以上，Buffer 类型的移动构造函数：
+
+\begin{cpp}
+Buffer(Buffer&& other)
+{
+    ptr = other.ptr;
+    length = other.length;
+    other.ptr = nullptr;
+    other.length = 0;
+}
+\end{cpp}
+
+要为一个类实现移动赋值操作符，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+编写一个接受该类类型右值引用，并返回其引用的赋值操作符：
+
+\begin{cpp}
+Buffer& operator=(Buffer&& other)
+{
+}
+\end{cpp}
+
+\item
+检查右值引用是否指向同一个对象，如果不是，则执行第 3 至第 5 步：
+
+\begin{cpp}
+if (this != &other)
+{
+}
+\end{cpp}
+
+\item
+释放当前对象的所有资源（如内存、句柄等）：
+
+\begin{cpp}
+delete[] ptr;
+\end{cpp}
+
+\item
+将来自右值引用的所有数据成员分配给当前实例：
+
+\begin{cpp}
+ptr = other.ptr;
+length = other.length;
+\end{cpp}
+
+\item
+将右值引用的数据成员分配给默认值：
+
+\begin{cpp}
+other.ptr = nullptr;
+other.length = 0;
+\end{cpp}
+
+\item
+不管第 3 至第 5 步是否执行，都返回当前实例的引用：
+
+\begin{cpp}
+return *this;
+\end{cpp}
+\end{enumerate}
+
+综合以上，Buffer 类型的移动赋值操作符：
+
+\begin{cpp}
+Buffer& operator=(Buffer&& other)
+{
+    if (this != &other)
+    {
+        delete[] ptr;
+        ptr = other.ptr;
+        length = other.length;
+        other.ptr = nullptr;
+        other.length = 0;
+    }
+    return *this;
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+除非已经存在用户定义的复制构造函数、移动构造函数、复制赋值操作符、移动赋值操作符或析构函数，否则编译器会默认提供移动构造函数和移动赋值操作符。当由编译器提供时，以成员的方式执行移动操作。移动构造函数递归地调用类数据成员的移动构造函数；同样，移动赋值操作符递归地调用类数据成员的移动赋值操作符。
+
+这种情况下，移动对于太大而无法复制的对象（如字符串或容器）或不应该复制的对象（如 \verb|unique_ptr| 智能指针）来说是一种性能上的优势。并不是所有的类型都需要同时实现复制和移动语义。一些类应该是只可移动的，而另一些类应该是既可复制又可移动的。另一方面，一个类可以是可复制但不可移动的，虽然技术上可以实现，但这并没有太大的意义。
+
+并不是所有的类型都能从移动语义中受益。对于内置类型（如 bool、int 或 double）、数组或 POD（Plain Old Data）类型，移动实际上就是复制操作。另一方面，在右值（即临时对象）的上下文中，移动语义提供了性能上的优势。右值是没有名字的对象；在表达式求值期间暂时存在，并在遇到下一个分号时销毁：
+
+\begin{cpp}
+T a;
+T b = a;
+T c = a + b;
+\end{cpp}
+
+上面的例子中，a、b 和 c 是左值；是有名字的实例，可以在其生命周期中的任何时候用来引用该实例。另一方面，当计算表达式 a+b 时，编译器会创建一个临时实例（这个例子中，赋给了 c），然后当遇到分号时，该临时实例就会销毁。这些临时实例称为右值，通常出现在赋值表达式的右侧。C++11可以通过右值引用来引用这些对象，用 \verb|&&| 表示。
+
+在右值的上下文中，移动语义很重要。可以从即将销毁的临时实例那里接管所有权，而且移动操作完成后无法再使用该实例。另一方面，左值不能移动，只能复制。这是因为在移动操作后仍然可以访问，用户期望对象保持原来的状态。例如，在上述例子中，表达式 b = a 将 a 赋值给 b。
+
+完成这个操作之后，作为左值的 a 实例仍然可以使用，并且应该保持与之前相同的状态。另一方面，a+b 的结果是临时的，其数据可以安全地移动到 c。
+
+移动构造函数与拷贝构造函数不同，接受的是该类类型的右值引用 \verb|T(T&&)|，而复制构造函数接受的是左值引用 \verb|T(T const&)|。同样，移动赋值接受的是右值引用 \verb|T& operator=(T&&)|，而复制赋值接受的是左值引用 \verb|T& operator=(T const &)|。即使两者都返回对 \verb|T&| 类的引用，编译器也会根据参数的类型（右值或左值）选择合适的构造函数或赋值操作符。
+
+当存在移动构造函数/赋值操作符时，右值会自动移动。左值也可以移动，但这需要显式地转换为右值引用。这可以通过 std::move() 函数来完成(执行的是 \verb|static_cast<T&&>|)：
+
+\begin{cpp}
+std::vector<Buffer> c;
+c.push_back(Buffer(100));  // move
+Buffer b(200);
+c.push_back(b);            // copy
+c.push_back(std::move(b)); // move
+\end{cpp}
+
+对象移动后，必须保持在一个有效的状态，对于这个状态的具体形式没有具体要求。为了保持一致性，应该将所有成员字段设置为其默认值（数值类型设为 0，指针设为 nullptr，布尔值设为 false 等）。
+
+下面的例子展示了 Buffer 实例可以构造和赋值的不同方式：
+
+\begin{cpp}
+Buffer b1;                // default constructor
+Buffer b2(100);           // explicit constructor
+Buffer b3(b2);            // copy constructor
+b1 = b3;                  // assignment operator
+Buffer b4(std::move(b1)); // move constructor
+b3 = std::move(b4);       // move assignment
+\end{cpp}
+
+每个实例的构造或赋值过程中，涉及的构造函数或赋值操作符已在注释中提到。
+
+\mySubsubsection{}{There's more...}
+
+正如 Buffer 示例中所见，实现移动构造函数和移动赋值操作符涉及到编写相似的代码（移动构造函数中的整个代码也在移动赋值操作符中出现）。实际上，这可以通过在移动构造函数中调用移动赋值操作符来避免（或者，另寻途径将赋值代码提炼到一个私有函数中，该函数由移动构造函数和移动赋值操作符调用）：
+
+\begin{cpp}
+Buffer(Buffer&& other) : ptr(nullptr), length(0)
+{
+    *this = std::move(other);
+}
+\end{cpp}
+
+例子中有两点需要注意：
+
+\begin{itemize}
+\item
+构造函数初始化列表中的成员初始化是必要的，这些成员可能会在稍后的移动赋值操作符中使用（例如，这里的 ptr 成员）。
+
+\item
+其他对象被静态转换为右值引用。如果没有这个显式的转换，将会调用复制赋值操作符。因为即使一个对象是右值，如果没有显式地转换为右值引用，编译器也会认为它是左值。
+\end{itemize}
+
+
+
+

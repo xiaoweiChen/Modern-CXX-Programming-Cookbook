@@ -1,0 +1,152 @@
+
+C++ 语言包含多种整数类型：short, int, long 和 long long，以及无符号对应类型 unsigned short, unsigned int, unsigned long, 和 unsigned long long。从 C++11 开始，引入了固定宽度的整数类型，如 int32\_t 和 uint32\_t，以及其他类似的类型。除此之外，还有用于存储字符而非数字的类型 char, signed char, unsigned char, wchar\_t, char8\_t, char16\_t 和 char32\_t。此外，用于存储 true 或 false 值的 bool 类型也是一种整数类型。这些类型的值比较是一种常见的操作，但比较有符号和无符号值时容易出错。如果没有一些特定于编译器的开关来标记这些错误或警告，可以执行这些操作并得到意外的结果。例如，比较 -1 < 42u（有符号 -1 与无符号 42 比较）会得出 false。C++20 标准提供了一组函数，用于安全地比较有符号和无符号值，本节将介绍这些函数。
+
+\mySubsubsection{}{How to do it...}
+
+要确保负的有符号整数总是小于无符号值，从而安全地比较有符号和无符号整数值，可以从 <utility> 头文件中使用以下任一比较函数：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{函数}        & \textbf{对应的比较操作符} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+std::cmp\_equal          & ==                                         \\ \hline
+std::cmp\_not\_equal     & !=                                         \\ \hline
+std::cmp\_less           & \textless{}                                \\ \hline
+std::cmp\_less\_equal    & \textless{}=                               \\ \hline
+std::cmp\_greater        & \textgreater{}                             \\ \hline
+std::cmp\_greater\_equal & \textgreater{}=                            \\ \hline
+\end{longtable}
+
+\begin{center}
+表 9.5: 新的 C++20 比较函数及其对应的比较操作符
+\end{center}
+
+以下是一个示例：
+
+\begin{cpp}
+int a = -1;
+unsigned int b = 42;
+if (std::cmp_less(a, b)) // a is less than b so this returns true
+{
+    std::cout << "-1 < 42\n";
+}
+else
+{
+    std::cout << "-1 >= 42\n";
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+直接比较两个有符号值或两个无符号值，但比较有符号和无符号整数则易出错。当这样的比较发生时，有符号值会转换成无符号值。例如，整数 -1 变成 4294967295。原因是，有符号数在内存中的存储方式如下：
+
+\begin{itemize}
+\item
+最高有效位表示符号：正数为 0，负数为 1。
+
+\item
+负数通过反转正数的位并加 1 来存储。
+\end{itemize}
+
+这种表示法被称为二进制补码。例如，假设一个 8 位有符号表示，值 1 存储为 0000001，而值 -1 存储为 11111111。这是因为正数的最低 7 位是 0000001，反转后是 1111110，加上 1 后变成 1111111。加上符号位后就构成了 11111111。对于 32 位有符号整数，值 -1 存储为 \verb|11111111'11111111'11111111'11111111|。
+
+另一方面，无符号值没有符号位。8 位二进制值 11111111 是十进制的 255，而 32 位二进制值 \verb|11111111'11111111'11111111'11111111| 是十进制的 4294967295。当我们把有符号值 -1 转换为无符号值时，它变成了 4294967295。以下比较有符号 -1 和无符号 42 的代码会输出 -1 >= 42，因为实际比较发生在无符号 4294967295 和无符号 42 之间。
+
+\begin{cpp}
+int a = -1;
+unsigned int b = 42;
+if(a < b)
+{
+    std::cout << "-1 < 42\n";
+}
+else
+{
+    std::cout << "-1 >= 42\n";
+}
+\end{cpp}
+
+这适用于所有的六个等值（==, !=）和不等值（<, <=, >, >=）操作符。为了得到正确的结果，需要检查有符号值是否为负数。上述 if 语句的正确条件如下：
+
+\begin{cpp}
+if(a < 0 || static_cast<unsigned int>(a) < b)
+\end{cpp}
+
+为了简化这类表达式的编写，C++20 标准引入了表 9.5 中列出的六个函数，这些函数应在比较有符号和无符号整数时用作相应操作符的替代。
+
+\begin{cpp}
+if(std::cmp_less(a, b))
+{
+    std::cout << "-1 < 42\n";
+}
+else
+{
+    std::cout << "-1 >= 42\n";
+}
+\end{cpp}
+
+下面的代码展示了一个可能的 \verb|std::cmp_less()| 函数实现：
+
+\begin{cpp}
+template<class T, class U>
+constexpr bool cmp_less(T t, U u) noexcept
+{
+    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
+        return t < u;
+    else if constexpr (std::is_signed_v<T>)
+        return t < 0 || std::make_unsigned_t<T>(t) < u;
+    else
+        return u >= 0 && t < std::make_unsigned_t<U>(u);
+}
+\end{cpp}
+
+这个函数的作用如下：
+
+\begin{itemize}
+\item
+如果两个参数都是有符号的，可使用内置的 < 比较操作符来比较。
+
+\item
+如果第一个参数是有符号的，第二个是无符号的，则会检查第一个参数是否为负（负值总是小于正值），或者将第一个参数转换为无符号后使用内置的 < 操作符与第二个参数进行比较。
+
+\item
+如果第一个参数是无符号的，第二个参数可以是有符号的也可以是无符号的。只有当第二个参数为正且第一个参数小于第二个参数转换为无符号后的值时，第一个参数才能小于第二个参数。
+\end{itemize}
+
+当使用这些函数时，请记住其仅适用于以下类型：
+
+\begin{itemize}
+\item
+short, int, long, long long 及其无符号对应类型
+
+\item
+固定宽度整数类型，如 \verb|int32_t|, \verb|int_least32_t|, \verb|int_fast32_t| 及其无符号对应类型
+
+\item
+扩展整数类型（这是特定于编译器的类型，如 \verb|__int64| 或 \verb|__int128| 及其无符号对应类型，大多数编译器都支持）
+\end{itemize}
+
+下一个代码分别提供了使用扩展类型（这种情况是微软特有的）和标准固定宽度整数类型的示例。
+
+\begin{cpp}
+__int64 a = -1;
+unsigned __int64 b = 42;
+if (std::cmp_less(a, b))  // OK
+{ }
+int32_t  a = -1;
+uint32_t b = 42;
+if (std::cmp_less(a, b))  // OK
+{ }
+\end{cpp}
+
+然而，不能用它们来比较枚举、std::byte、char、char8\_t、char16\_t、char32\_t、wchar\_t 和 bool。这种情况下，会得到一个编译器错误：
+
+\begin{cpp}
+if (std::cmp_equal(true, 1)) // error
+{ }
+\end{cpp}

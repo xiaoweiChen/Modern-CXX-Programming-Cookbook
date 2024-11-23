@@ -1,0 +1,276 @@
+
+模块是C++20标准中最重要的一项变化，代表了对C++语言及其编写和使用方式的根本性改变。模块在单独编译的源文件中提供，使用模块的翻译单元中编译。
+
+模块提供了多项优势，尤其是在与头文件的使用相比：
+
+\begin{itemize}
+\item
+只需导入一次，且导入顺序无关紧要。
+
+\item
+不需要将接口和实现分割到不同的源文件中(这仍然可能)。
+
+\item
+模块可减少编译时间，某些情况下减少显著。从模块导出的具体实现在一个二进制文件中，编译器可以比传统预编译头文件更快地处理这个文件。
+
+\item
+此外，该文件有可能用于构建与其他语言中的C++代码的集成和互操作性。
+\end{itemize}
+
+本示例中，将介绍如何使用模块。
+
+\mySubsubsection{}{Getting ready}
+
+撰写本文时，主要编译器（VC++、Clang和GCC）对模块的支持程度不同，构建系统（如CMake）在采用模块方面滞后（这种情况很可能在未来发生改变）。因为不同的编译器有不同的支持方式和不同的编译选项，本书不会提供如何构建这些示例的详细信息，建议查阅特定编译器的在线文档。
+
+\begin{myNotic}
+随书提供的源代码包含使用Visual Studio 2019 16.8和Visual Studio 2022 17.x中的MSVC编译器(cl.exe)构建此示例及下一个配方中源码的脚本。
+\end{myNotic}
+
+模块文件有几种类型：模块接口单元、模块接口分区和模块实现分区。本示例中，仅讨论第一种；其他两种将在下一个示例中介绍。
+
+\mySubsubsection{}{How to do it...}
+
+当模块化代码时，可以执行以下操作：
+
+\begin{itemize}
+\item
+使用import指令后跟模块名来导入模块。标准库可在std模块中找到，但这只有从C++23开始才可用。可以在C++23中编写如下代码：
+
+\begin{cpp}
+import std;
+int main()
+{
+    std::println("Hello, world!");
+}
+\end{cpp}
+
+C++23之前，标准库可能作为编译器特定的模块提供。下面的代码使用了Visual C++的std.core模块，包含了标准库的大部分功能，包括流库：
+
+\begin{cpp}
+import std.core;
+int main()
+{
+    std::cout << "Hello, World!\n";
+}
+\end{cpp}
+
+\item
+创建一个模块接口单元（MIU）以导出模块，可以包含函数、类型、常量甚至宏。声明必须以关键字export开头。对于VC++，模块接口单元文件必须具有.ixx扩展名。Clang接受不同的扩展名，包括.cpp、.cppm甚至是.ixx。以下示例导出了一个名为point的类模板、一个计算两点之间距离的函数distance()，以及一个用户定义的字面值操作符\_ip，该操作符可以从形如“0,0”或“12,-3”的字符串创建point类型的对象：
+
+\begin{cpp}
+// --- geometry.ixx/.cppm ---
+export module geometry;
+#ifdef __cpp_lib_modules
+import std;
+#else
+import std.core;
+#endif
+export template <class T,
+    typename = typename std::enable_if_t<std::is_arithmetic_v<T>, T>>
+struct point
+{
+    T x;
+    T y;
+};
+export using int_point = point<int>;
+export constexpr int_point int_point_zero{ 0,0 };
+export template <class T>
+double distance(point<T> const& p1, point<T> const& p2)
+{
+    return std::sqrt((p2.x - p1.x) * (p2.x - p1.x) +
+                     (p2.y - p1.y) * (p2.y - p1.y));
+}
+namespace geometry_literals
+{
+    export int_point operator ""_ip(const char* ptr, std::size_t size)
+    {
+        int x = 0, y = 0;
+        if(ptr)
+        {
+            while (*ptr != ',' && *ptr != ' ')
+                x = x * 10 + (*ptr++ - '0');
+            while (*ptr == ',' || *ptr == ' ') ptr++;
+            while (*ptr != 0)
+                y = y * 10 + (*ptr++ - '0');
+        }
+        return { x, y };
+    }
+}
+// --- main.cpp ---
+#ifdef __cpp_lib_modules
+import std;
+#else
+import std.core;
+#endif
+import geometry;
+int main()
+{
+    int_point p{ 3, 4 };
+    std::cout << distance(int_point_zero, p) << '\n';
+    {
+        using namespace geometry_literals;
+        std::cout << distance("0,0"_ip, "30,40"_ip) << '\n';
+    }
+}
+\end{cpp}
+
+\item
+使用import指令还可以导入头文件的内容。这里展示的例子使用了前面示例中相同的类型和函数：
+
+\begin{cpp}
+// --- geometry.h ---
+#pragma once
+#include <cmath>
+template <class T,
+    typename = typename std::enable_if_t<std::is_arithmetic_v<T>, T>>
+struct point
+{
+    T x;
+    T y;
+};
+using int_point = point<int>;
+constexpr int_point int_point_zero{ 0,0 };
+template <class T>
+double distance(point<T> const& p1, point<T> const& p2)
+{
+    return std::sqrt((p2.x – p1.x) * (p2.x – p1.x) +
+                     (p2.y – p1.y) * (p2.y – p1.y));
+}
+namespace geometry_literals
+{
+    int_point operator ""_ip(const char* ptr, std::size_t)
+    {
+        int x = 0, y = 0;
+        if(ptr)
+        {
+            while (*ptr != ',' && *ptr != ' ')
+                x = x * 10 + (*ptr++ - '0');
+            while (*ptr == ',' || *ptr == ' ') ptr++;
+            while (*ptr != 0)
+                y = y * 10 + (*ptr++ - '0');
+        }
+        return { x, y };
+    }
+}
+// --- main.cpp ---
+#ifdef __cpp_lib_modules
+import std;
+#else
+import std.core;
+#endif
+import "geometry.h";
+int main()
+{
+    int_point p{ 3, 4 };
+    std::cout << distance(int_point_zero, p) << '\n';
+    {
+        using namespace geometry_literals;
+        std::cout << distance("0,0"_ip, "30,40"_ip) << '\n';
+    }
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+模块单元由几个部分组成，这些部分可以是必需的或是可选的：
+
+\begin{itemize}
+\item
+全局模块，通过module;引入。这一部分可选，如果存在，则只能包含预处理器指令。在此添加的所有内容都属于全局模块，这是一个包含所有全局模块和所有非模块翻译单元的集合。
+
+\item
+模块声明，这是必需的形式为export module name;语句。
+
+\item
+模块前言，这是可选的，只能包含导入声明。
+
+\item
+模块范围，这是单元的内容，从模块声明开始，一直延伸到模块单元的末尾。
+\end{itemize}
+
+下图显示了一个包含上述所有部分的模块单元。左侧是模块的源码，右侧解释了各个模块：
+
+\myGraphic{0.8}{content/chapter12/images/1.png}{图12.1：模块示例（在左侧），每个部分都突出显示并进行了说明（在右侧）}
+
+模块可以导出实体，如函数、类和常量。每个导出都必须以export关键字开头。这个关键字总是第一个关键字，位于其他关键字（如class/struct、template或using）之前。在上一节所示的geometry模块中提供了几个例子：
+
+\begin{itemize}
+\item
+一个表示二维空间中点的类模板point
+
+\item
+一个point<int>的类型别名int\_point
+
+\item
+一个编译时常量int\_point\_zero
+
+\item
+一个计算两个点之间距离的函数模板distance()
+
+\item
+一个用户定义的字面值操作符\_ip，可以从像“3,4”这样的字符串创建int\_point实例
+\end{itemize}
+
+使用模块的翻译单元不需要任何更改，除了用import指令替换\#include预处理器指令。此外，也可以使用相同的import指令将头文件作为模块导入，如前所述的例子所示。
+
+模块和命名空间之间没有关系。这两个概念是独立的。geometry模块在geometry\_literals命名空间中导出了用户定义的字面值操作符""\_ip，而模块中的所有其他导出都在全局命名空间中可用。
+
+模块名称与单元文件名之间也没有关系。虽然geometry模块是在名为geometry.ixx/.cppm的文件中定义的，但文件名都会有相同的结果。建议遵循一致的命名方案，并使用模块名称作为模块文件名。另一方面，用于模块单元的扩展名因编译器而异，尽管随着模块支持达到成熟阶段，这可能会有所变化。
+
+C++23之前，标准库尚未模块化。然而，编译器已经以模块形式提供了标准库。Clang编译器为每个头文件提供了一个不同的模块。而Visual C++编译器则为标准库提供了以下模块：
+
+\begin{itemize}
+\item
+std.regex: <regex>头文件的内容
+
+\item
+std.filesystem: <filesystem>头文件的内容
+
+\item
+std.memory: <memory>头文件的内容
+
+\item
+std.threading: <atomic>、<condition\_variable>、<future>、<mutex>、<shared\_mutex>和<thread>头文件的内容
+
+\item
+std.core: 其余的C++标准库内容
+\end{itemize}
+
+正如从 std.core 或 std.regex 这样的模块名称中看到的，模块的名称可以是一系列由点（.）连接的标识符。点的作用只是帮助将名称分割成表示逻辑层次结构的部分，例如 company.project.module。使用点号可以说比使用下划线（如 \verb|std_core| 或 \verb|std_regex|）提供更好的可读性，后者也是合法的。
+
+另一方面，C++23 标准提供了两个标准化的命名模块：
+
+\begin{itemize}
+\item
+std，将 C++ 标准头文件（如 <vector>、<string>、<algorithm> 等）和 C 语言包装头文件（如 <cstdio>）中的所有内容导入 std 命名空间。如果想使用 std 限定所有内容，而不污染全局命名空间，应该使用这个模块。
+
+\item
+std.compat，导入 std 导入的所有内容，并且还包括 C 语言包装头文件的全局命名空间对应部分。例如，如果 std 从 <cstdio> 导入 std::fopen 和 std::fclose（以及其他所有内容），那么 std.compat 将导入 ::fopen 和 ::fclose。如果希望更方便迁移代码而无需用 std 命名空间来限定名称（如 std::fopen 而不是 fopen，\verb|std::size_t| 而不是 \verb|size_t| 等），应该使用这个模块。
+\end{itemize}
+
+作为一名开发者，熟悉编程语言中典型的入门程序——称为“Hello, world!”，简单地将这段文本输出到控制台。在 C++ 中，这个程序的传统形式如下：
+
+\begin{cpp}
+#include <iostream>
+int main()
+{
+    std::cout << "Hello, world!\n";
+}
+\end{cpp}
+
+C++23 中，借助对标准化模块的支持和文本格式库的新打印功能，这个程序可以看起来如下：
+
+\begin{cpp}
+import std;
+int main()
+{
+    std::println("Hello, world!");
+}
+\end{cpp}
+
+可以使用 \verb|__cpp_lib_modules| 特性宏检查标准模块 std 和 std.compat 是否可用。
+
+
+

@@ -1,0 +1,262 @@
+
+
+很多应用都需要生成随机数，从游戏到密码学，从采样到预测。然而，“随机数”这个术语实际上并不准确，数学公式生成数字的过程确定，并不会产生真正的随机数，而是产生看起来随机的数，所以这些数也称为伪随机数。真正的随机性只能通过基于物理过程的硬件设备来实现。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将介绍生成伪随机数的标准支持，理解随机数和伪随机数之间的区别。真正的随机数是无法预测的数字，其生成需要借助基于硬件的随机数生成器。伪随机数是指借助算法生成的数字，这些算法产生的序列接近于真实的随机数。
+
+此外，了解各种统计分布也是一个加分项。不过，了解什么是均匀分布很重要，因为所有引擎生成的数字都为均匀分布。这里不深入细节，均匀分布是一种关注可能发生的事件（一定范围内）的概率分布。
+
+\mySubsubsection{}{How to do it...}
+
+要在应用程序中生成伪随机数，需要按照以下步骤操作：
+
+\begin{enumerate}
+\item
+包含头文件 \verb|<random>|：
+
+\begin{cpp}
+#include <random>
+\end{cpp}
+
+\item
+使用 \verb|std::random_device| 生成器为伪随机引擎生成种子：
+
+\begin{cpp}
+std::random_device rd{};
+\end{cpp}
+
+\item
+使用可用的引擎生成数字，并用随机种子初始化：
+
+\begin{cpp}
+auto mtgen = std::mt19937{ rd() };
+\end{cpp}
+
+\item
+使用其中一个可用的分布将引擎的输出转换为你希望的统计分布：
+
+\begin{cpp}
+auto ud = std::uniform_int_distribution<>{ 1, 6 };
+\end{cpp}
+
+\item
+生成伪随机数：
+
+\begin{cpp}
+for(auto i = 0; i < 20; ++i)
+    auto number = ud(mtgen);
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it work...}
+
+伪随机数库包含两种类型的组件：
+
+\begin{itemize}
+\item
+引擎，即随机数生成器；可以生成均匀分布的伪随机数或（可用的话）实际的随机数。
+
+\item
+分布，将引擎的输出转换为统计分布。
+\end{itemize}
+
+所有引擎（除了 \verb|random_device|）都生成均匀分布的整数，并且所有引擎实现了以下方法：
+
+\begin{itemize}
+\item
+\verb|min()|: 静态方法，返回生成器能产生的最小值。
+
+\item
+\verb|max()|: 静态方法，返回生成器能产生的最大值。
+
+\item
+\verb|seed()|: 初始化算法的一个起始值。
+
+\item
+\verb|operator()|: 生成一个在 \verb|min()| 和 \verb|max()| 之间均匀分布的数字。
+
+\item
+\verb|discard()|: 生成并丢弃给定数量的伪随机数。
+\end{itemize}
+
+以下是可用的引擎：
+
+\begin{itemize}
+\item
+\verb|linear_congruential_engine|: 线性同余生成器，使用以下公式生成数字：
+
+$x(i) = (A * x(i – 1) + C)$ mod $M$
+
+\item
+\verb|mersenne_twister_engine|: 梅森旋转生成器，保持一个 W * (N – 1) * R 位的值。每次需要生成一个数字时，提取 W 位。当所有位都使用后，通过对大值进行移位和混合位来扭曲最大值，从而获得一组新的位来提取。
+
+\item
+\verb|subtract_with_carry_engine|: 这是一个基于以下公式的带进位减法生成器：
+
+$x(i) = (x(i – R) – x(i – S) – cy(i – 1))$ mod $M$
+
+上述公式中，cy 定义为：
+
+\myGraphic{0.6}{content/chapter2/images/6.png}{}
+\end{itemize}
+
+此外，标准库还提供了引擎适配器，是包括另一个引擎的引擎，并根据基础引擎的输出生成数字。引擎适配器实现了前述基础引擎的相同方法。以下是可用的引擎适配器：
+
+\begin{itemize}
+\item
+\verb|discard_block_engine|: 生成器，从基础引擎生成的每块$P$数字中保留只有 $R$个数字，丢弃其余部分。
+
+\item
+\verb|independent_bits_engine|: 生成器，生成的数字位数与基础引擎不同。
+
+\item
+\verb|shuffle_order_engine|:生成器，保留由基础引擎生成的 $K$ 个数字的混洗表，并从该表返回数字，同时用基础引擎生成的数字替换。
+\end{itemize}
+
+选择伪随机数生成器应基于具体需求。线性同余引擎速度快但对内部状态的存储要求很小。带进位减法引擎非常快，在没有高级算术指令集处理器的机器上也是如此。然而，需要更大的内部状态存储，且生成的数字序列具有较少的期望。梅森旋转是最慢的引擎，对内部状态的存储要求最高，但产生的伪随机数序列最长且不重复。
+
+所有这些引擎和引擎适配器都生成伪随机数，标准库还提供了另一种称为 \verb|random_device| 的引擎，该引擎旨在生成非确定性的数字，但这不是实际约束，因为没有物理上的随机熵来源。因此，\verb|random_device| 的实现实际上可能基于一个伪随机引擎。不同于其他引擎，\verb|random_device| 类不能设置种子，并且有一个方法叫做 \verb|entropy()|，返回随机设备的熵，对于确定性生成器来说熵为 0，对于非确定性生成器来说熵不为零。
+
+然而，这不是判断设备是否真正是非确定性的可靠方法。例如，GNU \verb|libstdc++| 和 LLVM \verb|libc++| 实现了非确定性设备但返回的熵值为 0。另一方面，\verb|VC++| 和 \verb|boost.random| 分别返回的熵值为 32 和 10。
+
+所有这些生成器生成的数字在均匀分布中都是整数，这只是大多数应用中需要随机数的众多可能统计分布。为了能够在其他分布中生成数字（无论是整数还是实数），标准库提供了几个分布类型。
+
+这些类型根据其实现的统计分布转换引擎的输出：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{multirow}
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|}
+\hline
+\textbf{类型}           & \textbf{类型名称}               & \textbf{数字类型} & \textbf{统计分布}           \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\multirow{2}{*}{均匀分布}   & uniform\_int\_distribution       & 整数 & 均匀                  \\ \cline{2-4}
+& uniform\_real\_distribution      & 实数    & 均匀                  \\ \hline
+\multirow{4}{*}{伯努利分布} & bernoulli\_distribution          & 布尔值 & 伯努利                \\ \cline{2-4}
+& binomial\_distribution           & 整数 & 二项式                 \\ \cline{2-4}
+& negative\_binomial\_distribution & 整数 & 负二项式         \\ \cline{2-4}
+& geometric\_distribution          & 整数 & 几何                \\ \hline
+\multirow{5}{*}{泊松分布}   & poisson\_distribution            & 整数 & 泊松                  \\ \cline{2-4}
+& exponential\_distribution        & 实数    & 指数              \\ \cline{2-4}
+& gamma\_distribution              & 实数    & 伽玛                    \\ \cline{2-4}
+& weibull\_distribution            & 实数    & 威布尔                  \\ \cline{2-4}
+& extreme\_value\_distribution     & 实数    & 极值            \\ \hline
+\multirow{6}{*}{正态分布} & normal\_distribution              & 实数             & 标准正态（高斯）                  \\ \cline{2-4}
+& lognormal\_distribution          & 实数    & 对数正态                \\ \cline{2-4}
+& chi\_squared\_distribution       & 实数    & 卡方              \\ \cline{2-4}
+& cauchy\_distribution             & 实数    & 柯西                   \\ \cline{2-4}
+& fisher\_f\_distribution          & 实数    & 费舍尔 F 分布  \\ \cline{2-4}
+& student\_t\_distribution         & 实数    & 学生 t 分布 \\ \hline
+\multirow{3}{*}{采样分布}  & discrete\_distribution           & 整数 & 离散                 \\ \cline{2-4}
+& piecewise\_constant\_distribution & 实数             & 常数子区间分布的值 \\ \cline{2-4}
+& piecewise\_linear\_distribution   & 实数             & 定义子区间分布的值  \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.12: <random> 头文件中标准分布列表
+\end{center}
+
+标准库提供的每个引擎都有其优势和劣势。初始化时，尽管梅森旋转是最慢且内部状态最大的引擎，但可以生成最长的非重复数字序列。接下来的例子中，将使用 \verb|std::mt19937|，这是一个具有 19,937 位内部状态的 32 位梅森旋转引擎。还有一个 64 位的梅森旋转引擎 \verb|std::mt19937_64|。两者都是 \verb|std::mersenne_twister_engine| 的别名。
+
+生成随机数最简单的方式如下所示：
+
+\begin{cpp}
+auto mtgen = std::mt19937 {};
+for (auto i = 0; i < 10; ++i)
+    std::cout << mtgen() << '\n';
+\end{cpp}
+
+mtgen 是 \verb|std::mt19937|的实例，用于梅森旋转引擎。要生成数字，只需使用调用操作符来推进内部状态，并返回下一个伪随机数即可。但这段代码存在问题，没有设置种子。因此，总是生成相同的数字序列，这可能不是大多数情况下所期望的结果。
+
+初始化引擎有不同的方法。常用的方法类似于 C 语言的随机库，使用当前时间：
+
+\begin{cpp}
+auto seed = std::chrono::high_resolution_clock::now()
+            .time_since_epoch()
+            .count();
+auto mtgen = std::mt19937{ static_cast<unsigned int>(seed) };
+\end{cpp}
+
+\verb|seed| 是一个代表从时钟纪元到现在的滴答数，用这个数字来作为引擎的随机种子。这种方法的问题在于种子是确定的，而在某些类别的应用中，种子可能受到攻击。一个更可靠的方法是用真实的随机数来为生成器设置种子。
+
+\verb|std::random_device| 类型是一个应该返回真正随机数的引擎，尽管实际实现可能基于伪随机生成器：
+
+\begin{cpp}
+std::random_device rd;
+auto mtgen = std::mt19937 {rd()};
+\end{cpp}
+
+所有引擎生成的数字都遵循均匀分布。要将结果转换为其他统计分布，必须使用分布类。为了展示生成的数字是如何根据选定的分布分布的，将使用以下函数。这个函数生成指定数量的伪随机数，并在映射中计数它们的重复次数。使用映射中的值生成类似条形图的图表，显示每个数字出现的频率：
+
+\begin{cpp}
+void generate_and_print(std::function<int(void)> gen,
+int const iterations = 10000)
+{
+    // map to store the numbers and their repetition
+    auto data = std::map<int, int>{};
+    // generate random numbers
+    for (auto n = 0; n < iterations; ++n)
+    ++data[gen()];
+    // find the element with the most repetitions
+    auto max = std::max_element(
+    std::begin(data), std::end(data),
+    [](auto kvp1, auto kvp2) {
+        return kvp1.second < kvp2.second; });
+    // print the bars
+    for (auto i = max->second / 200; i > 0; --i)
+    {
+        for (auto kvp : data)
+        {
+            std::cout
+            << std::fixed << std::setprecision(1) << std::setw(3)
+            << (kvp.second / 200 >= i ? (char)219 : ' ');
+        }
+        std::cout << '\n';
+    }
+    // print the numbers
+    for (auto kvp : data)
+    {
+        std::cout
+        << std::fixed << std::setprecision(1) << std::setw(3)
+        << kvp.first;
+    }
+    std::cout << '\n';
+}
+\end{cpp}
+
+下面的代码使用\verb|std::mt19937|引擎生成随机数，随机数在[1,6]范围内均匀分布；这就是掷6面骰子时得到的结果:
+
+\begin{cpp}
+std::random_device rd{};
+auto mtgen = std::mt19937{ rd() };
+auto ud = std::uniform_int_distribution<>{ 1, 6 };
+generate_and_print([&mtgen, &ud]() {return ud(mtgen); });
+\end{cpp}
+
+程序的输出看起来像这样：
+
+\myGraphic{0.3}{content/chapter2/images/7.png}{图 2.6: 范围 [1,6] 的均匀分布}
+
+下一个例子中，将分布改为均值为 5、标准差为 2 的正态分布。这种分布产生的是实数；为了使用 \verb|generate_and_print()| 函数，数字必须四舍五入为整数：
+
+\begin{cpp}
+std::random_device rd{};
+auto mtgen = std::mt19937{ rd() };
+auto nd = std::normal_distribution<>{ 5, 2 };
+generate_and_print(
+    [&mtgen, &nd]() {
+        return static_cast<int>(std::round(nd(mtgen))); });
+\end{cpp}
+
+上述代码的输出：
+
+\myGraphic{0.8}{content/chapter2/images/8.png}{图 2.7: 均值为 5、标准差为 2 的正态分布}
+
+从图形表示中可以看到，分布已从均匀分布变为以值 5 为中心的正态分布。
+

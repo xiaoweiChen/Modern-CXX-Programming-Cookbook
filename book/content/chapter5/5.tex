@@ -1,0 +1,217 @@
+应用程序中最常执行的操作之一就是搜索数据，标准库提供了许多通用算法，用于搜索标准容器中的元素，或者搜索可以由开始迭代器和结束迭代器定义的范围。本示例中，将介绍这些标准算法是什么，以及如何使用。
+
+\mySubsubsection{}{Getting ready}
+
+对于这个示例中的所有例子，可以使用 std::vector，但所有算法都可以应用于由开始和结束迭代器定义的范围，具体取决于算法的不同，可以是输入迭代器或前向迭代器。所有这些算法都在 <algorithm> 头文件中的 std 命名空间下可用。
+
+\mySubsubsection{}{How to do it...}
+
+以下是可用于在范围内查找元素的算法列表：
+
+\begin{itemize}
+\item
+使用 std::find() 在范围内查找一个值；返回指向第一个等于该值的元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 13, 1, 5, 3, 2, 8, 1 };
+auto it = std::find(v.cbegin(), v.cend(), 3);
+if (it != v.cend()) std::cout << *it << '\n'; // prints 3
+\end{cpp}
+
+\item
+使用 \verb|std::find_if()| 查找符合一元谓词条件的值；返回指向第一个使谓词返回 true 的元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 13, 1, 5, 3, 2, 8, 1 };
+auto it = std::find_if(v.cbegin(), v.cend(),
+                       [](int const n) {return n > 10; });
+if (it != v.cend()) std::cout << *it << '\n'; // prints 13
+\end{cpp}
+
+\item
+使用 \verb|std::find_if_not()| 查找不符合一元谓词条件的值；返回指向第一个使谓词返回 false 的元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 13, 1, 5, 3, 2, 8, 1 };
+auto it = std::find_if_not(v.cbegin(), v.cend(),
+                    [](int const n) {return n % 2 == 1; });
+if (it != v.cend()) std::cout << *it << '\n'; // prints 2
+\end{cpp}
+
+\item
+使用 \verb|std::find_first_of()| 查找一个范围内的值在另一个范围内的出现；返回指向找到的第一个元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 13, 1, 5, 3, 2, 8, 1 };
+std::vector<int> p{ 5, 7, 11 };
+auto it = std::find_first_of(v.cbegin(), v.cend(),
+                             p.cbegin(), p.cend());
+if (it != v.cend())
+    std::cout << "found " << *it
+              << " at index " << std::distance(v.cbegin(), it)
+              << '\n';
+// found 5 at index 2
+\end{cpp}
+
+\item
+使用 \verb|std::find_end()| 查找范围中子范围的最后一个出现；返回指向范围内最后一个子范围的第一个元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v1{ 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1 };
+std::vector<int> v2{ 1, 0, 1 };
+auto it = std::find_end(v1.cbegin(), v1.cend(),
+                        v2.cbegin(), v2.cend());
+if (it != v1.cend())
+    std::cout << "found at index "
+              << std::distance(v1.cbegin(), it) << '\n';
+// found at index 8
+\end{cpp}
+
+\item
+要查找范围中的最小和最大元素，使用 \verb|std::min_element()| 查找最小值，\verb|std::max_element()| 查找最大值，以及 \verb|std::minmax_element()| 同时查找最小和最大值：
+
+\begin{cpp}
+std::vector<int> v{ 1, 5, -2, 9, 6 };
+auto minit = std::min_element(v.begin(), v.end());
+std::cout << "min=" << *minit << '\n';           // min=-2
+auto maxit = std::max_element(v.begin(), v.end());
+std::cout << "max=" << *maxit << '\n';           // max=9
+auto minmaxit = std::minmax_element(v.begin(), v.end());
+std::cout << "min=" << *minmaxit.first << '\n';  // min=-2
+std::cout << "max=" << *minmaxit.second << '\n'; // max=9
+\end{cpp}
+
+\item
+使用 std::search() 查找范围中子范围的第一次出现；返回指向范围内子范围的第一个元素的迭代器：
+
+\begin{cpp}
+auto text = "The quick brown fox jumps over the lazy dog"s;
+auto word = "over"s;
+auto it = std::search(text.cbegin(), text.cend(),
+                      word.cbegin(), word.cend());
+if (it != text.cend())
+    std::cout << "found " << word
+              << " at index "
+              << std::distance(text.cbegin(), it) << '\n';
+\end{cpp}
+
+\item
+使用带有搜索器的 std::search()，是一个实现了搜索算法并满足一些预定义条件的类。C++17 中引入了std::search() 的重载版本 ，提供的标准搜索器实现了 Boyer-Moore 和 Boyer-Moore-Horspool 字符串搜索算法：
+
+\begin{cpp}
+auto text = "The quick brown fox jumps over the lazy dog"s;
+auto word = "over"s;
+auto it = std::search(
+    text.cbegin(), text.cend(),
+    std::make_boyer_moore_searcher(word.cbegin(), word.cend()));
+if (it != text.cend())
+    std::cout << "found " << word
+              << " at index "
+              << std::distance(text.cbegin(), it) << '\n';
+\end{cpp}
+
+\item
+使用 \verb|std::search_n()| 查找范围中某个值的 N 次连续出现；返回指向找到的序列的第一个元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1 };
+auto it = std::search_n(v.cbegin(), v.cend(), 2, 0);
+if (it != v.cend())
+    std::cout << "found at index "
+              << std::distance(v.cbegin(), it) << '\n';
+\end{cpp}
+
+\item
+使用 \verb|std::adjacent_find()| 查找范围内相邻的两个相等元素或满足二元谓词的元素；返回指向找到的第一个元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 2, 3, 5, 8, 13 };
+auto it = std::adjacent_find(v.cbegin(), v.cend());
+if (it != v.cend())
+    std::cout << "found at index "
+              << std::distance(v.cbegin(), it) << '\n';
+auto it = std::adjacent_find(
+    v.cbegin(), v.cend(),
+    [](int const a, int const b) {
+        return IsPrime(a) && IsPrime(b); });
+if (it != v.cend())
+    std::cout << "found at index "
+              << std::distance(v.cbegin(), it) << '\n';
+\end{cpp}
+
+\item
+使用 \verb|std::binary_search()| 查找一个值是否存在于已排序的范围内；返回一个布尔值，指示是否找到了该值：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 2, 3, 5, 8, 13 };
+auto success = std::binary_search(v.cbegin(), v.cend(), 8);
+if (success) std::cout << "found" << '\n';
+\end{cpp}
+
+\item
+使用 \verb|std::lower_bound()| 查找范围内第一个不小于指定值的元素；返回指向该元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 2, 3, 5, 8, 13 };
+auto it = std::lower_bound(v.cbegin(), v.cend(), 1);
+if (it != v.cend())
+    std::cout << "lower bound at "
+              << std::distance(v.cbegin(), it) << '\n';
+\end{cpp}
+
+\item
+使用 \verb|std::upper_bound()| 查找范围内第一个大于指定值的元素；返回指向该元素的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 2, 3, 5, 8, 13 };
+auto it = std::upper_bound(v.cbegin(), v.cend(), 1);
+if (it != v.cend())
+    std::cout << "upper bound at "
+              << std::distance(v.cbegin(), it) << '\n';
+\end{cpp}
+
+\item
+使用 \verb|std::equal_range()| 查找范围内值等于指定值的子范围。返回一对定义了子范围首尾迭代器的迭代器对；这两个迭代器等价于 \verb|std::lower_bound()| 和 \verb|std::upper_bound()| 返回的迭代器：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 2, 3, 5, 8, 13 };
+auto bounds = std::equal_range(v.cbegin(), v.cend(), 1);
+std::cout << "range between indexes "
+          << std::distance(v.cbegin(), bounds.first)
+          << " and "
+          << std::distance(v.cbegin(), bounds.second)
+          << '\n';
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+这些算法的工作方式非常相似：都接受定义搜索范围的迭代器作为参数，以及每个算法特定的附加参数。除了返回布尔值的 \verb|std::binary_search()| 和返回迭代器对的 \verb|std::equal_range()| 之外，其他算法都返回指向搜索元素或子范围的迭代器。这些迭代器必须与范围的结束迭代器（即最后一个元素之后的位置）进行比较，以检查搜索是否成功。如果搜索没有找到元素或子范围，则返回值就是结束迭代器。
+
+所有这些算法都有多种重载，但在“How to do it...”中，只查看了一种特定的重载，以展示如何使用这些算法。为了获取所有重载的完整参考，应该查阅其他资源，例如 \url{https://en.cppreference.com/w/cpp/algorithm}。
+
+前面所有的例子中，使用了常量迭代器，但所有这些算法同样适用于可变迭代器和反向迭代器。因其接受迭代器作为输入参数，所以可以与标准容器、数组或具有迭代器的序列一起工作。
+
+特别需要注意的是 \verb|std::binary_search()| 算法：定义搜索范围的迭代器参数至少应满足前向迭代器的要求。无论提供的迭代器类型如何，比较次数总是与范围大小成对数关系。但如果迭代器是随机访问迭代器，则迭代器增量的次数也是对数关系；如果不是随机访问迭代器，则增量次数是线性的，与范围大小成比例。
+
+除了 \verb|std::find_if_not()| 外，所有这些算法在 C++11 之前就已经存在，一些新的标准引入了这些算法的新重载。例如，\verb|std::search()| 在 C++17 中引入了几种重载形式。其中一个重载的形式如下：
+
+\begin{cpp}
+template<class ForwardIterator, class Searcher>
+ForwardIterator search(ForwardIterator first, ForwardIterator last,
+    const Searcher& searcher );
+\end{cpp}
+
+这种重载形式用于搜索由搜索器函数对象定义的模式，标准库为这种搜索器提供了几种实现：
+
+\begin{itemize}
+\item
+\verb|default_searcher|是将搜索委托给标准的 \verb|std::search()| 算法。
+
+\item
+\verb|boyer_moore_searcher|实现了用于字符串搜索的 Boyer-Moore 算法。
+\item
+\verb|boyer_moore_horspool_algorithm|实现了用于字符串搜索的 Boyer-Moore-Horspool 算法。
+\end{itemize}
+
+许多标准容器都有一个成员函数 \verb|find()|，用于在容器中查找元素。当这种成员方法可用并且符合需求时，应该优先使用这些成员函数，这些成员函数是根据每个容器的特点进行了优化。

@@ -1,0 +1,178 @@
+
+像本书中讨论的其他测试框架一样，Catch2 会以可读的格式将测试程序的执行结果输出到标准输出流 stdout。此外，还支持使用 XML 格式报告或写入文件等选项。本示例中，将介绍使用 Catch2 时控制输出的主要选项。
+
+\mySubsubsection{}{Getting ready}
+
+为了举例说明如何修改测试程序的执行输出，可以使用以下测试用例：
+
+\begin{cpp}
+EST_CASE("case1")
+{
+    SECTION("function1")
+    {
+        REQUIRE(true);
+    }
+}
+TEST_CASE("case2")
+{
+    SECTION("function2")
+    {
+        REQUIRE(false);
+    }
+}
+\end{cpp}
+
+运行这两个测试用例的输出如下：
+
+\begin{shell}
+----------------------------------------------------------
+case2
+    function2
+----------------------------------------------------------
+f:\chapter11ca_04\main.cpp(14)
+..........................................................
+f:\chapter11ca_04\main.cpp(16): FAILED:
+REQUIRE( false )
+==========================================================
+test cases: 2 | 1 passed | 1 failed
+assertions: 2 | 1 passed | 1 failed
+\end{shell}
+
+接下来的部分中，将了解一些控制 Catch2 测试程序输出的各种选项。
+
+\mySubsubsection{}{How to do it...}
+
+使用 Catch2 控制测试程序的输出时：
+
+\begin{itemize}
+\item
+使用命令行参数 \verb|-r| 或 \verb|--reporter <reporter>| 来指定用于格式化和结构化结果的报告器。框架提供的默认选项有 console、compact、xml 和 junit：
+
+\begin{shell}
+chapter11ca_04.exe -r junit
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+    <testsuite name="chapter11ca_04.exe" errors="0"
+               failures="1"
+               tests="2" hostname="tbd"
+               time="0.002039"
+               timestamp="2020-05-02T21:17:04Z">
+        <testcase classname="case1" name="function1"
+                  time="0.00016"/>
+        <testcase classname="case2"
+                  name="function2" time="0.00024">
+            <failure message="false" type="REQUIRE">
+                at f:\chapter11ca_04\main.cpp(16)
+            </failure>
+        </testcase>
+    <system-out/>
+    <system-err/>
+    </testsuite>
+</testsuites>
+\end{shell}
+
+\item
+使用命令行参数 \verb|-s| 或 \verb|--success| 显示成功的测试用例的结果：
+
+\begin{shell}
+chapter11ca_04.exe -s
+--------------------------------------------------
+case1
+    function1
+--------------------------------------------------
+f:\chapter11ca_04\main.cpp(6)
+..................................................
+f:\chapter11ca_04\main.cpp(8):
+PASSED:
+    REQUIRE( true )
+--------------------------------------------------
+case2
+    function2
+--------------------------------------------------
+f:\chapter11ca_04\main.cpp(14)
+..................................................
+f:\chapter11ca_04\main.cpp(16):
+FAILED:
+    REQUIRE( false )
+==================================================
+test cases: 2 | 1 passed | 1 failed
+assertions: 2 | 1 passed | 1 failed
+\end{shell}
+
+\item
+使用命令行参数 \verb|-o| 或 \verb|--out <filename>| 将所有输出发送到文件而不是标准流：
+
+\begin{shell}
+chapter11ca_04.exe -o test_report.log
+\end{shell}
+
+\item
+使用命令行参数 \verb|-d| 或 \verb|--durations <yes/no>| 显示每个测试用例执行所需的时间：
+
+\begin{shell}
+chapter11ca_04.exe -d yes
+0.000 s: scenario1
+0.000 s: case1
+--------------------------------------------------
+case2
+    scenario2
+--------------------------------------------------
+f:\chapter11ca_04\main.cpp(14)
+..................................................
+f:\chapter11ca_04\main.cpp(16):
+FAILED:
+REQUIRE( false )
+0.003 s: scenario2
+0.000 s: case2
+0.000 s: case2
+==================================================
+test cases: 2 | 1 passed | 1 failed
+assertions: 2 | 1 passed | 1 failed
+\end{shell}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+除了默认用于报告测试程序执行结果的人类可读格式外，Catch2 框架还支持两种 XML 格式：
+
+\begin{itemize}
+\item
+特定于 Catch2 的 XML 格式（使用 \verb|-r xml| 指定）
+
+\item
+遵循 JUNIT ANT 任务结构的 JUNIT 类似 XML 格式（使用 \verb|-r junit| 指定）
+\end{itemize}
+
+前者报告器在单元测试执行且结果可用时流式传输 XML 内容，可以用作 XSLT 转换的输入，以生成实例的 HTML 报告。后者报告器需要收集所有程序执行数据，以便在输出前构建报告。JUNIT XML 格式对于第三方工具（如持续集成服务器）很有用。
+
+几个报告器以独立头文件的形式提供，需要包含在测试程序的源代码中（所有报告器的头文件命名格式为 \verb|catch_reporter_*.hpp|）。这些可用的报告器包括：
+
+\begin{itemize}
+\item
+TeamCity 报告器（使用 \verb|-r teamcity| 指定），将 TeamCity 服务消息写入标准输出流。仅适用于与 TeamCity 的集成。这是一个流式报告器；数据在可用时即写入。
+
+\item
+Automake 报告器（使用 \verb|-r automake| 指定），写入 automake 通过 make check 所期望的元标签。
+
+\item
+测试任意协议（或简称 TAP）报告器（使用 \verb|-r tap| 指定）。
+
+\item
+SonarQube 报告器（使用 \verb|-r sonarqube| 指定），使用 SonarQube 泛用测试数据 XML 格式写入。
+\end{itemize}
+
+下面的例子展示了如何包含 TeamCity 头文件，以使用 TeamCity 报告器生成报告：
+
+\begin{cpp}
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/reporters/catch_reporter_teamcity.hpp>
+\end{cpp}
+
+测试报告的默认目标是标准输出流 stdout（即使是显式写入 stderr 的数据最终也会重定向到 stdout），也可以将输出写入文件。这些格式化选项可以组合使用：
+
+\begin{shell}
+hapter11ca_04.exe -r junit -o test_report.xml
+\end{shell}
+
+此命令指定了报告应使用 JUNIT XML 格式，并保存到名为 \verb|test_report.xml| 的文件中。
+

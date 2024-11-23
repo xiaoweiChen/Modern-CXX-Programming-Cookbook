@@ -1,0 +1,147 @@
+前面的示例中，探讨了用于在一个范围内搜索和排序的标准通用算法。算法库提供了许多其他的通用算法，其中包括几个用于用值填充一个范围的算法。这个示例中，将了解这些算法是什么，以及应该如何使用。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中的所有例子都使用了 \verb|std::vector|，像所有的通用算法一样，在本示例中看到的算法接受迭代器来定义一个范围的边界，因此也可以与任何标准容器、数组或定义了向前迭代器的自定义类型所代表的序列一起使用。
+
+除了可以在 \verb|<numeric>| 头文件中找到的 \verb|std::iota()| 之外，其他所有算法都在 \verb|<algorithm>| 头文件中。
+
+\mySubsubsection{}{How to do it...}
+
+要向一个范围赋值，可以使用以下任何一个标准算法：
+
+\begin{itemize}
+\item
+使用 \verb|std::fill()| 给一个范围内的所有元素赋同一个值；范围由第一个和最后一个向前迭代器定义：
+
+\begin{cpp}
+std::vector<int> v(5);
+std::fill(v.begin(), v.end(), 42);
+// v = {42, 42, 42, 42, 42}
+\end{cpp}
+
+\item
+使用 \verb|std::fill_n()| 给一个范围内的一定数量的元素赋值；范围由第一个向前迭代器和一个计数器定义，该计数器指示应给多少个元素赋指定的值：
+
+\begin{cpp}
+std::vector<int> v(10);
+std::fill_n(v.begin(), 5, 42);
+// v = {42, 42, 42, 42, 42, 0, 0, 0, 0, 0}
+\end{cpp}
+
+\item
+使用 \verb|std::generate()| 给一个范围内的每个元素赋函数返回的值；范围由第一个和最后一个向前迭代器定义，函数为范围中的每个元素调用一次：
+
+\begin{cpp}
+std::random_device rd{};
+std::mt19937 mt{ rd() };
+std::uniform_int_distribution<> ud{1, 10};
+std::vector<int> v(5);
+std::generate(v.begin(), v.end(),
+              [&ud, &mt] {return ud(mt); });
+\end{cpp}
+
+\item
+使用 \verb|std::generate_n()| 给一个范围内的一定数量的元素赋函数返回的值；范围由第一个向前迭代器和一个计数器定义，该计数器指示应给多少个元素赋值，函数为每个元素调用一次：
+
+\begin{cpp}
+std::vector<int> v(5);
+auto i = 1;
+std::generate_n(v.begin(), v.size(), [&i] { return i*i++; });
+// v = {1, 4, 9, 16, 25}
+\end{cpp}
+
+\item
+使用 \verb|std::iota()| 给一个范围内的元素赋按顺序递增的值；范围由第一个和最后一个向前迭代器定义，值从一个初始指定值开始递增：
+
+\begin{cpp}
+std::vector<int> v(5);
+std::iota(v.begin(), v.end(), 1);
+// v = {1, 2, 3, 4, 5}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|std::fill()| 和 \verb|std::fill_n()| 的工作方式类似，不过在范围的指定方式上有所不同：前者通过第一个和最后一个迭代器指定，后者通过第一个迭代器和一个计数器指定。第二个算法返回一个迭代器，如果计数器大于零，则该迭代器指向最后一个赋值元素之后的位置；否则，返回一个指向范围第一个元素的迭代器。
+
+\verb|std::generate()| 和 \verb|std::generate_n()| 也相似，仅在范围的指定方式上不同。前者接受两个迭代器，定义范围的下限和上限，而后者接受一个指向第一个元素的迭代器和一个计数器。像 \verb|std::fill_n()| 一样，\verb|std::generate_n()| 也返回一个迭代器，如果计数器大于零，则该迭代器指向最后一个赋值元素之后的位置；否则，返回一个指向范围第一个元素的迭代器。这些算法为范围内的每个元素调用一个指定的函数，并将返回的值赋给元素。生成函数不接受任何参数，不能将参数值传递给函数，因为它们设计用于初始化一个范围的元素。如果需要使用元素的值来生成新值，应使用 \verb|std::transform()|。
+
+\verb|std::iota()| 的名称来源于 APL 编程语言中的 ι(iota) 函数，最初是 STL 的一部分，但直到 C++11 才纳入标准库。此函数接受一个范围的第一个和最后一个迭代器，以及一个初始值，该值被赋给范围的第一个元素。然后，使用前缀递增操作符 \verb|++| 为范围中的其余元素生成按顺序递增的值。
+
+\begin{myNotic}
+STL 是标准模板库的缩写，是由 Alexander Stepanov 最初为 C++ 设计的一个软件库，在 C++ 语言标准化之前就已经存在。后来，用来建模 C++ 标准库，提供容器、迭代器、算法和函数。不应将其与 C++ 标准库混淆，因为这两者是不同的实体。
+\end{myNotic}
+
+\mySubsubsection{}{There's more...}
+
+本示例中看到的例子使用了整数，以便更容易理解。也可以提供一个现实生活中的例子，帮助各位读者更好地理解这些算法如何用于更复杂的场景。
+
+考虑一个给定两种颜色的函数，生成一系列中间点，代表一个渐变。颜色对象有三个值，分别对应红色、绿色和蓝色通道：
+
+\begin{cpp}
+struct color
+{
+    unsigned char red   = 0;
+    unsigned char blue  = 0;
+    unsigned char green = 0;
+};
+\end{cpp}
+
+编写一个函数，该函数接受起始颜色和结束颜色，以及要生成的点数，并返回一个颜色对象的向量。内部使用 \verb|std::generate_n()| 生成值：
+
+\begin{cpp}
+std::vector<color> make_gradient(color const& c1, color const& c2, size_t points)
+{
+    std::vector<color> colors(points);
+    auto rstep = static_cast<double>(c2.red - c1.red) / points;
+    auto gstep = static_cast<double>(c2.green - c1.green) / points;
+    auto bstep = static_cast<double>(c2.blue - c1.blue) / points;
+    auto r = c1.red;
+    auto g = c1.green;
+    auto b = c1.blue;
+    std::generate_n(colors.begin(),
+                    points,
+                    [&r, &g, &b, rstep, gstep, bstep] {
+        color c {
+            static_cast<unsigned char>(r),
+            static_cast<unsigned char>(g),
+            static_cast<unsigned char>(b)
+        };
+        r += rstep;
+        g += gstep;
+        b += bstep;
+        return c;
+    });
+    return colors;
+}
+\end{cpp}
+
+可以这样使用这个函数：
+
+\begin{cpp}
+color white { 255, 255, 255 };
+color black { 0, 0, 0 };
+std::vector<color> grayscale = make_gradient(white, black, 256);
+std::for_each(
+    grayscale.begin(), grayscale.end(),
+    [](color const& c) {
+        std::cout <<
+        static_cast<int>(c.red) << ", "
+        << static_cast<int>(c.green) << ", "
+        << static_cast<int>(c.blue) << '\n';
+    });
+\end{cpp}
+
+虽然运行这段代码的输出有 256 行（每行代表一个点），这里展示其中一部分：
+
+\begin{shell}
+255, 255, 255
+254, 254, 254
+253, 253, 253
+…
+1, 1, 1
+0, 0, 0
+\end{shell}
+
+

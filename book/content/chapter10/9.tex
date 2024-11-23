@@ -1,0 +1,110 @@
+
+单例可能是最著名的设计模式，限制了一个类型实例只能实例化一次。尽管在某些情况下这是必要的，但很多时候单例的使用更像是一种反模式，可以通过其他的设计选择来避免。
+
+由于单例意味着整个程序中只有一个类型实例可用，这样的唯一实例可能会再不同的线程访问。因此，当实现单例时，也应该使其线程安全。
+
+C++11 之前，做到这一点并不容易，通常采用双重检查锁定技术。Scott Meyers 和 Andrei Alexandrescu 在一篇题为《C++ 和双重检查锁定的危险》的论文中指出，使用这一模式并不能保证在可移植的 C++ 中实现线程安全的单例。幸运的是，这种情况在 C++11 中发生了变化，本示例展示了如何在现代 C++ 中编写线程安全的单例。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例，需要了解静态存储持续时间、内部链接以及删除和默认函数的工作原理。如果还没有阅读过的话，也应该先阅读前一示例关于使用奇特递归模板模式（CRTP）实现静态多态的内容。
+
+\mySubsubsection{}{How to do it...}
+
+要实现线程安全的单例，应该按照以下步骤操作：
+
+\begin{enumerate}
+\item
+定义 Singleton 类型：
+
+\begin{cpp}
+class Singleton
+{
+};
+\end{cpp}
+
+\item
+将默认构造函数设为私有：
+
+\begin{cpp}
+private:
+    Singleton() = default;
+\end{cpp}
+
+\item
+将复制构造函数和复制赋值操作符设为公有并删除：
+
+\begin{cpp}
+public:
+    Singleton(Singleton const &) = delete;
+    Singleton& operator=(Singleton const&) = delete;
+\end{cpp}
+
+\item
+创建和返回单一实例的函数应该是静态的，并且应该返回类类型的引用。应该声明一个类类型的静态实例，并返回对该实例的引用：
+
+\begin{cpp}
+public:
+    static Singleton& instance()
+    {
+        static Singleton single;
+        return single;
+    }
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+由于不应该直接由用户创建单例实例，所有构造函数要么是私有的，要么是公有的但已删除。默认构造函数是私有的但未删除，因为类型代码中必须实际创建类的一个实例。这个实现中，一个名为 instance() 的静态函数返回类的单一实例。
+
+\begin{myTip}
+尽管大多数实现返回的是指针，但实际上返回引用更有意义，不会导致此函数返回空指针（没有对象）。
+\end{myTip}
+
+instance() 方法的实现乍看之下，可能显得简单且不线程安全(熟悉双重检查锁定模式（DCLP）的话)。C++11中，这实际上已不再必要，因为静态存储持续时间实例初始化的关键细节发生了变化。即使多个线程同时尝试初始化同一个静态实例，初始化也只会发生一次。DCLP 的责任已经从用户转移到了编译器，尽管编译器可能会使用另一种技术来确保结果。
+
+以下是 C++ 标准文档版本 N4917 第 8.8.3 段落中定义静态实例初始化规则的引文：
+
+\begin{myTip}
+具有静态存储持续时间（6.7.5.2）或线程存储持续时间（6.7.5.3）的块变量的动态初始化在其声明首次执行时进行；这样的变量在其初始化完成后即认为已初始化。如果初始化过程中抛出了异常，则初始化未完成，因此下次执行进入声明时将再次尝试初始化。如果在变量正在初始化时并发执行进入声明，则并发执行应当等待初始化完成。
+
+\begin{shell}
+[注释：符合标准的实现不应在执行初始化器时引入任何死锁。死锁仍可能由程序逻辑引起；实现只需避免因自身的同步操作而导致的死锁。]
+\end{shell}
+
+如果在变量正在初始化时递归地重新进入声明，行为未定义。
+\end{myTip}
+
+静态局部实例具有静态存储持续时间，但只有在第一次使用时（即第一次调用 instance() 方法时）才会实例化。当程序退出时，该实例会销毁。顺便提一下，返回指针而不是引用的唯一可能的优势是，在程序退出前的某个时刻删除这个唯一实例，然后可能会重新创建。但这再创建没有太多意义，因为它与类的单一全局实例的概念相冲突，该实例可以在程序中的任何地方访问。
+
+\mySubsubsection{}{There's more...}
+
+在较大的代码库中，可能会出现需要多种单例类型的情况。为了避免多次编写相同的模式，可以以通用方式实现它。为此，需要采用本章前面提到的奇特递归模板模式（CRTP）。实际的单例是作为类模板实现的。instance() 方法创建并返回类型模板参数的示例，该参数将是派生类：
+
+\begin{cpp}
+template <class T>
+class SingletonBase
+{
+    protected:
+    SingletonBase() {}
+public:
+    SingletonBase(SingletonBase const &) = delete;
+    SingletonBase& operator=(SingletonBase const&) = delete;
+    static T& instance()
+    {
+        static T single;
+        return single;
+    }
+};
+class Single : public SingletonBase<Single>
+{
+    Single() {}
+    friend class SingletonBase<Single>;
+public:
+    void demo() { std::cout << "demo" << '\n'; }
+};
+\end{cpp}
+
+上一节中的 Singleton 类变成了 SingletonBase 类模板。默认构造函数不再是私有的而是受保护的，因为必须从派生类访问。这个例子中，需要实例化单个对象的类称为 Single，构造函数必须私有，但默认构造函数也必须对基类模板可用；因此，SingletonBase<Single> 是 Single 类型的“朋友”。
+
+

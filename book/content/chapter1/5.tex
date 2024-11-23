@@ -1,0 +1,207 @@
+
+
+C++11标准为指定和查询类型的对齐要求提供了标准化方法（之前，这只能通过编译器的特定方法实现）。控制对齐对于提升不同处理器上的性能,以及启用某些仅在特定对齐数据上工作的指令至关重要。
+
+例如，Intel SIMD 扩展（SSE）和SSE2 是一套处理器指令，当相同的操作需要应用于多个数据对象时，可以显著提高性能，这些指令要求数据具有16字节的对齐。对于扩展了大多数整数处理器指令至256位的Intel高级向量扩展（或Intel AVX），建议使用32字节的对齐。本示例将探讨使用 alignas 特性来控制对齐要求，以及 alignof 操作符，用于获取类型的对齐要求。
+
+\mySubsubsection{}{Getting ready}
+
+应该对数据对齐是什么，以及编译器如何执行默认的数据对齐有所了解。
+
+\mySubsubsection{}{How to do it...}
+
+\begin{itemize}
+\item
+若要控制类型（无论是类级别，还是数据成员级别）或对象的对齐，请使用alignas关键字：
+
+\begin{cpp}
+struct alignas(4) foo
+{
+    char a;
+    char b;
+};
+struct bar
+{
+    alignas(2) char a;
+    alignas(8) int  b;
+};
+alignas(8)   int a;
+alignas(256) long b[4];
+\end{cpp}
+
+\item
+若要查询类型的对齐，请使用alignof操作符:
+
+\begin{cpp}
+auto align = alignof(foo);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+处理器并不是一次访问一个字节，而是以2的次幂（如2、4、8、16、32等）为单位的大块进行内存访问，所以编译器在内存中对齐数据以确保处理器能够轻松访问这一点至关重要。如果数据未对齐，编译器就需要进行额外的工作来访问数据；需要读取多个数据块，进行位移并丢弃不必要的字节，然后合并剩余部分。
+
+C++编译器根据数据类型的大小来对变量进行对齐。标准仅规定了 char、signed char、unsigned char、char8\_t（C++20）和 std::byte（C++17）的大小必须为1。还要求 short 的大小至少为16位，long 的大小至少为32位，long long 的大小至少为64位。同时，标准还要求满足 1 == sizeof(char) <= sizeof(short) <= sizeof(int) <= sizeof(long) <= sizeof(long long)。因此，大多数类型的大小是编译器特定的，可能依赖于平台。通常情况下，这些类型的大小分别为：bool 和 char 为1字节，short 为2字节，int、long 和 float 为4字节，double 和 long long 为8字节，以此类推。对于结构体或联合体，其对齐必须与最大成员的大小相匹配，以避免性能问题。为了说明这一点，看看以下数据结构：
+
+\begin{cpp}
+struct foo1 // size = 1, alignment = 1
+{                // foo1:    +-+
+    char a;      // members: |a|
+};
+struct foo2 // size = 2, alignment = 1
+{                // foo2:    +-+-+
+    char a;      // members  |a|b|
+    char b;
+};
+struct foo3 // size = 8, alignment = 4
+{                // foo3:    +----+----+
+    char a;      // members: |a...|bbbb|
+    int  b;      // . represents a byte of padding
+};
+\end{cpp}
+
+考虑以下结构体foo1和foo2大小不同，但对齐方式相同——均为1——因为所有数据成员都是类型为char，其大小为1字节。而在结构体foo3中，第二个成员是一个整数，大小为4字节，所以这个结构体的成员对齐是在4字节的地址上完成的，编译器引入了填充字节。
+
+\begin{cpp}
+struct foo3_
+{
+    char a;        // 1 byte
+    char _pad0[3]; // 3 bytes padding to put b on a 4-byte boundary
+    int  b;        // 4 bytes
+};
+\end{cpp}
+
+同样地，下面的结构体总大小为24字节，对齐要求为8字节，这是因为最大的成员是一个大小为8字节的double类型。为了确保所有成员都能在8字节边界的地址上访问，这个结构体需要多处填充：
+
+\begin{cpp}
+struct foo4 // size = 24, alignment = 8
+{                 // foo4:    +--------+--------+--------+--------+
+    int a;        // members: |aaaab...|cccc....|dddddddd|e.......|
+    char b;       // . represents a byte of padding
+    float c;
+    double d;
+    bool e;
+};
+\end{cpp}
+
+编译器实际创建的结构体如下所示：
+
+\begin{cpp}
+struct foo4_
+{
+    int a;         // 4 bytes
+    char b;        // 1 byte
+    char _pad0[3]; // 3 bytes padding to put c on a 8-byte boundary
+    float c;       // 4 bytes
+    char _pad1[4]; // 4 bytes padding to put d on a 8-byte boundary
+    double d;      // 8 bytes
+    bool e;        // 1 byte
+    char _pad2[7]; // 7 bytes padding to make sizeof struct multiple of 8
+};
+\end{cpp}
+
+C++11使用alignas说明符来指定对象或类型的对齐方式，可以用一个表达式（一个计算结果为0或有效对齐值的整型常量表达式）、类型ID或参数包。alignas说明符可以应用于变量声明、不表示位字段的类数据成员声明，或者类、联合体或枚举的声明。
+
+应用了alignas说明符的类型或实例，将具有等于所有用于声明的alignas说明符的最大（大于零）表达式的对齐要求。
+
+使用alignas说明符时有几个限制：
+
+\begin{itemize}
+\item
+唯一有效的对齐值是2的幂（1, 2, 4, 8, 16, 32等）。其他值都非法，程序会认为是不合法的形式；但这不一定导致错误，编译器可能会选择忽略该说明符。
+
+\item
+会忽略对齐值0。
+
+\item
+如果声明中最大的alignas值小于没有alignas说明符时的自然对齐值，则程序也会认为是不合法的形式。
+\end{itemize}
+
+下面的例子中，alignas说明符应用于类声明。没有alignas说明符的情况下，自然对齐将是1，但加上alignas(4)之后，变为4：
+
+\begin{cpp}
+struct alignas(4) foo
+{
+    char a;
+    char b;
+};
+\end{cpp}
+
+换句话说，编译器将上述类转换为如下形式：
+
+\begin{cpp}
+struct foo
+{
+    char a;
+    char b;
+    char _pad0[2];
+};
+\end{cpp}
+
+alignas说明符可以同时应用于类声明和成员数据声明，其中最严格（即最大）的值会胜出。下面的例子中，成员a的自然大小为1字节，需要对齐至2字节；成员b的自然大小为4字节，需要对齐至8字节，所以最严格的对齐要求是8字节。整个类的对齐要求是4字节，这比最严格的对齐要求要弱（小），因此会忽略该值，并且编译器会产生警告：
+
+\begin{cpp}
+struct alignas(4) foo
+{
+    alignas(2) char a;
+    alignas(8) int  b;
+};
+\end{cpp}
+
+结果是像这样的结构体：
+
+\begin{cpp}
+struct foo
+{
+    char a;
+    char _pad0[7];
+    int b;
+    char _pad1[4];
+};
+\end{cpp}
+
+alignas说明符也可以应用于变量。下面的例子中，整数变量a需要放在内存中8字节的倍数位置。下一个变量，包含4个长整型的数组，可放在内存中256字节的倍数位置，编译器会在两个变量之间插入最多244字节的填充（取决于变量a位于内存中的哪个8字节倍数位置）：
+
+\begin{cpp}
+alignas(8)   int a;
+alignas(256) long b[4];
+printf("%p\n", &a); // eg. 0000006C0D9EF908
+printf("%p\n", &b); // eg. 0000006C0D9EFA00
+\end{cpp}
+
+查看地址，可以看到变量a确实位于8字节的倍数地址上，而变量b位于256字节（十六进制100）的倍数地址上。
+
+为了查询类型的对齐要求，使用alignof操作符。与sizeof不同，此操作符只能应用于类型，而不能应用于变量或类数据成员。可以应用于完整类型、数组类型或引用类型。对于数组，返回值是元素类型的对齐值；对于引用，返回值是引用类型的对齐值。以下是几个例子：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{表达式} & \textbf{结果值}                                       \\ \hline
+\endfirsthead
+%
+\endhead
+%
+alignof(char)       & 1，char的自然对齐是1             \\ \hline
+alignof(int)        & 4，int的自然对齐是4              \\ \hline
+alignof(int*)       & 32位系统上是4，64位系统上是8，指针的对齐值   \\ \hline
+alignof(int{[}4{]}) & 4，素类型的自然对齐是4 \\ \hline
+alignof(foo\&) & 8，类foo的指定对齐值是8 \\ \hline
+\end{longtable}
+
+\begin{center}
+表1.1: alignof表达式及其求值结果示例
+\end{center}
+
+alignas说明符在希望强制对数据类型进行对齐（考虑前述的限制）时非常有用，这样可以使该类型的变量能够高效地访问和复制。因此，优化CPU读写操作时，可避免不必要的缓存行失效。
+
+这在某些性能敏感的应用程序类别中尤为重要，如游戏或交易应用程序。相反，alignof操作符用于检索指定类型的最小对齐要求。
+
+
+
+
+
+
+
+

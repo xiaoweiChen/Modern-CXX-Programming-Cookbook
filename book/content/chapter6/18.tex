@@ -1,0 +1,122 @@
+
+调试是软件开发中不可或缺的一部分。无论是多么简单或复杂的程序，都很难从第一次尝试起就按预期运行。开发者会花费大量时间调试代码，使用各种工具和技术，从调试器到打印到控制台或文本文件的消息。有时候，希望在日志消息中提供详细的信息来源，包括文件名、行号，甚至可能是函数名。虽然这在过去可以通过一些标准宏实现， C++20 中一个新的实用类型 \verb|std::source_location| 能够以现代方式做到这一点。
+
+\mySubsubsection{}{How to do it...}
+
+要记录包括文件名、行号和函数名在内的信息，请执行以下步骤：
+
+\begin{itemize}
+\item
+定义一个带有所有需要提供的信息参数（如消息、严重性等）的日志记录函数。
+
+\item
+添加一个 \verb|std::source_location| 类型参数（需要包含 \verb|<source_location>| 头文件），并将其默认值设为 \verb|std::source_location::current()|。
+
+\item
+使用成员函数 \verb|file_name()|、\verb|line()|、\verb|column()| 和 \verb|function_name()| 获取调用源的信息。
+\end{itemize}
+
+下面展示了一个这样的日志记录函数的例子:
+
+\begin{cpp}
+void log(std::string_view message,
+         std::source_location const location = std::source_location::current())
+{
+    std::cout   << location.file_name() << '('
+                << location.line() << ':'
+                << location.column() << ") '"
+                << location.function_name() << "': "
+                << message << '\n';
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+C++20 之前，记录诸如源文件、行号和函数名之类的信息只能借助多个宏来实现：
+
+\begin{itemize}
+\item
+\verb|__FILE__|, 展开为当前文件的名称
+
+\item
+\verb|__LINE__|, 展开为源文件的行号
+\end{itemize}
+
+此外，所有编译器都支持非标准宏，包括 \verb|__func__| / \verb|__FUNCTION__|，这些宏提供当前函数的名称。
+
+使用这些宏，可以编写如下日志记录函数：
+
+\begin{cpp}
+void log(std::string_view message,
+         std::string_view file,
+         int line,
+         std::string_view function)
+{
+    std::cout << file << '('
+              << line << ") '"
+              << function << "': "
+              << message << '\n';
+}
+\end{cpp}
+
+然而，这些宏必须从函数执行的上下文中使用：
+
+\begin{cpp}
+int main()
+{
+    log("This is a log entry!", __FILE__, __LINE__, __FUNCTION__);
+}
+\end{cpp}
+
+运行此函数的结果将在控制台上显示如下：
+
+\begin{shell}
+[...]\source.cpp(23) 'main': This is a log entry!
+\end{shell}
+
+C++20 的 \verb|std::source_location| 是一个更好的替代方案：
+
+\begin{itemize}
+\item
+不再依赖于宏。
+
+\item
+包括列信息，而不仅仅是行信息。
+
+\item
+可以在日志记录函数的签名中使用，简化调用。
+\end{itemize}
+
+“How to do it...”定义的 log() 函数有如下调用：
+
+\begin{cpp}
+int main()
+{
+    log("This is a log entry!");
+}
+\end{cpp}
+
+将生成以下输出：
+
+\begin{shell}
+[...]\source.cpp(23:4) 'int __cdecl main(void)': This is a log entry!
+\end{shell}
+
+尽管存在默认构造函数，但用默认值初始化数据。要获取正确的值，必须调用静态成员函数 current()。此函数的工作方式如下：
+
+\begin{itemize}
+\item
+直接在一个函数调用中调用时，用关于调用位置的信息初始化数据。
+
+\item
+在默认成员初始化器中使用时，用关于构造函数聚合初始化数据成员的位置的信息初始化数据。
+
+\item
+用作默认参数（如本例所示）时，用调用位置（函数调用）的信息初始化数据。
+
+\item
+其他上下文中使用时，行为未定义。
+\end{itemize}
+
+需要注意的是，预处理器指令 \verb|#line| 会更改源代码行号和文件名。这会影响宏 \verb|__FILE__| 和 \verb|__LINE__| 返回的值。同样地，\verb|std::source_location| 也会受到 \verb|#line| 指令的影响，与标准宏相同。
+

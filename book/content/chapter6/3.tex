@@ -1,0 +1,118 @@
+上一个示例中，介绍了 C++20 对处理日历和使用 \verb|year_month_day| 类型，及其他来自 chrono 库的类型来表达格里高利历日期的支持。
+
+也了解了如何使用 \verb|hh_mm_ss| 类型来表示一天中的时间。这些例子中，都是使用系统时钟来处理时间点的，系统时钟测量的是 Unix 时间，因此默认使用的时区是 UTC。但通常更感兴趣的是本地时间，有时也可能是其他时区的时间，所以 chrono 库增加了一些功能来支持时区。本示例中，将介绍 chrono 中时区的使用。
+
+\mySubsubsection{}{Getting ready}
+
+继续这个示例之前，建议先阅读前一个示例。
+
+\mySubsubsection{}{How to do it...}
+
+可以使用 C++20 chrono 库来做以下事情：
+
+\begin{itemize}
+\item
+使用 \verb|std::chrono::current_zone()| 从时区数据库中检索本地时区。
+
+\item
+使用 \verb|std::chrono::locate_zone()| 通过其名称从时区数据库中检索特定的时区。
+
+\item
+使用 \verb|std::chrono::zoned_time| 类模板在一个特定的时区中表示一个时间点。
+
+\item
+检索并显示当前本地时间：
+
+\begin{cpp}
+auto time = zoned_time{ current_zone(), system_clock::now() };
+std::cout << time << '\n'; // 2024-01-16 22:10:30.9274320 EET
+\end{cpp}
+
+\item
+检索并显示另一个时区的当前时间。下面的例子中，使用意大利时间：
+
+\begin{cpp}
+auto time = zoned_time{ locate_zone("Europe/Rome"),
+                        system_clock::now() };
+std::cout << time << '\n'; // 2024-01-16 21:10:30.9291091 CET
+\end{cpp}
+
+\item
+使用适当的区域设置格式显示当前本地时间。例子中，当前时间是罗马尼亚时间，使用的区域设置也是罗马尼亚：
+
+\begin{cpp}
+auto time = zoned_time{ current_zone(), system_clock::now() };
+std::cout << std::format(std::locale{"ro_RO"}, "%c", time)
+          << '\n'; // 16.01.2024 22:12:57
+\end{cpp}
+
+\item
+一个特定的时区中表示一个时间点并显示。下面的例子中，是纽约时间：
+
+\begin{cpp}
+auto time = local_days{ 2024y / June / 1 } + 12h + 30min + 45s + 256ms;
+auto ny_time = zoned_time<std::chrono::milliseconds>{
+                    locate_zone("America/New_York"), time};
+std::cout << ny_time << '\n';
+// 2024-06-01 12:30:45.256 EDT
+\end{cpp}
+
+\item
+将一个特定时区中的时间点转换为另一个时区中的时间点。面的例子中，将纽约时间转换为洛杉矶时间：
+
+\begin{cpp}
+auto la_time = zoned_time<std::chrono::milliseconds>(
+                    locate_zone("America/Los_Angeles"),
+                    ny_time);
+std::cout << la_time << '\n'; // 2024-06-01 09:30:45.256 PDT
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+系统维护了一份 IANA 时区（TZ）数据库的副本（该数据库可在 \url{https://www.iana.org/time-zones} 在线获取）。作为用户，不能创建或修改数据库，但只能通过如 \verb|std::chrono::tzdb()| 或 \verb|std::chrono::get_tzdb_list()| 等函数检索其只读副本。时区的信息存储在 \verb|std::chrono::time_zone| 类型实例中，该实例不能直接创建；仅在初始化时区数据库时由库创建。不过，可以使用两个函数获得这些实例的常量访问权限：
+
+\begin{itemize}
+\item
+\verb|std::chrono::current_zone()| 检索表示本地时区的 \verb|time_zone| 实例。
+
+\item
+\verb|std::chrono::locate_zone()| 检索表示指定时区的 \verb|time_zone| 实例。
+\end{itemize}
+
+时区名称的例子包括 Europe/Berlin、Asia/Dubai 和 America/Los\_Angeles。当位置名称包含多个单词时，空格会用下划线（\_）代替，如前面的例子中洛杉矶写作 Los\_Angeles。
+
+所有 IANA TZ 数据库中的时区列表可以在 \url{https://en.wikipedia.org/wiki/List_of_tz_database_time_zones} 找到。
+
+C++20 chrono 库中有两组类型用于表示时间点：
+
+\begin{itemize}
+\item
+\verb|sys_days| 和 \verb|sys_seconds|（具有日和秒的精度）表示系统时区中的时间点，即 UTC。这些是 \verb|std::chrono::sys_time| 的类型别名，后者反过来又是 \verb|std::chrono::time_point| 的别名，使用的是 \verb|std::chrono::system_clock|。
+
+\item
+\verb|local_days| 和 \verb|local_seconds|（同样具有日和秒的精度）表示尚未指定时区的时间点。这些是 \verb|std::chrono::local_time| 的类型别名，后者反过来是使用 \verb|std::chrono::local_t| 伪时钟的 \verb|std::chrono::time_point| 的别名。此时钟的目的是，指示一个尚未指定的时区。
+\end{itemize}
+
+\verb|std::chrono::zoned_time| 类型模板表示时区与时间点的配对，可以由 \verb|sys_time|、\verb|local_time| 或另一个 \verb|zoned_time| 实例创建。以下是所有这些情况的例子：
+
+\begin{cpp}
+auto zst = zoned_time<std::chrono::seconds>(
+    current_zone(),
+    sys_days{ 2024y / May / 10 } +14h + 20min + 30s);
+std::cout << zst << '\n'; // 2024-05-10 17:20:30 EEST (or GMT+3)
+    auto zlt = zoned_time<std::chrono::seconds>(
+    current_zone(),
+    local_days{ 2024y / May / 10 } +14h + 20min + 30s);
+std::cout << zlt << '\n'; // 2024-05-10 14:20:30 EEST (or GMT+3)
+auto zpt = zoned_time<std::chrono::seconds>(
+    locate_zone("Europe/Paris"),
+    zlt);
+std::cout << zpt << '\n'; //2024-05-10 13:20:30 CEST (or GMT+2)
+\end{cpp}
+
+注释中的时间基于罗马尼亚时区。第一个例子中，时间以 \verb|sys_days| 表示，使用的是 UTC 时区。由于罗马尼亚时间在 2024 年 5 月 10 日是 UTC+3（实行夏令时），所以当地时间是 17:20:30。
+
+第二个例子中，时间是以 \verb|local_days| 指定的，这是一个与时区无关的时间。当与当前时区配对时，实际时间是 14:20:30。
+
+第三个也是最后一个例子中，将罗马尼亚的本地时间转换为巴黎的时间，即 13:20:30（因为在那天，巴黎的时间是 UTC+2）。

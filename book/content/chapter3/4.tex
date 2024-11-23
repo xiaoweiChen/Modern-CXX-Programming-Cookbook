@@ -1,0 +1,250 @@
+lambda是匿名的函数对象，应该可以递归地调用。但这样做动机不明，需要将lambda分配给一个函数包装器并通过引用捕获该包装器。虽然可以说递归lambda没有什么意义，并且通常情况下普通函数可能是一个更好的选择。本示例中，会介绍如何对lambda进行递归。
+
+\mySubsubsection{}{Getting ready}
+
+为了演示如何递归lambda，将以斐波那契函数为示例。这个函数通常以递归方式实现：
+
+\begin{cpp}
+constexpr int fib(int const n)
+{
+    return n <= 2 ? 1 : fib(n - 1) + fib(n - 2);
+}
+\end{cpp}
+
+基于此实现，来看看如何使用递归lambda对其进行重写。
+
+\mySubsubsection{}{How to do it...}
+
+为了编写递归lambda函数，必须做以下几件事：
+
+\begin{itemize}
+\item
+在函数作用域内定义lambda。
+
+\item
+将lambda分配给std::function包装器。
+
+\item
+通过引用在lambda中捕获std::function对象，以便递归调用。
+\end{itemize}
+
+C++14中，上述模式可以使用通用lambda来简化：
+
+\begin{itemize}
+\item
+在函数作用域内定义lambda。
+
+\item
+声明第一个参数为auto占位符；这用于将lambda表达式本身作为参数传递给自身。
+
+\item
+通过传递lambda本身作为第一个参数来调用lambda表达式。
+\end{itemize}
+
+C++23中，这一模式可以进一步简化：
+
+\begin{itemize}
+\item
+在函数作用域内定义lambda。
+
+\item
+声明第一个参数为\verb|const auto&&| self；这是一个新的C++23特性，推导this或显式对象参数。可以通过self参数递归调用lambda表达式。
+
+\item
+通过调用lambda表达式并传递显式参数（如果有）来调用，并让编译器推导第一个参数。
+\end{itemize}
+
+以下是递归lambda的例子：
+
+\begin{itemize}
+\item
+在一个函数的作用域内，定义并在同一作用域内调用的递归斐波那契lambda表达式：
+
+\begin{cpp}
+void sample()
+{
+    std::function<int(int const)> lfib =
+    [&lfib](int const n)
+    {
+        return n <= 2 ? 1 : lfib(n - 1) + lfib(n - 2);
+    };
+    auto f10 = lfib(10);
+}
+\end{cpp}
+
+\item
+由一个函数返回的递归斐波那契lambda表达式：
+
+\begin{cpp}
+std::function<int(int const)> fib_create()
+{
+    std::function<int(int const)> f = [](int const n)
+    {
+        std::function<int(int const)> lfib = [&lfib](int n)
+        {
+            return n <= 2 ? 1 : lfib(n - 1) + lfib(n - 2);
+        };
+        return lfib(n);
+    };
+    return f;
+}
+
+void sample()
+{
+    auto lfib = fib_create();
+    auto f10 = lfib(10);
+}
+\end{cpp}
+
+\item
+作为类成员可递归调用的lambda表达式：
+
+\begin{cpp}
+struct fibonacci
+{
+    std::function<int(int const)> lfib =
+    [this](int const n)
+    {
+        return n <= 2 ? 1 : lfib(n - 1) + lfib(n - 2);
+    };
+};
+fibonacci f;
+f.lfib(10);
+\end{cpp}
+
+\item
+递归斐波那契通用lambda表达式——C++14：
+
+\begin{cpp}
+void sample()
+{
+    auto lfib = [](auto f, int const n)
+    {
+        if (n < 2) return 1;
+        else return f(f, n - 1) + f(f, n - 2);
+    };
+    lfib(lfib, 10);
+}
+\end{cpp}
+
+\item
+使用C++23特性的显式对象参数（或推导this）特性编写的递归斐波那契lambda表达式，这是对上面示例的进一步简化：
+
+\begin{cpp}
+void sample()
+{
+    auto lfib = [](this const auto& self, int n) -> int
+    {
+        return n <= 2 ? 1 : self(n - 1) + self(n - 2);
+    };
+    lfib(5);
+}
+
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+C++11中递归lambda时，首先考虑的是lambda表达式是一个函数对象，为了能够从lambda体内部递归调用，lambda必须捕获其闭包（即lambda的实例），所以lambda必须捕获自身，而这样做有几个含义：
+
+\begin{itemize}
+\item
+首先，lambda必须有一个名字；匿名lambda不能捕获以便再次调用。
+
+\item
+其次，lambda只能在函数作用域内定义。因为lambda只能捕获函数作用域内的变量，不能捕获具有静态存储的变量。命名空间作用域内定义的类型实例，或带有static或external限定符的类型实例具有静态存储特性。如果lambda是在命名空间作用域内定义的，其闭包也将具有静态存储特性，因此lambda不会捕获。
+
+\item
+第三个含义是lambda闭包的类型不能保持未指定状态，不能用auto说明符声明。无法让用auto类型说明符声明的变量出现在初始化器中。因为当初始化器正在处理时，变量的类型尚不清楚。因此，必须指定lambda闭包的类型，可以通过函数包装器std::function来实现。
+
+\item
+最后，lambda闭包必须通过引用捕获。如果通过复制（或值）捕获，则会创建一个未初始化的函数包装器副本。最终我们得到一个无法调用的类型实例。即使编译器不会对值捕获提出警告，但在调用闭包时，仍会抛出\verb|std::bad_function_call|异常。
+\end{itemize}
+
+“How to do it...”的第一个示例，递归lambda在另一个名为sample()的函数内定义。lambda表达式的签名和主体与介绍部分定义的递归函数fib()相同。lambda闭包会分配给了一个名为lfib的函数包装器，然后通过引用被lambda捕获，并从其主体中递归调用。由于闭包是通过引用捕获的，因此在lambda主体中调用时，将会进行初始化。
+
+第二个示例中，定义了一个返回lambda表达式闭包的函数，该函数又定义并调用了使用其参数调用的递归lambda。当需要从函数返回递归lambda时，必须实现此模式。因为调用递归lambda时，lambda闭包仍然必须可用，\verb|fib_create()|会返回一个函数包装器。调用时，该包装器会创建一个捕获自身的递归lambda。外部的f lambda不捕获任何东西，因此不会有悬空引用的问题。但当调用时，会创建嵌套lambda的闭包，这是实际调用的lambda，并返回应用该递归lfib lambda到其参数的结果。
+
+C++14中编写递归lambda更为简单，代替捕获lambda闭包，作为参数传递（通常是第一个）。可使用auto占位符声明了一个参数：
+
+\begin{cpp}
+auto lfib = [](auto f, int const n)
+{
+    if (n < 2) return 1;
+    else return f(f, n - 1) + f(f, n - 2);
+};
+lfib(lfib, 10);
+\end{cpp}
+
+lambda表达式是一个具有函数调用操作符的函数对象，通用lambda是一个具有模板函数调用操作符的函数实例。编译器为上述代码段生成的代码为：
+
+\begin{cpp}
+class __lambda_name_3
+{
+    public:
+    template<class T1>
+    inline int operator()(T1 f, const int n) const
+    {
+        if (n < 2) {
+            return 1;
+        }
+        else {
+            return f(f, n - 1) + f(f, n - 2);
+        }
+    }
+    template<>
+    inline int operator()<__lambda_name_3> (__lambda_name_3 f,
+    const int n) const
+    {
+        if (n < 2) {
+            return 1;
+        }
+        else {
+            return f.operator()(__lambda_name_3(f), n - 1) +
+            f.operator()(__lambda_name_3(f), n - 2);
+        }
+    }
+};
+__lambda_name_3 lfib = __lambda_name_3{};
+lfib.operator()(__lambda_name_3(lfib), 10);
+\end{cpp}
+
+函数调用操作符是一个模板函数，其第一个参数的类型为模板参数类型。主要模板提供了一个针对类类型本身的完整显式特化，可以将lambda本身作为参数传递来调用，从而避免在C++11中捕获std::function实例的情况。
+
+如果编译器支持C++23，借助显式对象参数特性（也称为推导this），可以进一步简化这个问题。这个能使编译器能够从函数内部判断，所调用表达式是否为左值或右值，或者是否为cv-或ref-限定，并且是什么类型。这一特性使得以下场景成为可能：
+
+\begin{itemize}
+\item
+避免使用基于重载的cv-和ref-限定符重复代码（例如，最常见的案例是没有限定符和带有const限定符的同一个函数）。
+
+\item
+通过使用简单的继承简化奇特的递归模板模式（CRTP），可从模式中去除递归。
+
+\item
+简化编写递归lambda的过程。
+\end{itemize}
+
+根据“How to do it...”给出的例子，编译器能够推断出第一个参数self的类型，不需要显式地将lambda闭包作为参数传递。
+
+注意，C++23的例子中，可使用尾部返回类型语法定义lambda表达式：
+
+\begin{cpp}
+[](this auto const & self, int n) -> int
+\end{cpp}
+
+如果没有这行代码，会遇到如下编译错误：
+
+\begin{shell}
+error: function 'operator()<(lambda)>' with deduced return type cannot be used before it is defined
+\end{shell}
+
+通过对函数的小改动，就不再需要尾部返回类型，而推导this特性又能正常工作：
+
+\begin{cpp}
+auto lfib = [](this auto const& self, int n)
+{
+    if (n <= 2) return 1;
+    return self(n - 1) + self(n - 2);
+};
+\end{cpp}
+

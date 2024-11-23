@@ -1,0 +1,127 @@
+处理容器时，经常需要在开始、结束或中间的某个位置插入新元素。有些算法，比如上一个示例中要求提供一个指向要插入的范围的迭代器，但如果简单地传递一个如 begin() 返回的迭代器，它不会插入而是覆盖容器中的元素。此外，不能使用 end() 返回的迭代器在末尾插入。为了执行这样的操作，标准库提供了一组迭代器和迭代器适配器，使这成为可能。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中讨论的迭代器和适配器在 <iterator> 头文件的 std 命名空间中可用。如果包含了如 <algorithm> 这样的头文件，就无需显式地包含 <iterator>。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下迭代器适配器将新元素插入到容器中：
+
+\begin{itemize}
+\item
+使用 \verb|std::back_inserter()| 对于具有 push\_back() 方法的容器，在其末尾插入元素：
+
+\begin{cpp}
+std::vector<int> v{ 1,2,3,4,5 };
+std::fill_n(std::back_inserter(v), 3, 0);
+// v={1,2,3,4,5,0,0,0}
+\end{cpp}
+
+\item
+使用 \verb|std::front_inserter()| 对于具有 \verb|push_front()| 方法的容器，在其开头插入元素：
+
+\begin{cpp}
+std::list<int> l{ 1,2,3,4,5 };
+std::fill_n(std::front_inserter(l), 3, 0);
+// l={0,0,0,1,2,3,4,5}
+\end{cpp}
+
+\item
+使用 \verb|std::inserter()| 对于具有 insert() 方法的容器，在任意位置插入元素：
+
+\begin{cpp}
+std::vector<int> v{ 1,2,3,4,5 };
+std::fill_n(std::inserter(v, v.begin()), 3, 0);
+// v={0,0,0,1,2,3,4,5}
+std::list<int> l{ 1,2,3,4,5 };
+auto it = l.begin();
+std::advance(it, 3);
+std::fill_n(std::inserter(l, it), 3, 0);
+// l={1,2,3,0,0,0,4,5}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|std::back_inserter()|、\verb|std::front_inserter()| 和 \verb|std::inserter()| 都是辅助函数，创建类型为 \verb|std::back_insert_iterator|、\verb|std::front_insert_iterator| 和 \verb|std::insert_iterator| 的迭代器适配器。这些都是输出迭代器，分别用于追加、前置或插入到构建的容器中。增加和解引用这些迭代器不会发生任何事情。但在赋值时，这些迭代器会调用容器的以下方法：
+
+\begin{itemize}
+\item
+\verb|std::back_insterter_iterator| 调用  push\_back()
+
+\item
+\verb|std::front_inserter_iterator| 调用  push\_front()
+
+\item
+\verb|std::insert_iterator| 调用  insert()
+\end{itemize}
+
+以下是简化版的 \verb|std::back_inserter_iterator| 实现：
+
+\begin{cpp}
+template<class C>
+class back_insert_iterator {
+public:
+    typedef back_insert_iterator<C> T;
+    typedef typename C::value_type V;
+    explicit back_insert_iterator( C& c ) :container( &c ) { }
+    T& operator=( const V& val ) {
+        container->push_back( val );
+        return *this;
+    }
+    T& operator*() { return *this; }
+    T& operator++() { return *this; }
+    T& operator++( int ) { return *this; }
+protected:
+    C* container;
+};
+\end{cpp}
+
+由于赋值操作符的工作方式，这些迭代器只能与某些标准容器一起使用：
+
+\begin{itemize}
+\item
+\verb|std::back_insert_iterator| 可以与 std::vector、std::list、std::deque 和 std::basic\_string 一起使用。
+
+\item
+\verb|std::front_insert_iterator| 可以与 std::list、std::forward\_list 和 std::deque 一起使用。
+
+\item
+\verb|std::insert_iterator| 可以与所有标准容器一起使用。
+\end{itemize}
+
+下面的例子展示了如何在 std::vector 的开头，插入三个值为 0 的元素：
+
+\begin{cpp}
+std::vector<int> v{ 1,2,3,4,5 };
+std::fill_n(std::inserter(v, v.begin()), 3, 0);
+// v={0,0,0,1,2,3,4,5}
+\end{cpp}
+
+std::inserter() 适配器接受两个参数：容器和一个元素应该被插入的位置的迭代器。在容器上调用 insert() 时，\verb|std::insert_iterator| 会递增迭代器，因此再次赋值时，可以将新元素插入到下一个位置：
+
+\begin{cpp}
+T& operator=(const V& v)
+{
+    iter = container->insert(iter, v);
+    ++iter;
+    return (*this);
+}
+\end{cpp}
+
+这段代码概念性地展示了 \verb|std::inserter_iterator| 适配器的赋值操作符是如何实现的。首先调用容器的 insert() 成员函数，然后递增返回的迭代器。所有标准容器都有一个带有这种签名的 insert() 方法，所以这个适配器可以与所有这些容器一起使用。
+
+\mySubsubsection{}{There's more...}
+
+这些迭代器适配器旨在与插入多个元素到范围的算法或函数一起使用。当然，也可以用来插入单个元素，但这是一种反模式，直接调用 push\_back()、push\_front() 或 insert() 会更简单和直观：
+
+\begin{cpp}
+std::vector<int> v{ 1,2,3,4,5 };
+*std::back_inserter(v) = 6; // v = {1,2,3,4,5,6}
+std::back_insert_iterator<std::vector<int>> it(v);
+*it = 7;                    // v = {1,2,3,4,5,6,7}
+\end{cpp}
+
+使用适配器迭代器插入单个元素的做法应当避免。这样做没有任何好处，只会使代码变得杂乱无章。
+

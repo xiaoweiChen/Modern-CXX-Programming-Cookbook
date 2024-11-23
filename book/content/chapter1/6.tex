@@ -1,0 +1,255 @@
+
+枚举（enumeration）是C++中的一种基本类型，用于定义一组值，这些值始终属于某个整型基础类型。枚举的命名值（称为枚举器，enumerators）是常量，使用关键字enum声明的枚举称为无作用域枚举（unscoped enumerations），而使用enum class或enum struct声明的枚举则称为有作用域枚举（scoped enumerations）。后者是在C++11中引入的，旨在解决无作用域枚举中存在的若干问题。
+
+\mySubsubsection{}{How to do it...}
+
+使用枚举时应该：
+
+\begin{itemize}
+\item
+尽可能使用有作用域枚举，而非无作用域枚举。
+
+\item
+使用enum class或enum struct声明有作用域枚举：
+
+\begin{cpp}
+enum class Status { Unknown, Created, Connected };
+Status s = Status::Created;
+\end{cpp}
+\end{itemize}
+
+\begin{myNotic}
+enum class和enum struct声明等价，在本书其余部分中，将使用enum class。
+\end{myNotic}
+
+有作用域枚举是有作用域限定的命名空间，C++20标准可以通过using指令与它们关联。可以这样做：
+
+\begin{itemize}
+\item
+使用using指令在局部作用域中引入有作用域枚举标识符：
+
+\begin{cpp}
+int main()
+{
+    using Status::Unknown;
+    Status s = Unknown;
+}
+\end{cpp}
+
+\item
+使用using指令在局部作用域中引入有作用域枚举的所有标识符：
+
+\begin{cpp}
+struct foo
+{
+    enum class Status { Unknown, Created, Connected };
+    using enum Status;
+};
+foo::Status s = foo::Created; // instead of
+// foo::Status::Created
+\end{cpp}
+
+\item
+switch语句中使用using enum指令引入枚举标识符以简化代码：
+
+\begin{cpp}
+void process(Status const s)
+{
+    switch (s)
+    {
+        using enum Status;
+        case Unknown:   /*…*/ break;
+        case Created:   /*...*/ break;
+        case Connected: /*...*/ break;
+    }
+}
+\end{cpp}
+\end{itemize}
+
+将有作用域枚举转换为其基础类型有时是必要的，特别是在使用旧风格API时，这些API通常接受整型参数。C++23，可以使用std::to\_underlying()工具函数将有作用域枚举转换为其基础类型：
+
+\begin{cpp}
+void old_api(unsigned flag);
+enum class user_rights : unsigned
+{
+    None, Read = 1, Write = 2, Delete = 4
+};
+old_api(std::to_underlying(user_rights::Read));
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+无作用域枚举存在一些问题，这些问题对开发者造成了困扰：
+
+\begin{itemize}
+\item
+将枚举器导出到周围的上下文中，这有两个缺点：
+
+\begin{itemize}
+\item
+如果两个枚举在同一个命名空间中有相同名称的枚举器，可能导致名称冲突。
+
+\item
+无法使用完全限定名来使用枚举器:
+
+\begin{cpp}
+enum Status {Unknown, Created, Connected};
+enum Codes {OK, Failure, Unknown};   // error
+auto status = Status::Created;       // error
+\end{cpp}
+\end{itemize}
+
+\item
+C++11之前，不能指定基础类型，而这个类型必须是整型，且不能大于int，除非枚举器值不能适应有符号或无符号整型，所以枚举不可能前向声明。原因在于枚举的大小未知，直到定义枚举器值后，编译器才能选择合适的基础整型。这个问题已在C++11中得到解决。
+
+\item
+枚举器值可以隐式转换为int。可以有意或无意地混合具有特定意义的枚举值和整数（这些整数可能与枚举的意义无关），而编译器不会发出警告:
+
+\begin{cpp}
+enum Codes { OK, Failure };
+void include_offset(int pixels) {/*...*/}
+include_offset(Failure);
+\end{cpp}
+\end{itemize}
+
+相比之下，有作用域枚举基本上是强类型的枚举，行为与无作用域枚举不同：
+
+\begin{itemize}
+\item
+不会将其枚举器导出到周围的作用域。上面提到的两个枚举将变为如下形式，不再产生名称冲突，并且可以使用完全限定名:
+
+\begin{cpp}
+enum class Status { Unknown, Created, Connected };
+enum class Codes { OK, Failure, Unknown }; // OK
+Codes code = Codes::Unknown;               // OK
+\end{cpp}
+
+\item
+可以指定基础类型。对于基础类型的规定规则同样适用于有作用域枚举，只是用户可以显式指定基础类型。可以在定义可用之前知道基础类型，所以也解决了前向声明的问题：
+
+\begin{cpp}
+enum class Codes : unsigned int;
+void print_code(Codes const code) {}
+enum class Codes : unsigned int
+{
+    OK = 0,
+    Failure = 1,
+    Unknown = 0xFFFF0000U
+};
+\end{cpp}
+
+\item
+有作用域枚举的值不再隐式转换为int。将enum class的值赋给整型变量会触发编译器错误，除非指定了显式转换:
+
+\begin{cpp}
+Codes c1 = Codes::OK;                       // OK
+int c2 = Codes::Failure;                    // error
+int c3 = static_cast<int>(Codes::Failure);  // OK
+\end{cpp}
+
+\end{itemize}
+
+然而，有作用域枚举有一个缺点：受限制的作用域。不会在外部作用域中导出标识符，这在某些情况下可能不方便，例如:正在编写一个switch语句，并且需要为每个case标签重复枚举名称:
+
+\begin{cpp}
+std::string_view to_string(Status const s)
+{
+    switch (s)
+    {
+        case Status::Unknown:   return "Unknown";
+        case Status::Created:   return "Created";
+        case Status::Connected: return "Connected";
+    }
+}
+\end{cpp}
+
+C++20，可以使用带有有作用域枚举名称的using指令来简化。上述代码可简化为:
+
+\begin{cpp}
+std::string_view to_string(Status const s)
+{
+    switch (s)
+    {
+        using enum Status;
+        case Unknown:   return "Unknown";
+        case Created:   return "Created";
+        case Connected: return "Connected";
+    }
+}
+\end{cpp}
+
+using指令的效果是，所有的枚举器标识符都会引入到了局部作用域中，可以使用非限定形式来引用。也可以通过使用带有限定标识符名称的using指令，只将特定的枚举标识符引入局部作用域，比如using Status::Connected。
+
+C++23版本的标准添加了几个处理有作用域枚举的工具函数。其中第一个是std::to\_underlying()(需要头文件<utility>)，其功能是将枚举转换为其基础类型。
+
+其目的是与不使用有作用域枚举的API（无论是遗留的还是新的）一起工作。来看一个例子：考虑以下函数old\_api()，接受一个整型参数，将其解释为控制用户权限的标志:
+
+\begin{cpp}
+void old_api(unsigned flag)
+{
+    if ((flag & 0x01) == 0x01) { /* can read */ }
+    if ((flag & 0x02) == 0x02) { /* can write */ }
+    if ((flag & 0x04) == 0x04) { /* can delete */ }
+}
+\end{cpp}
+
+这个函数有如下调用:
+
+\begin{cpp}
+old_api(1); // read only
+old_api(3); // read & write
+\end{cpp}
+
+系统的新定义了如下用于用户权限的有作用域枚举:
+
+\begin{cpp}
+enum class user_rights : unsigned
+{
+    None,
+    Read = 1,
+    Write = 2,
+    Delete = 4
+};
+\end{cpp}
+
+不能使用来自user\_rights的枚举来调用old\_api()函数，必须使用static\_cast:
+
+\begin{cpp}
+old_api(static_cast<int>(user_rights::Read)); // read only
+old_api(static_cast<int>(user_rights::Read) |
+        static_cast<int>(user_rights::Write)); // read & write
+\end{cpp}
+
+为了避免这些static\_cast，C++23提供了std::to\_underlying()函数:
+
+\begin{cpp}
+old_api(std::to_underlying(user_rights::Read));
+old_api(std::to_underlying(user_rights::Read) |
+        std::to_underlying(user_rights::Write));
+\end{cpp}
+
+C++23中引入的另一个工具是类型特征is\_scoped\_enum<T>，在<type\_traits>头文件中。包含一个名为value的成员常量，如果模板类型参数T是有作用域枚举类型，则该常量等于true，否则等于false；还有一个辅助变量模板is\_scoped\_enum\_v<T>。
+
+这个类型特征的目的是识别枚举是否是有作用域的，以便根据枚举的类型应用不同的行为。这里有一个简单的例子：
+
+\begin{cpp}
+enum A {};
+enum class B {};
+int main()
+{
+    std::cout << std::is_scoped_enum_v<A> << '\n';
+    std::cout << std::is_scoped_enum_v<B> << '\n';
+}
+\end{cpp}
+
+因为A是一个无作用域的枚举，第一行将打印0；因为B是一个有作用域的枚举，第二行将打印1。
+
+
+
+
+
+
+
+
+
+

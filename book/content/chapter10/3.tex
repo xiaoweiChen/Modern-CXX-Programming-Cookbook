@@ -1,0 +1,163 @@
+
+C++ 只支持位置参数，可根据参数的位置传递给函数。其他语言还支持命名参数——调用时指定参数名称和调用参数。对于具有默认值的参数，这很有用。一个函数可能有带有默认值的参数，尽管其总是出现在所有非默认参数之后。
+
+一种称为命名参数惯用法的技术，提供了一种方法来模拟命名参数并帮助解决“为默认参数之前的参数传参”的问题。
+
+\mySubsubsection{}{Getting ready}
+
+为了举例说明命名参数惯用法，将使用如下代码中的 control 类型：
+
+\begin{cpp}
+class control
+{
+    int id_;
+    std::string text_;
+    int width_;
+    int height_;
+    bool visible_;
+public:
+    control(
+    int const id,
+    std::string_view text = "",
+    int const width = 0,
+    int const height = 0,
+    bool const visible = false):
+        id_(id), text_(text),
+        width_(width), height_(height),
+        visible_(visible)
+    {}
+};
+\end{cpp}
+
+control 类型代表一个可视控件，如按钮或输入框，并具有数值标识符、文本、尺寸和可见性等属性。这些属性提供给构造函数，除了 ID 之外，所有其他的都有默认值。实际上，这样的类型会有许多其他属性，比如：文本画笔、背景画笔、边框样式、字体大小、字体系列等。
+
+\mySubsubsection{}{How to do it...}
+
+为了实现一个函数（通常有很多默认参数）的命名参数惯用法，按照以下步骤操作：
+
+\begin{enumerate}
+\item
+创建一个类型来包装函数的参数：
+
+\begin{cpp}
+class control_properties
+{
+    int id_;
+    std::string text_;
+    int width_ = 0;
+    int height_ = 0;
+    bool visible_ = false;
+};
+\end{cpp}
+
+\item
+需要访问这些属性的类或函数，可以声明为友元(以避免编写多余的 getter)：
+
+\begin{cpp}
+friend class control;
+\end{cpp}
+
+\item
+原始函数中，每个没有默认值的位置参数，应该成为类构造函数的一个位置参数，且没有默认值：
+
+\begin{cpp}
+public:
+    control_properties(int const id) :id_(id)
+    {}
+\end{cpp}
+
+\item
+对于原始函数中每个有默认值的位置参数，应该有一个同名的函数，其内部设置值并返回一个对该类的引用：
+
+\begin{cpp}
+public:
+    control_properties& text(std::string_view t)
+    { text_ = t.data(); return *this; }
+    control_properties& width(int const w)
+    { width_ = w; return *this; }
+    control_properties& height(int const h)
+    { height_ = h; return *this; }
+    control_properties& visible(bool const v)
+    { visible_ = v; return *this; }
+\end{cpp}
+
+\item
+应该修改原始函数，或者提供一个重载版本，以接受一个新类的参数，从中读取属性值：
+
+\begin{cpp}
+control(control_properties const & cp):
+    id_(cp.id_),
+    text_(cp.text_),
+    width_(cp.width_),
+    height_(cp.height_),
+    visible_(cp.visible_)
+{}
+\end{cpp}
+\end{enumerate}
+
+综上所述，结果如下：
+
+\begin{cpp}
+class control;
+class control_properties
+{
+    int id_;
+    std::string text_;
+    int width_ = 0;
+    int height_ = 0;
+    bool visible_ = false;
+    friend class control;
+public:
+    control_properties(int const id) :id_(id)
+    {}
+    control_properties& text(std::string_view t)
+    { text_ = t.data(); return *this; }
+    control_properties& width(int const w)
+    { width_ = w; return *this; }
+    control_properties& height(int const h)
+    { height_ = h; return *this; }
+    control_properties& visible(bool const v)
+    { visible_ = v; return *this; }
+};
+class control
+{
+    int         id_;
+    std::string text_;
+    int         width_;
+    int         height_;
+    bool        visible_;
+    public:
+    control(control_properties const & cp):
+        id_(cp.id_),
+        text_(cp.text_),
+        width_(cp.width_),
+        height_(cp.height_),
+        visible_(cp.visible_)
+    {}
+};
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+最初的 control 类有一个带有多个参数的构造函数。实际中，可以找到参数数量很多的例子。实践中常遇到的一种解决方案是，将常见的布尔类型属性组合成位标志，这些位标志可以作为一个单一的整数参数一起传递（例如，控件的边框样式，定义边框应在哪些位置可见：顶部、底部、左侧、右侧，或者是这四个位置的任意组合）。使用初始实现创建一个 control 实例如下所示：
+
+\begin{cpp}
+control c(1044, "sample", 100, 20, true);
+\end{cpp}
+
+命名参数惯用法的优点在于，允许仅为想要的参数指定值，顺序任意，使用名称指定，比固定的位置顺序直观得多。
+
+虽然实现这一惯用法并没有单一的策略，但本示例相当典型。control 类型的构造函数中提供的属性已放入一个单独的类型中，称为 \verb|control_properties|，将 control 类型声明为友元类，允许访问其私有数据成员而无需提供 getter 方法。这有一个副作用，即限制了 \verb|control_properties| 在 control 类型外部的使用。control 类型构造函数的非可选参数也是 \verb|control_properties| 构造函数的非可选参数。对于所有其他带有默认值的参数，\verb|control_properties| 类型定义了一个具有相关名称的函数，该函数只是将数据成员设置为提供的参数，然后返回一个 \verb|control_properties| 的引用。这使得用户能够以任意顺序链式调用这些函数。
+
+control 类型的构造函数已经替换为一个新的构造函数，该构造函数只有一个参数，即对 \verb|control_properties| 实例的常量引用，其数据成员会复制到 control 实例的数据成员中。
+
+使用这种方式实现的命名参数惯用法，创建一个 control 实例：
+
+\begin{cpp}
+control c(control_properties(1044)
+        .visible(true)
+        .height(20)
+        .width(100));
+\end{cpp}
+
+

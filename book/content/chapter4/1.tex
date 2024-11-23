@@ -1,0 +1,281 @@
+
+条件编译是一种简单的机制，允许开发人员维护单一的代码库，但只将代码的某些部分考虑进编译过程，以生成不同的可执行文件，通常是为运行在不同平台或硬件上，或者依赖不同的库或库版本。常见的例子包括基于编译器、平台（x86、x64、ARM 等）、配置（调试或发布）、或用户定义的具体条件来使用或忽略代码。本示例中，将介绍条件编译如何工作。
+
+\mySubsubsection{}{Getting ready}
+
+条件编译技术广泛用于许多目的。本示例中，将了解几个例子，并解释其工作原理。这项技术并不局限于这些例子。对于本示例的范围，只会考虑三大编译器：GCC、Clang 和 VC++。
+
+\mySubsubsection{}{How to do it...}
+
+要条件性地编译代码段，可以使用 \verb|#if|、\verb|#ifdef| 和 \verb|#ifndef| 指令（与 \verb|#elif|、\verb|#else| 和 \verb|#endif| 指令一起使用）。条件编译的一般形式为：
+
+\begin{cpp}
+#if condition1
+    text1
+#elif condition2
+    text2
+#elif condition3
+    text3
+#else
+    text4
+#endif
+\end{cpp}
+
+这里的条件意味着使用 \verb|defined identifier| 或 \verb|defined (identifier)| 语法检查宏是否已定义，也可以使用以下形式：
+
+\begin{cpp}
+#ifdef identifier1
+    text1
+#elifdef identifier2
+    text2
+#endif
+#ifndef identifier1
+    text1
+#elifndef identifier2
+    text2
+#endif
+\end{cpp}
+
+\verb|#elifdef| 和 \verb|#elifndef| 指令在 C++23 中引入。
+
+为了定义条件编译的宏，可以使用以下任一方法：
+
+\begin{itemize}
+\item
+在源代码中使用 \verb|#define| 指令：
+
+\begin{cpp}
+#define VERBOSE_PRINTS
+#define VERBOSITY_LEVEL 5
+\end{cpp}
+
+\item
+使用特定于每个编译器的编译器命令行选项。最常用的编译器的例子如下：
+
+\begin{itemize}
+\item
+Visual C++，使用 /Dname 或 /Dname=value（其中 /Dname 等同于 /Dname=1），例如 \verb|cl /DVERBOSITY_LEVEL=5|。
+
+\item
+GCC 和 Clang，使用 -D name 或 -D name=value（其中 -D name 等同于 -D name=1），例如 \verb|gcc -D VERBOSITY_LEVEL=5|。
+\end{itemize}
+\end{itemize}
+
+以下是条件编译的一些例子：
+
+\begin{itemize}
+\item
+头文件保护以避免重复定义（由于同一个翻译单元中多次包含相同的头文件）：
+
+\begin{cpp}
+#ifndef UNIQUE_NAME
+#define UNIQUE_NAME
+class widget { };
+#endif
+\end{cpp}
+
+\item
+跨平台应用程序的编译器特定代码。以下是一个示例，用于在控制台打印一条消息，显示编译器名称：
+
+\begin{cpp}
+void show_compiler()
+{
+#if defined _MSC_VER
+    std::cout << "Visual C++\n";
+#elif defined __clang__
+    std::cout << "Clang\n";
+#elif defined __GNUG__
+    std::cout << "GCC\n";
+#else
+    std::cout << "Unknown compiler\n";
+#endif
+}
+\end{cpp}
+
+\item
+针对多个架构的目标特定代码，例如，条件性地编译适用于多个编译器和架构的代码：
+
+\begin{cpp}
+void show_architecture()
+{
+#if defined _MSC_VER
+#if defined _M_X64
+    std::cout << "AMD64\n";
+#elif defined _M_IX86
+    std::cout << "INTEL x86\n";
+#elif defined _M_ARM
+    std::cout << "ARM\n";
+#else
+    std::cout << "unknown\n";
+#endif
+#elif defined __clang__ || __GNUG__
+#if defined __amd64__
+    std::cout << "AMD64\n";
+#elif defined __i386__
+    std::cout << "INTEL x86\n";
+#elif defined __arm__
+    std::cout << "ARM\n";
+#else
+    std::cout << "unknown\n";
+#endif
+#else
+#error Unknown compiler
+#endif
+}
+\end{cpp}
+
+\item
+配置特定代码，条件性地编译用于调试和发布的代码：
+
+\begin{cpp}
+void show_configuration()
+{
+#ifdef _DEBUG
+    std::cout << "debug\n";
+#else
+    std::cout << "release\n";
+#endif
+}
+\end{cpp}
+
+\item
+要检查语言或特性是否可用，可使用预定义宏 \verb|__cpp_xxx| 对于语言特性（如 \verb|__cpp_constexpr|、\verb|__cpp_constinit| 或 \verb|__cpp_modules|）和 \verb|__cpp_lib_xxx| 对于特性（如 \verb|__cpp_lib_concepts|、\verb|__cpp_lib_expected| 或 \verb|__cpp_lib_jthread|）。特性宏是在 C++20 中引入的，可以在 <version> 头文件中找到：
+
+\begin{cpp}
+#ifdef __cpp_consteval
+#define CONSTEVAL consteval
+#else
+#define CONSTEVAL constexpr
+#endif
+CONSTEVAL int twice(int const n)
+{
+    return n + n;
+}
+int main()
+{
+    twice(42);
+}
+\end{cpp}
+
+\item
+要检查某个头文件或源文件是否可用以包含，可以使用 \verb|__has_include| 指令(C++17)。以下示例检查 <optional> 头文件是否存在：
+
+\begin{cpp}
+#if __has_include(<optional>)
+#include <optional>
+template<class T> using optional_t = std::optional<T>;
+#elif
+#include "myoptional.h"
+template<class T> using optional_t = my::optional<T>;
+#endif
+\end{cpp}
+
+\item
+要检查某个属性是否受支持（以及从哪个版本开始支持），可以使用 \verb|__has_cpp_attribute| 指令(C++20)：
+
+\begin{cpp}
+#if defined(__has_cpp_attribute)
+#if __has_cpp_attribute(deprecated)
+#define DEPRECATED(msg) [[deprecated(msg)]]
+#endif
+#endif
+DEPRECATED("This function is deprecated.")
+void func() {}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+讨论编译之前，首先澄清一个经常会遇到的术语：翻译单元，这是编译的基本单位。是将源文件（一个 .cpp 文件）的内容和整个直接或间接包含的头文件合并的结果，但不包括本示例中描述的条件预处理语句排除的文本。
+
+使用预处理指令 \verb|#if|、\verb|#ifndef|、\verb|#ifdef|、\verb|#elif|、\verb|#else| 和 \verb|#endif| 时，编译器最多会选择一个分支，该分支的内容将被包含在翻译单元中进行编译。这些指令的主体可以是文本，包括其他预处理指令：
+
+\begin{itemize}
+\item
+\verb|#if|、\verb|#ifdef| 和 \verb|#ifndef| 必须有一个匹配的 \verb|#endif|。
+
+\item
+\verb|#if| 指令可以有多个 \verb|#elif| 指令，但只能有一个 \verb|#else|，并且必须是 \verb|#endif| 前的最后一个。
+
+\item
+\verb|#if|、\verb|#ifdef|、\verb|#ifndef|、\verb|#elif|、\verb|#else| 和 \verb|#endif| 可以嵌套。
+
+\item
+\verb|#if| 指令要求一个常量表达式，而 \verb|#ifdef| 和 \verb|#ifndef| 要求一个标识符。
+
+\item
+定义操作符可以用于预处理常量表达式，但仅限于 \verb|#if| 和 \verb|#elif| 指令中。
+
+\item
+如果标识符已定义，则 \verb|defined(identifier)| 认为是真；否则，认为是假。
+
+\item
+定义为空文本的标识符，也是已定义。
+
+\item
+\verb|#ifdef identifier| 等价于 \verb|#if defined(identifier)|。
+
+\item
+\verb|#ifndef identifier| 等价于 \verb|#if !defined(identifier)|。
+
+\item
+\verb|defined(identifier)| 和 \verb|defined identifier| 等价。
+\end{itemize}
+
+头文件保护是条件编译最常见的形式，这种方法用于防止同一翻译单元中多次包含头文件的内容（尽管每次都会扫描头文件以检测应包含的内容）。头文件中的代码会以防止多次包含的方式受到保护，如前一节给出的例子所示。考虑到给定的例子，这种方式的工作原理是，如果 \verb|UNIQUE_NAME| 宏（前一节中的通用名称）未定义，则 \verb|#if| 指令后的代码直到 \verb|#endif| 都会包含在翻译单元中编译。这时，\verb|UNIQUE_NAME| 宏就会通过 \verb|#define| 指令定义。下次在同一翻译单元中包含头文件时，\verb|UNIQUE_NAME| 宏已经定义，因此 \verb|#if| 指令体内的代码不会包含在翻译单元中，从而避免了重复。
+
+\begin{myNotic}
+注意，宏名称在整个应用程序中必须唯一；否则，只有第一个使用该宏的头文件中的代码会编译。其他使用相同名称的头文件中的代码将忽略。通常情况下，宏的名称基于定义它的头文件的名称。
+\end{myNotic}
+
+另一个重要的条件编译的例子是跨平台代码，这需要考虑不同的编译器和架构，通常是 Intel x86、AMD64 或 ARM ，但编译器要也会为其支持的平台定义自己的宏。"How to do it..." 部分的示例展示了如何为多个编译器和架构条件性地编译代码。
+
+\begin{myNotic}
+注意，上述示例中只考虑了几种架构。实际上，有多种宏可以用来识别相同的架构。确保在代码中使用这些类型的宏之前阅读每个编译器的文档。
+\end{myNotic}
+
+配置特定代码也通过宏和条件编译来处理。像 GCC 和 Clang 这样的编译器在使用 -g 标志时不会为调试配置定义特殊的宏。Visual C++ 在调试配置中确实定义了 \verb|_DEBUG|，如“How to do it...”的最后一个示例所示。对于其他编译器，需要显式地定义一个宏来识别这样的调试配置。
+
+特性测试是条件编译的一个重要应用场景，特别是在那些提供多平台（Windows、Linux 等）和编译器版本（C++11、C++14、C++17 等）支持的库中。库的实现者通常需要检查某个特定的语言特性和语言属性是否可用。这可以通过一组预定义的宏来实现：
+
+\begin{itemize}
+\item
+\verb|__cplusplus|：指示正在使用的 C++ 标准版本。会展开为以下值之一：对于 C++11 之前的版本为 199711L，对于 C++11 为 201103L，对于 C++14 为 201402L，对于 C++17 为 201703L，对于 C++20 为 202002L。本书撰写时，C++23 的值尚未定义。
+
+\item
+\verb|__cpp_xxx| 宏，用于确定是否支持某个语言特性。例子包括 \verb|__cpp_concepts|、\verb|__cpp_consteval|、\verb|__cpp_modules| 等。
+
+\item
+\verb|__cpp_lib_xxx| 宏，用于确定是否支持某个特性。例子包括 \verb|__cpp_lib_any|、\verb|__cpp_lib_optional|、\verb|__cpp_lib_constexpr_string| 等。这些宏定义在 C++20 引入的 <version> 头文件中。
+\end{itemize}
+
+随着新功能的添加，\verb|__cpp_xxx| 语言特性宏和 \verb|__cpp_lib_xxx| 库特性宏的集合正在扩大新的宏。这里展示的宏列表太长无法全部列出，但可以在 \url{https://en.cppreference.com/w/cpp/feature_test}查阅完整的列表。
+
+除了这些宏之外，还有两个指令 \verb|__has_include| 和 \verb|__has_cpp_attribute|，可以在 \verb|#if/#elif| 表达式中使用，以确定某个头文件或源文件是否存在，或者编译器是否支持某个属性。所有这些宏和指令都是有用的工具，可以帮助确定某个特定的功能是否存在，能够编写跨平台和编译器版本的可移植代码。
+
+\mySubsubsection{}{There's more...}
+
+进行条件编译时，可能希望显示警告或完全停止编译。可以通过两个诊断宏的帮助来实现：
+
+\begin{itemize}
+\item
+\verb|#error| 显示一条消息到控制台并停止程序的编译。
+
+\item
+自 C++23 起可用 \verb|#warning| 显示一条消息到控制台，但不停止程序的编译。
+\end{itemize}
+
+下面的代码展示了使用这些指令的例子：
+
+\begin{cpp}
+#ifdef _WIN64
+#error "64-bit not supported"
+#endif
+#if __cplusplus < 201703L
+#warning "Consider upgrading to a C++17 compiler"
+#endif
+\end{cpp}
+
+虽然 \verb|#warning| 自 C++23 起才可用，但许多编译器作为扩展提供了对这个指令的支持。
+
+

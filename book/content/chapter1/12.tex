@@ -1,0 +1,134 @@
+C++11标准引入了一种新的命名空间类型——内联命名空间——是一种机制，使得嵌套命名空间中的声明看起来和行为就像是外围命名空间的一部分。内联命名空间通过在命名空间声明中使用inline关键字来定义（匿名命名空间也可以内联）。这对库版本控制非常有用，在本示例中，将介绍如何使用内联命名空间来对符号进行版本控制。通过本示例，可以了解如何使用内联命名空间和条件编译来对源码进行版本管理。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将介绍命名空间和嵌套命名空间、模板和模板特化，以及使用预处理器宏进行条件编译。熟悉这些概念是继续进行本示例的前提。
+
+\mySubsubsection{}{How to do it...}
+
+为了提供库的多个版本，并让用户决定使用哪个版本，请按照以下步骤操作：
+
+\begin{itemize}
+\item
+在命名空间内定义库的内容。
+
+\item
+在内部内联命名空间内定义库的每个版本或部分。
+
+\item
+使用预处理器宏和\#if指令来启用库的特定版本。
+\end{itemize}
+
+以下示例展示了有两个版本的库：
+
+\begin{cpp}
+namespace modernlib
+{
+    #ifndef LIB_VERSION_2
+    inline namespace version_1
+    {
+        template<typename T>
+        int test(T value) { return 1; }
+    }
+    #endif
+    #ifdef LIB_VERSION_2
+    inline namespace version_2
+    {
+        template<typename T>
+        int test(T value) { return 2; }
+    }
+    #endif
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+内联命名空间的成员可视为外围命名空间的成员。这样的成员可以偏特化、显式实例化或显式特化。这是一个传递属性，如果命名空间A包含一个内联命名空间B，而B又包含一个内联命名空间C，则C的成员看起来就像是B和A的成员，而B的成员看起来就像是A的成员。
+
+为了更好地理解为什么内联命名空间是有帮助的，来看一个随着时间发展从第一个版本演进到第二个版本（及以后）的库。这个库在名为modernlib的命名空间下定义了所有的类型和函数。在第一个版本中，这个库可能如下所示：
+
+\begin{cpp}
+namespace modernlib
+{
+    template<typename T>
+    int test(T value) { return 1; }
+}
+\end{cpp}
+
+库的用户可以进行如下调用并返回值1：
+
+\begin{cpp}
+auto x = modernlib::test(42);
+\end{cpp}
+
+但用户可能会决定特化模板函数test()：
+
+\begin{cpp}
+struct foo { int a; };
+namespace modernlib
+{
+    template<>
+    int test(foo value) { return value.a; }
+}
+auto y = modernlib::test(foo{ 42 });
+\end{cpp}
+
+因为调用了特化函数，y的值不再是1而是42。
+
+到目前为止一切正常，但作为库开发者，当决定创建库的第二个版本，但仍同时发布第一版和第二版，并让客户端通过宏来控制使用哪一个版本。第二个版本中，提供了新的test()函数实现，不再返回1而是返回2。
+
+为了能够同时提供第一版和第二版的实现，将其放入名为version\_1和version\_2的嵌套命名空间中，并使用预处理器宏有条件地编译库：
+
+\begin{cpp}
+namespace modernlib
+{
+    namespace version_1
+    {
+        template<typename T>
+        int test(T value) { return 1; }
+    }
+    #ifndef LIB_VERSION_2
+    using namespace version_1;
+    #endif
+    namespace version_2
+    {
+        template<typename T>
+        int test(T value) { return 2; }
+    }
+    #ifdef LIB_VERSION_2
+    using namespace version_2;
+    #endif
+}
+\end{cpp}
+
+无论用户使用的是库的第一个版本还是第二个版本，代码都出错了。这是因为test函数现在位于嵌套命名空间中，而foo的特化是在modernlib命名空间中完成的，实际上应该是完成在modernlib::version\_1或modernlib::version\_2中。这是因为模板的特化要求必须在声明该模板的同一命名空间中完成。
+
+这种情况下，用户需要更改代码：
+
+\begin{cpp}
+#define LIB_VERSION_2
+#include "modernlib.h"
+struct foo { int a; };
+namespace modernlib
+{
+    namespace version_2
+    {
+        template<>
+        int test(foo value) { return value.a; }
+    }
+}
+\end{cpp}
+
+这是一个问题，库泄露了实现细节，客户需要了解这些细节才能进行模板特化。这些内部细节可以通过内联命名空间以本示例“How to do it...”部分所示的方式隐藏起来。通过定义modernlib库，当在modernlib命名空间中进行模板特化时，用户特化test()函数的代码不再出错，因为无论是version\_1::test()还是version\_2::test()（具体取决于用户实际使用的是哪个版本）都表现得像是外围modernlib命名空间的一部分。现在的实现细节对用户来说不可见，用户只能看到外围命名空间modernlib。
+
+然而，std命名空间为标准保留，永远不应该内联。另外，如果一个命名空间在其第一次定义时不是内联，那么也不应该定义为内联。
+
+
+
+
+
+
+
+
+
+

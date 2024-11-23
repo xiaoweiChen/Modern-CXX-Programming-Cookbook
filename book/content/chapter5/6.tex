@@ -1,0 +1,137 @@
+前一个示例中，介绍了用于在一个范围内搜索的标准通用算法，另一个经常需要执行的常见操作是对一个范围进行排序。许多程序，包括一些搜索算法，都需要一个已排序的范围。标准库提供了几种用于排序范围的通用算法。本示例中，将了解这些算法是什么，以及如何使用。
+
+\mySubsubsection{}{Getting ready}
+
+排序通用算法适用于由起始和结束迭代器定义的范围，因此可以对标准容器、数组或代表序列且具有随机访问迭代器的对象进行排序。然而，本示例中的所有例子都将使用 std::vector。
+
+\mySubsubsection{}{How to do it...}
+
+以下是用于排序范围的标准通用算法列表：
+
+\begin{itemize}
+\item
+使用 \verb|std::sort()| 对范围进行排序：
+
+\begin{cpp}
+std::vector<int> v{3, 13, 5, 8, 1, 2, 1};
+std::sort(v.begin(), v.end());
+// v = {1, 1, 2, 3, 5, 8, 13}
+std::sort(v.begin(), v.end(), std::greater<>());
+// v = {13, 8, 5, 3, 2, 1, 1}
+\end{cpp}
+
+\item
+使用 \verb|std::stable_sort()| 对范围进行排序，同时保持相等元素的原有顺序：
+
+\begin{cpp}
+struct Task
+{
+    int priority;
+    std::string name;
+};
+bool operator<(Task const & lhs, Task const & rhs) {
+    return lhs.priority < rhs.priority;
+}
+bool operator>(Task const & lhs, Task const & rhs) {
+    return lhs.priority > rhs.priority;
+}
+std::vector<Task> v{
+    { 10, "Task 1"s }, { 40, "Task 2"s }, { 25, "Task 3"s },
+    { 10, "Task 4"s }, { 80, "Task 5"s }, { 10, "Task 6"s },
+};
+std::stable_sort(v.begin(), v.end());
+// {{ 10, "Task 1" },{ 10, "Task 4" },{ 10, "Task 6" },
+    //  { 25, "Task 3" },{ 40, "Task 2" },{ 80, "Task 5" }}
+std::stable_sort(v.begin(), v.end(), std::greater<>());
+// {{ 80, "Task 5" },{ 40, "Task 2" },{ 25, "Task 3" },
+    //  { 10, "Task 1" },{ 10, "Task 4" },{ 10, "Task 6" }}
+\end{cpp}
+
+\item
+使用 \verb|std::partial_sort()| 对一个范围的部分进行排序（其余部分顺序未定）：
+
+\begin{cpp}
+std::vector<int> v{ 3, 13, 5, 8, 1, 2, 1 };
+std::partial_sort(v.begin(), v.begin() + 4, v.end());
+// v = {1, 1, 2, 3, ?, ?, ?}
+std::partial_sort(v.begin(), v.begin() + 4, v.end(),
+                  std::greater<>());
+// v = {13, 8, 5, 3, ?, ?, ?}
+\end{cpp}
+
+\item
+使用 \verb|std::partial_sort_copy()| 对一个范围的部分进行排序，并将排序后的元素复制到第二个范围中，同时保持原始范围不变：
+
+\begin{cpp}
+std::vector<int> v{ 3, 13, 5, 8, 1, 2, 1 };
+std::vector<int> vc(v.size());
+std::partial_sort_copy(v.begin(), v.end(), vc.begin(), vc.end());
+// v = {3, 13, 5, 8, 1, 2, 1}
+// vc = {1, 1, 2, 3, 5, 8, 13}
+std::partial_sort_copy(v.begin(), v.end(),
+                       vc.begin(), vc.end(),
+                       std::greater<>());
+// vc = {13, 8, 5, 3, 2, 1, 1}
+\end{cpp}
+
+\item
+使用 \verb|std::nth_element()| 对一个范围进行排序，第 N 个元素是该范围完全排序后会处于该位置的元素，而其前后的元素则分别小于和大于它，但不保证它们也有序：
+
+\begin{cpp}
+std::vector<int> v{ 3, 13, 5, 8, 1, 2, 1 };
+std::nth_element(v.begin(), v.begin() + 3, v.end());
+// v = {1, 1, 2, 3, 5, 8, 13}
+std::nth_element(v.begin(), v.begin() + 3, v.end(), std::greater<>());
+// v = {13, 8, 5, 3, 2, 1, 1}
+\end{cpp}
+
+\item
+使用 \verb|std::is_sorted()| 检查一个范围是否已排序：
+
+\begin{cpp}
+std::vector<int> v { 1, 1, 2, 3, 5, 8, 13 };
+auto sorted = std::is_sorted(v.cbegin(), v.cend());
+sorted = std::is_sorted(v.cbegin(), v.cend(), std::greater<>());
+\end{cpp}
+
+\item
+使用 \verb|std::is_sorted_until()| 查找从一个范围的开头开始的一个已排序子范围：
+
+\begin{cpp}
+std::vector<int> v{ 3, 13, 5, 8, 1, 2, 1 };
+auto it = std::is_sorted_until(v.cbegin(), v.cend());
+auto length = std::distance(v.cbegin(), it);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+上述所有通用算法都接受随机访问迭代器作为参数来定义要排序的范围。其中一些算法还接受输出范围，都有重载版本：一个需要一个比较函数来对元素进行排序，另一个不需要，而是使用 < 操作符来比较元素。
+
+这些算法的工作方式如下：
+
+\begin{itemize}
+\item
+\verb|std::sort()| 修改输入范围，使其元素按照默认或指定的比较函数排序。
+
+\item
+\verb|std::stable_sort()| 类似于 \verb|std::sort()|，保证保持相等元素的原始顺序。
+
+\item
+\verb|std::partial_sort()| 接受三个迭代器参数，分别表示范围的第一个、中间和最后一个元素，这里的“中间”可以是任意元素，而不必是自然的中间位置。结果是一个部分排序的范围，使得原范围 [first, last) 中最小的 middle - first 个元素位于 [first, middle) 子范围内，而其余元素则以未指定的顺序出现在 [middle, last) 子范围内。
+
+\item
+\verb|std::partial_sort_copy()| 并不是 \verb|std::partial_sort()| 的变体版本，而是 \verb|std::sort()| 的一种形式。通过将元素复制到输出范围，来对一个范围进行排序而不改变它。算法的参数是输入和输出范围的第一个和最后一个迭代器。如果输出范围的大小 M 大于或等于输入范围的大小 N，则整个输入范围都会排序并复制到输出范围中；输出范围的前 N 个元素会覆盖，而后 M - N 个元素则保持不变。如果输出范围小于输入范围，则只有输入范围的前 M 个已排序元素会复制到输出范围中（这时，输出范围会完全覆盖）。
+
+\item
+\verb|std::nth_element()| 实际上是一种选择算法的实现，用于找到一个范围内的第 N 小元素。该算法接受三个迭代器参数，分别表示第一个、第 N 个和最后一个元素，并部分排序该范围，使得排序后第 N 个元素就是该范围完全排序后会处于该位置的元素。修改后的范围内，第 N 个元素之前的 N - 1 个元素都小于它，而第 N 个元素之后的所有元素都大于它，但对于这些其他元素的顺序没有保证。
+
+\item
+\verb|std::is_sorted()| 检查指定范围是否按照指定或默认的比较函数排序，并返回一个布尔值进行指示。
+
+\item
+\verb|std::is_sorted_until()| 查找从指定范围的开头开始的一个已排序子范围，使用提供的比较函数或默认的 < 操作符。返回值是一个迭代器，表示已排序子范围的上限，也就是最后一个已排序元素的下一个位置。
+\end{itemize}
+
+一些标准容器，如 \verb|std::list| 和 \verb|std::forward_list|，提供了成员函数 \verb|sort()|，这些函数针对这些容器进行了优化。这种情况下，应该优先使用这些成员函数而不是通用标准算法 \verb|std::sort()|。
+

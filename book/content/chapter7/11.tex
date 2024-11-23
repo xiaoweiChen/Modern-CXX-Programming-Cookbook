@@ -1,0 +1,211 @@
+文件系统库提供了函数和类型，使开发人员能够检查文件系统对象（如文件或目录）的存在性、属性（如类型、最后写入时间、权限等）。本示例中，将介绍这些类型和函数，及如何使用。
+
+\mySubsubsection{}{Getting ready}
+
+下面的代码示例，可使用 \verb|fs| 作为 \verb|std::filesystem| 命名空间的别名。文件系统库在名为 \verb|<filesystem>| 的头文件中可用，使用变量 \verb|path| 表示文件路径，\verb|err| 用于接收来自文件系统API的错误代码：
+
+\begin{cpp}
+auto path = fs::current_path() / "main.cpp";
+auto err = std::error_code{};
+\end{cpp}
+
+另外，这个示例中将引用以下所示的 \verb|to_time_t| 函数：
+
+\begin{cpp}
+template <typename TP>
+std::time_t to_time_t(TP tp)
+{
+    using namespace std::chrono;
+    auto sctp = time_point_cast<system_clock::duration>(
+        tp - TP::clock::now() + system_clock::now());
+    return system_clock::to_time_t(sctp);
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+使用以下库函数检索文件系统实例的信息：
+
+\begin{itemize}
+\item
+要检查路径是否指代现有的文件系统实例，可使用 \verb|exists()|：
+
+\begin{cpp}
+auto exists = fs::exists(path, err);
+std::cout << "file exists: " << std::boolalpha
+          << exists << '\n';
+\end{cpp}
+
+\item
+要检查两个不同的路径是否指代同一个文件系统实例，可使用 \verb|equivalent()|：
+
+\begin{cpp}
+auto same = fs::equivalent(path,
+                fs::current_path() / "." / "main.cpp", err);
+std::cout << "equivalent: " << same << '\n';
+\end{cpp}
+
+\item
+要检索文件的字节大小，使用 \verb|file_size()|。这不需要打开文件，所以应该优先于先打开文件再使用 \verb|seekg()|/\verb|tellg()| 函数的方法：
+
+\begin{cpp}
+auto size = fs::file_size(path, err);
+std::cout << "file size: " << size << '\n';
+\end{cpp}
+
+\item
+要检索指向文件系统对象的硬链接数量，可使用 \verb|hard_link_count()|：
+
+\begin{cpp}
+auto links = fs::hard_link_count(path, err);
+if(links != static_cast<uintmax_t>(-1))
+    std::cout << "hard links: " << links << '\n';
+else
+    std::cout << "hard links: error" << '\n';
+\end{cpp}
+
+\item
+要检索或设置文件系统对象的最后修改时间，可使用 \verb|last_write_time()|：
+
+\begin{cpp}
+auto lwt = fs::last_write_time(path, err);
+auto time = to_time_t(lwt);
+auto localtime = std::localtime(&time);
+std::cout << "last write time: "
+          << std::put_time(localtime, "%c") << '\n';
+\end{cpp}
+
+\item
+要检索文件属性，如类型和权限（类似于POSIX的stat函数返回的结果），可使用 \verb|status()| 函数。此函数会跟随符号链接。要检索符号链接本身的文件属性而不跟随，可使用 \verb|symlink_status()|：
+
+\begin{cpp}
+auto print_perm = [](fs::perms p)
+{
+    std::cout
+        << ((p & fs::perms::owner_read) != fs::perms::none ?
+            "r" : "-")
+        << ((p & fs::perms::owner_write) != fs::perms::none ?
+            "w" : "-")
+        << ((p & fs::perms::owner_exec) != fs::perms::none ?
+            "x" : "-")
+        << ((p & fs::perms::group_read) != fs::perms::none ?
+            "r" : "-")
+        << ((p & fs::perms::group_write) != fs::perms::none ?
+            "w" : "-")
+        << ((p & fs::perms::group_exec) != fs::perms::none ?
+            "x" : "-")
+        << ((p & fs::perms::others_read) != fs::perms::none ?
+            "r" : "-")
+        << ((p & fs::perms::others_write) != fs::perms::none ?
+            "w" : "-")
+        << ((p & fs::perms::others_exec) != fs::perms::none ?
+            "x" : "-")
+        << '\n';
+};
+auto status = fs::status(path, err);
+std::cout << "type: " << static_cast<int>(status.type()) << '\n';
+std::cout << "permissions: ";
+print_perm(status.permissions());
+\end{cpp}
+
+\item
+要检查路径是否指代特定类型的文件系统实例，如文件、目录、符号链接等，使用 \verb|is_regular_file()|、\verb|is_directory()|、\verb|is_symlink()| 等函数：
+
+\begin{cpp}
+std::cout << "regular file? " <<
+          fs::is_regular_file(path, err) << '\n';
+std::cout << "directory? " <<
+          fs::is_directory(path, err) << '\n';
+std::cout << "char file? " <<
+          fs::is_character_file(path, err) << '\n';
+std::cout << "symlink? " <<
+          fs::is_symlink(path, err) << '\n';
+\end{cpp}
+
+\item
+要检查文件或目录是否为空，使用 \verb|is_empty()| 函数：
+
+\begin{cpp}
+bool empty = fs::is_empty(path, err);
+if (!err)
+{
+    std::cout << std::boolalpha
+    << "is_empty(): " << empty << '\n';
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+这些用于检索文件系统文件和目录信息的函数一般来说简单直接，也需要注意一些事项：
+
+\begin{itemize}
+\item
+检查文件系统对象是否存在可以使用 \verb|exists()| 函数，通过传递路径或先前使用 \verb|status()| 函数检索的 \verb|std::filesystem::file_status| 实例来完成。
+
+\item
+\verb|equivalent()| 函数确定两个文件系统对象的状态是否相同，状态由 \verb|status()| 函数检索。如果两个路径都不存在，或者都存在但都不是文件、目录或符号链接，则该函数将返回错误。指向同一文件对象的硬链接等价，符号链接及其目标也等价。
+
+\item
+\verb|file_size()| 函数只能用来确定常规文件和指向常规文件的符号链接的大小。对于其他类型的文件实例，如目录，此函数会失败。该函数返回文件的字节数，如果发生错误则返回 -1。如果想确定文件是否为空，可以使用 \verb|is_empty()| 函数。这对所有类型的文件系统对象有效，包括目录。
+
+\item
+\verb|last_write_time()| 函数有两种重载：一种用于检索文件系统对象的最后修改时间，另一种用于设置最后修改时间。时间由 \verb|std::filesystem::file_time_type| 实例表示，基本上是 \verb|std::chrono::time_point| 类型的别名。以下示例将文件的最后写入时间改为比其先前值早30分钟：
+
+\begin{cpp}
+using namespace std::chrono_literals;
+auto lwt = fs::last_write_time(path, err);
+fs::last_write_time(path, lwt - 30min);
+\end{cpp}
+
+\item
+\verb|status()| 函数确定文件系统对象的类型和权限。如果文件是一个符号链接，返回的信息是关于符号链接的目标。要检索符号链接本身的信息，必须使用 \verb|symlink_status()| 函数，这些函数返回一个 \verb|std::filesystem::file_status| 实例。
+
+此类有一个 \verb|type()| 成员函数用于检索文件类型，以及一个 \verb|permissions()| 成员函数用于检索文件权限。文件的类型由 \verb|std::filesystem::file_type| 枚举定义。文件的权限由 \verb|std::filesystem::perms| 枚举定义。枚举中的不是所有枚举器都代表权限；有些代表控制位，如 \verb|add_perms| 表示应添加权限，或 \verb|remove_perms| 表示应删除权限。可以使用 \verb|permissions()| 函数修改文件或目录的权限。以下示例向文件的所有者和用户组添加所有权限：
+
+\begin{cpp}
+fs::permissions(
+    path,
+    fs::perms::add_perms |
+    fs::perms::owner_all | fs::perms::group_all,
+    err);
+\end{cpp}
+
+\item
+要确定文件系统对象的类型，如文件、目录或符号链接，有两个选项：检索文件状态然后检查类型属性，或者使用可用的文件系统函数，如 \verb|is_regular_file()|、\verb|is_symlink()| 或 \verb|is_directory()|。以下检查路径是否指代普通文件的示例等效：
+
+\begin{cpp}
+auto s = fs::status(path, err);
+auto isfile = s.type() == std::filesystem::file_type::regular;
+auto isfile = fs::is_regular_file(path, err);
+\end{cpp}
+\end{itemize}
+
+本示例中讨论的所有函数，都有一个重载会在发生错误时抛出异常，以及不会抛出异常但通过函数参数返回错误代码的重载。虽然本示例中的代码未显示（为了简化），但要检查这些函数返回的 \verb|error_code| 值。每个值的实际含义取决于返回调用和所属的值型类别（如系统、I/O流或通用），在所有值型类别中，值0认为表示成功：
+
+\begin{cpp}
+auto lwt = fs::last_write_time(path, err);
+if (!err) // success
+{
+    auto time = to_time_t(lwt);
+    auto localtime = std::localtime(&time);
+    std::cout << "last write time: "
+              << std::put_time(localtime, "%c") << '\n';
+}
+\end{cpp}
+
+如果使用的是不返回错误代码但抛出异常的重载，就需要捕获可能发生的异常：
+
+\begin{cpp}
+try
+{
+    auto exists = fs::exists(path);
+    std::cout << "file exists: " << std::boolalpha << exists << '\n';
+}
+catch (std::filesystem::filesystem_error const& ex)
+{
+    std::cerr << ex.what() << '\n';
+}
+\end{cpp}
+
+

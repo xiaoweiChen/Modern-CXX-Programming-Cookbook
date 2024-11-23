@@ -1,0 +1,183 @@
+
+基于范围的循环（其他编程语言中称为 for-each）允许迭代一个范围的元素，相对于标准的 for 循环提供了一个简化的语法。但基于范围的循环并不适用于所有表示范围的类型，其要求存在 begin() 和 end() 函数（对于非数组类型），这些函数可以是成员函数也可以是独立函数。本示例中，将介绍如何让自定义类型能够在基于范围的循环中使用。
+
+\mySubsubsection{}{Getting ready}
+
+为了展示如何使表示序列的自定义类型支持基于范围的循环，可以使用以下简单的数组实现：
+
+\begin{cpp}
+template <typename T, size_t const Size>
+class dummy_array
+{
+    T data[Size] = {};
+    public:
+    T const & GetAt(size_t const index) const
+    {
+        if (index < Size) return data[index];
+        throw std::out_of_range("index out of range");
+    }
+    void SetAt(size_t const index, T const & value)
+    {
+        if (index < Size) data[index] = value;
+        else throw std::out_of_range("index out of range");
+    }
+    size_t GetSize() const { return Size; }
+};
+\end{cpp}
+
+本示例的目标是让如下代码正常工作：
+
+\begin{cpp}
+dummy_array<int, 3> arr;
+arr.SetAt(0, 1);
+arr.SetAt(1, 2);
+arr.SetAt(2, 3);
+for(auto&& e : arr)
+{
+    std::cout << e << '\n';
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+要使自定义类型支持给予范围的循环，需要做以下几件事：
+
+\begin{itemize}
+\item
+创建该类型的可变和常量迭代器，这些迭代器必须实现以下操作符：
+
+\begin{itemize}
+\item
+operator++ （前置和后置版本）用于递增迭代器。
+
+\item
+operator* 用于解引用迭代器并访问迭代器指向的实际元素。
+
+\item
+operator!= 用于将迭代器与其他迭代器进行不等比较。
+\end{itemize}
+
+\item
+为该类型提供独立的 begin() 和 end() 函数。
+\end{itemize}
+
+基于上述示例，需要提供以下内容：
+
+\begin{itemize}
+\item
+下面是最小化迭代器的类型实现:
+
+\begin{cpp}
+template <typename T, typename C, size_t const Size>
+class dummy_array_iterator_type
+{
+    public:
+    dummy_array_iterator_type(C& collection,
+    size_t const index) :
+    index(index), collection(collection)
+    { }
+    bool operator!= (dummy_array_iterator_type const & other) const
+    {
+        return index != other.index;
+    }
+    T const & operator* () const
+    {
+        return collection.GetAt(index);
+    }
+    dummy_array_iterator_type& operator++()
+    {
+        ++index;
+        return *this;
+    }
+    dummy_array_iterator_type operator++(int)
+    {
+        auto temp = *this;
+        ++*this;
+        return temp;
+    }
+    private:
+    size_t   index;
+    C&       collection;
+};
+\end{cpp}
+
+\item
+可变和常量迭代器的别名模板:
+
+\begin{cpp}
+template <typename T, size_t const Size>
+using dummy_array_iterator =
+    dummy_array_iterator_type<
+T, dummy_array<T, Size>, Size>;
+template <typename T, size_t const Size>
+using dummy_array_const_iterator =
+    dummy_array_iterator_type<
+        T, dummy_array<T, Size> const, Size>;
+\end{cpp}
+
+\item
+返回相应开始和结束迭代器的独立 begin() 和 end() 函数，包括两种别名模板的重载:
+
+\begin{cpp}
+template <typename T, size_t const Size>
+inline dummy_array_iterator<T, Size> begin(
+dummy_array<T, Size>& collection)
+{
+    return dummy_array_iterator<T, Size>(collection, 0);
+}
+template <typename T, size_t const Size>
+inline dummy_array_iterator<T, Size> end(
+dummy_array<T, Size>& collection)
+{
+    return dummy_array_iterator<T, Size>(
+    collection, collection.GetSize());
+}
+template <typename T, size_t const Size>
+inline dummy_array_const_iterator<T, Size> begin(
+dummy_array<T, Size> const & collection)
+{
+    return dummy_array_const_iterator<T, Size>(
+    collection, 0);
+}
+template <typename T, size_t const Size>
+inline dummy_array_const_iterator<T, Size> end(
+dummy_array<T, Size> const & collection)
+{
+    return dummy_array_const_iterator<T, Size>(
+    collection, collection.GetSize());
+}
+\end{cpp}
+
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+有了上述实现，先前展示的基于范围的循环就能编译和执行。当执行依赖查找时，编译器会找到编写的两个 begin() 和 end() 函数（接受 dummy\_array 的引用），因此生成的代码就有效了。
+
+上述示例中，定义了迭代器类模板和两个别名模板，分别为 dummy\_array\_iterator 和 dummy\_array\_const\_iterator。begin() 和 end() 函数都有这两种迭代器类型的重载。以便使用基于范围的循环，来处理常量和非常量实例的容器：
+
+\begin{cpp}
+template <typename T, const size_t Size>
+void print_dummy_array(dummy_array<T, Size> const & arr)
+{
+    for (auto && e : arr)
+    {
+        std::cout << e << '\n';
+    }
+}
+\end{cpp}
+
+使自定义类型支持基于范围的循环，一种替代方案是提供成员 begin() 和 end() 函数，这只有在拥有并可以修改源码的情况下才有意义。
+
+
+
+
+
+
+
+
+
+
+
+
+

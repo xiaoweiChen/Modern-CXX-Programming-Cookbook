@@ -1,0 +1,288 @@
+
+标准库中的字符串类型是一种通用实现，缺乏很多实用方法，如转换大小写、去除空白、分割等，这些方法可以满足开发者的不同需求，有些第三方库提供了丰富的字符串功能集合。本示例中，将实现几个简单但有用的函数，目的是展示如何使用字符串方法和标准泛型算法来操纵字符串，同时也提供一些可在应用程序中重用的代码。
+
+本示例中，将实现一个小的字符串工具库：
+
+\begin{itemize}
+\item
+将字符串转换为小写或大写
+
+\item
+反转字符串
+
+\item
+从字符串的开头和/或结尾修剪空白字符
+
+\item
+从字符串的开头和/或结尾修剪特定字符集中的字符
+
+\item
+删除字符串中任意位置的字符
+
+\item
+使用特定的分隔符对字符串进行分词
+\end{itemize}
+
+开始实现之前，先来看一些前提条件。
+
+\mySubsubsection{}{Getting ready}
+
+支持所有的标准字符串类型——即 \verb|std::string|、\verb|std::wstring|、\verb|std::u16string| 和 \verb|std::u32string|。
+
+为了避免使用
+
+\verb|std::basic_string<CharT, std::char_traits<CharT>, std::allocator<CharT>>|
+
+这样的长名称，将使用以下字符串和字符串流的别名模板：
+
+\begin{cpp}
+template <typename CharT>
+using tstring =
+    std::basic_string<CharT, std::char_traits<CharT>,
+                      std::allocator<CharT>>;
+template <typename CharT>
+using tstringstream =
+    std::basic_stringstream<CharT, std::char_traits<CharT>,
+                            std::allocator<CharT>>;
+\end{cpp}
+
+为了实现这些字符串辅助函数，需要包含用于字符串的头文件 <string> 和标准通用算法的头文件 <algorithm>。
+
+本示例中的所有例子中，将使用 C++14 的标准自定义字面量操作符，为此需要显式使用 \verb|std::string_literals| 命名空间。
+
+\mySubsubsection{}{How to do it...}
+
+\begin{enumerate}
+\item
+要将字符串转换为大写或小写，可以使用通用算法 \verb|std::transform()| 对字符串中的字符使用 \verb|toupper()| 或 \verb|tolower()|：
+
+\begin{cpp}
+template<typename CharT>
+inline tstring<CharT> to_upper(tstring<CharT> text)
+{
+    std::transform(std::begin(text), std::end(text),
+    std::begin(text), toupper);
+    return text;
+}
+template<typename CharT>
+inline tstring<CharT> to_lower(tstring<CharT> text)
+{
+    std::transform(std::begin(text), std::end(text),
+    std::begin(text), tolower);
+    return text;
+}
+\end{cpp}
+
+\item
+要反转字符串，可以使用通用算法 \verb|std::reverse()|：
+
+\begin{cpp}
+template<typename CharT>
+inline tstring<CharT> reverse(tstring<CharT> text)
+{
+    std::reverse(std::begin(text), std::end(text));
+    return text;
+}
+\end{cpp}
+
+\item
+修剪字符串的开头、结尾或两者，可用 \verb|std::basic_string|的 \verb|find_first_not_of()| 和 \verb|find_last_not_of()|成员函数：
+
+\begin{cpp}
+template<typename CharT>
+inline tstring<CharT> trim(tstring<CharT> const & text)
+{
+    auto first{ text.find_first_not_of(' ') };
+    auto last{ text.find_last_not_of(' ') };
+    return text.substr(first, (last - first + 1));
+}
+template<typename CharT>
+inline tstring<CharT> trimleft(tstring<CharT> const & text)
+{
+    auto first{ text.find_first_not_of(' ') };
+    return text.substr(first, text.size() - first);
+}
+template<typename CharT>
+inline tstring<CharT> trimright(tstring<CharT> const & text)
+{
+    auto last{ text.find_last_not_of(' ') };
+    return text.substr(0, last + 1);
+}
+\end{cpp}
+
+\item
+要修剪字符串中给定字符集中的字符，可以使用接受定义要查找的字符集字符串参数的 \verb|find_first_not_of()| 和 \verb|find_last_not_of()| 函数(重载版本)：
+
+\begin{cpp}
+template<typename CharT>
+inline tstring<CharT> trim(tstring<CharT> const & text,
+tstring<CharT> const & chars)
+{
+    auto first{ text.find_first_not_of(chars) };
+    auto last{ text.find_last_not_of(chars) };
+    return text.substr(first, (last - first + 1));
+}
+template<typename CharT>
+inline tstring<CharT> trimleft(tstring<CharT> const & text,
+tstring<CharT> const & chars)
+{
+    auto first{ text.find_first_not_of(chars) };
+    return text.substr(first, text.size() - first);
+}
+template<typename CharT>
+inline tstring<CharT> trimright(tstring<CharT> const &text,
+tstring<CharT> const &chars)
+{
+    auto last{ text.find_last_not_of(chars) };
+    return text.substr(0, last + 1);
+}
+\end{cpp}
+
+\item
+要从字符串中删除字符，可以使用 \verb|std::remove_if()| 和 \verb|std::basic_string::erase()|：
+
+\begin{cpp}
+template<typename CharT>
+inline tstring<CharT> remove(tstring<CharT> text,
+CharT const ch)
+{
+    auto start = std::remove_if(
+                    std::begin(text), std::end(text),
+                    [=](CharT const c) {return c == ch; });
+    text.erase(start, std::end(text));
+    return text;
+}
+\end{cpp}
+
+\item
+要基于指定的分隔符拆分字符串，可以使用 \verb|std::getline()| 从 \verb|std::basic_stringstream| 中读取内容。从转义流中提取token压入vector中：
+
+\begin{cpp}
+template<typename CharT>
+inline std::vector<tstring<CharT>> split
+(tstring<CharT> text, CharT const delimiter)
+{
+    auto sstr = tstringstream<CharT>{ text };
+    auto tokens = std::vector<tstring<CharT>>{};
+    auto token = tstring<CharT>{};
+    while (std::getline(sstr, token, delimiter))
+    {
+        if (!token.empty()) tokens.push_back(token);
+    }
+    return tokens;
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it work...}
+
+实现库中的工具函数的两种选择：
+
+\begin{itemize}
+\item
+函数将修改使用引用传递的字符串
+
+\item
+函数不更改原始字符串，会返回一个新的字符串
+\end{itemize}
+
+第二种选择的优势在于保留了原始字符串，这在很多情况下有用。否则，首先需要复制字符串并更改副本。本示例提供的实现采取了第二种方法。
+
+“How to do it...”中首先实现的功能是 \verb|to_upper()| 和 \verb|to_lower()|，可将字符串的内容转换为大写或小写。最简单的方式是使用标准算法 \verb|std::transform()|。这是一个通用算法，将一个函数应用于由开始和结束迭代器定义的范围内的每个元素，并将结果存储在另一个只需指定开始迭代器的范围内。输出范围可以与输入范围相同，应用的函数是 \verb|toupper()| 或 \verb|tolower()|：
+
+\begin{cpp}
+auto ut{ string_library::to_upper("this is not UPPERCASE"s) };
+// ut = "THIS IS NOT UPPERCASE"
+auto lt{ string_library::to_lower("THIS IS NOT lowercase"s) };
+// lt = "this is not lowercase"
+\end{cpp}
+
+接下来是 \verb|reverse()|，该函数反转字符串的内容，使用标准算法 \verb|std::reverse()|，反转由开始和结束迭代器定义的范围内的元素：
+
+\begin{cpp}
+auto rt{string_library::reverse("cookbook"s)}; // rt = "koobkooc"
+\end{cpp}
+
+涉及到修剪时，字符串可以在开头、结尾或两端修剪。这里，实现了三种不同的函数：\verb|trim()| 用于修剪两端，\verb|trimleft()| 用于修剪字符串开头，\verb|trimright()| 用于修剪字符串结尾。第一个版本的函数只修剪空格。为了找到要修剪的部分，使用了 \verb|std::basic_string| 的 \verb|find_first_not_of()| 和 \verb|find_last_not_of()|。这两个函数会返回字符串中不是指定字符的第一个和最后一个字符。随后，对 \verb|std::basic_string| 的 \verb|substr()| 方法的调用返回了一个新的字符串。该方法接受字符串中的一个索引和要复制到新字符串中的元素数量：
+
+\begin{cpp}
+auto text1{"   this is an example   "s};
+auto t1{ string_library::trim(text1) };
+// t1 = "this is an example"
+auto t2{ string_library::trimleft(text1) };
+// t2 = "this is an example   "
+auto t3{ string_library::trimright(text1) };
+// t3 = "   this is an example"
+\end{cpp}
+
+有时，从字符串中修剪其他字符然后是空格可能很有用。需要为修剪函数提供了重载版本，指定了要移除的字符集(该集合作为字符串指定)。实现与先前版本非常相似，\verb|find_first_not_of()| 和 \verb|find_last_not_of()| 都有接受包含要排除搜索字符串的重载：
+
+\begin{cpp}
+auto chars1{" !%\n\r"s};
+auto text3{"!!  this % needs a lot\rof trimming  !\n"s};
+auto t7{ string_library::trim(text3, chars1) };
+// t7 = "this % needs a lot\rof trimming"
+auto t8{ string_library::trimleft(text3, chars1) };
+// t8 = "this % needs a lot\rof trimming  !\n"
+auto t9{ string_library::trimright(text3, chars1) };
+// t9 = "!!  this % needs a lot\rof trimming"
+\end{cpp}
+
+如果需要从字符串中移除字符，修剪方法就不够用了，因其仅处理字符串开头和结尾处的一段连续字符。为此，实现了一个简单的 \verb|remove()| 方法，使用了标准算法 \verb|std::remove_if()|。
+
+\verb|std::remove()| 和 \verb|std::remove_if()| 可能一开始看起来不够直观。通过重新排列由起始和结束迭代器定义范围内的内容（使用移动赋值），来移除满足条件的元素。需要移除的元素会放置在范围的末尾，函数会返回一个指向代表已移除元素的范围中首个元素的迭代器。这个迭代器实际上定义了修改后的范围的新终点。如果没有元素移除，返回的迭代器就是原始范围的终点迭代器。此返回迭代器的值随后用来调用 \verb|std::basic_string::erase()| ，该函数真正地擦除由两个迭代器定义的字符串内容。例子中，这两个迭代器分别是 \verb|std::remove_if()| 返回的是迭代器和字符串的终点：
+
+\begin{cpp}
+auto text4{"must remove all * from text**"s};
+auto t10{ string_library::remove(text4, '*') };
+// t10 = "must remove all  from text"
+auto t11{ string_library::remove(text4, '!') };
+// t11 = "must remove all * from text**"
+\end{cpp}
+
+最后实现的是 \verb|split()|，根据指定的分隔符拆分字符串的内容。实现这个功能有多种方法，可使用 \verb|std::getline()| 函数。这个函数从输入流中读取字符直到遇到指定的分隔符，并将字符放入一个字符串中。
+
+开始从输入缓冲区读取之前，会在输出字符串上调用 \verb|erase()| 以清空其内容。循环中调用此方法会产生放入vector中的token，结果会跳过空格：
+
+\begin{cpp}
+auto text5{"this text will be split   "s};
+auto tokens1{ string_library::split(text5, ' ') };
+// tokens1 = {"this", "text", "will", "be", "split"}
+auto tokens2{ string_library::split(""s, ' ') };
+// tokens2 = {}
+\end{cpp}
+
+这里展示了两个文本拆分的例子。第一个例子中，\verb|text5| 变量中的文本拆分为单词，正如前面提到的，忽略空标记。第二个例子中，拆分空字符串会产生一个空的 \verb|token| vector。
+
+\mySubsubsection{}{There's more...}
+
+较新的标准中，为了帮助用户避免定义一些广泛使用的函数，已经在 \verb|std::basic_string| 类模板中添加了几个辅助方法。方法列在下表中：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{函数} & \textbf{C++ 版本} & \textbf{描述}                                       \\ \hline
+\endfirsthead
+%
+\endhead
+%
+starts\_with      & C++20                & 检查字符串是否以指定的前缀开始 \\ \hline
+ends\_with        & C++20                & 检查字符串是否以指定的后缀结束   \\ \hline
+contains          & C++23                & 检查字符串是否包含指定的子字符串 \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.13: 新增的字符串函数(basic\_string的成员函数)
+\end{center}
+
+这些成员函数的使用在下面的代码中有所举例：
+
+\begin{cpp}
+std::string text = "The Lord of the Rings";
+if(text.starts_with("The")) {}
+if(text.ends_with("Rings")) {}
+if(text.contains("Lord")) {}
+\end{cpp}
+

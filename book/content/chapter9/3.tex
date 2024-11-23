@@ -1,0 +1,217 @@
+
+
+尽管没有正式定义，常量正确性意味着那些不应该修改（即不可变对象）保持不变。作为开发人员，可以通过使用const关键字来声明参数、变量和成员函数来强制实现这一点。本示例中，将介绍常量正确性的优点，以及如何实现。
+
+\mySubsubsection{}{How to do it...}
+
+为了确保程序的常量正确性，应该始终将以下内容声明为常量：
+
+\begin{itemize}
+\item
+不应在函数内部修改函数参数：
+
+\begin{cpp}
+struct session {};
+session connect(std::string const & uri,
+int const timeout = 2000)
+{
+    /* do something */
+    return session { /* ... */ };
+}
+\end{cpp}
+
+\item
+不会改变类型的数据成员：
+
+\begin{cpp}
+class user_settings
+{
+    public:
+    int const min_update_interval = 15;
+    /* other members */
+};
+\end{cpp}
+
+\item
+从外部看不会修改状态的成员函数：
+
+\begin{cpp}
+class user_settings
+{
+    bool show_online;
+public:
+    bool can_show_online() const {return show_online;}
+    /* other members */
+};
+\end{cpp}
+
+\item
+生命周期内值不会改变的函数局部变量：
+
+\begin{cpp}
+user_settings get_user_settings()
+{
+    return user_settings {};
+}
+void update()
+{
+    user_settings const us = get_user_settings();
+    if(us.can_show_online()) { /* do something */ }
+    /* do more */
+}
+\end{cpp}
+
+\item
+应该绑定到临时实例（右值）以延长临时实例生命周期至（常量）引用生命周期的引用：
+
+\begin{cpp}
+std::string greetings()
+{
+    return "Hello, World!";
+}
+const std::string & s = greetings(); // must use const
+std::cout << s << std::endl;
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+将实例和成员函数声明为常量有几个好处：
+
+\begin{itemize}
+\item
+避免实例的意外和故意更改，在某些情况下，这可能导致程序的错误行为。
+
+\item
+使编译器能够进行更好的优化。
+
+\item
+为其他用户提供代码语义文档。
+\end{itemize}
+
+\begin{myNotic}
+常量正确性不仅是一种个人风格，而是应该指导C++开发的核心原则。
+\end{myNotic}
+
+不幸的是，常量正确性的重要性在过去以及现在都没有得到足够的重视，无论是在书籍、C++社区还是工作环境中。一个经验法则是，所有不应该改变的东西都应该声明为常量。这应该始终这样做，而不仅仅是在开发后期，需要清理和重构代码时才去做。
+
+将参数或变量声明为常量时，可以在类型前面放const关键字（const T c），也可以放在类型后面（T const c）。两种方式等价，无论选择哪种风格，声明的阅读方向都应该是从右向左。const T c 应读作 c 是一个常量 T，而 T const c 则读作 c 是一个 T 类型的常量。对于指针来说，这一点稍微复杂一些。下表展示了各种指针声明及其含义：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{Expression} & \textbf{Description}                                                       \\ \hline
+\endfirsthead
+%
+\endhead
+%
+T* p                & p 是指向非常量 T 的非常量指针。                           \\ \hline
+const T* p          & p 是指向常量 T 的非常量指针。                       \\ \hline
+T const * p         & p 是指向常量 T 的非常量指针（同上）。     \\ \hline
+const T * const p   & p 是指向常量 T 的常量指针。                           \\ \hline
+T const * const p  & p 是指向常量 T 的常量指针（同上）。        \\ \hline
+T** p               & p 是指向非常量 T 的非常量指针的非常量指针。 \\ \hline
+const T** p         & p 是指向常量 T 的非常量指针的非常量指针。     \\ \hline
+T const ** p        & 同 const T** p。                                                       \\ \hline
+const T* const * p & p 是指向常量 T 的常量指针的非常量指针。 \\ \hline
+T const * const * p & 同 const T* const * p。                                                \\ \hline
+\end{longtable}
+
+\begin{center}
+表 9.1: 指针声明示例及其含义
+\end{center}
+
+\begin{myNotic}
+将const关键字放在类型后面更自然，其语法解释的方向——从右向左——保持一致。本书中的所有示例都采用了这种风格。
+\end{myNotic}
+
+对于引用来说，情况类似：\verb|const T & c| 和 \verb|T const & c| 等价，所以 c 是一个指向常量 T 的引用。然而，\verb|T const & const c|，表示 c 是一个指向常量 T 的常量引用。没有意义，因为引用——变量的别名——在本质上是隐式常量，即不能修改为指向另一个变量的别名。
+
+指向非常量实例的非常量指针，即 T*，可以隐式转换为指向常量实例的非常量指针，即 T const *。 而，T** 不能隐式转换为 T const** （与 const T** 相同）。可通过指向非常量实例的指针，修改常量对象：
+
+\begin{cpp}
+int const c = 42;
+int* x;
+int const ** p = &x; // this is an actual error
+*p = &c;
+*x = 0;              // this modifies c
+\end{cpp}
+
+如果一个实例是常量，则只能调用其类型的常量成员函数。然而，将成员函数声明为常量并表示该函数只能在常量实例上调用，还表明该函数不会从外部修改实例的状态，而这点通常会被误解。一个类型具有内部状态，可以通过公共接口将其暴露给外部。
+
+然而，并不是所有的内部状态都会暴露出来，而且从公共接口可见的内容可能在内部状态中没有直接的表现。（如果建模订单行，并在内部表示中有项目数量和项目销售价格字段，则可以有一个公开的方法通过乘以数量和价格来暴露订单行金额。）因此，从实例公共接口来看，状态是一个逻辑状态。将方法定义为常量是一种声明，确保函数不会改变逻辑状态。然而，编译器会阻止使用这样的方法修改数据成员。为了避免这个问题，应该将常量方法修改的数据成员声明为mutable。
+
+以下示例中，computation 是一个具有 compute() 方法的类型，该方法执行长时间运行的计算操作。因为这个函数不影响对象的逻辑状态，所以声明为常量。然而，为了避免重新计算相同输入的结果，计算后的值存储在一个缓存中。为了能够在常量函数中修改缓存，声明为mutable：
+
+\begin{cpp}
+class computation
+{
+    double compute_value(double const input) const
+    {
+        /* long running operation */
+        return input + 42;
+    }
+    mutable std::map<double, double> cache;
+public:
+    double compute(double const input) const
+    {
+        auto it = cache.find(input);
+        if(it != cache.end()) return it->second;
+        auto result = compute_value(input);
+        cache[input] = result;
+        return result;
+    }
+};
+\end{cpp}
+
+类似的场景由以下类型表示，该类实现了线程安全的容器。对共享内部数据的访问由互斥锁保护。该类提供了诸如添加和删除值的方法，以及 contains() 这样的方法，用于指示容器中是否存在某个项。成员函数不打算修改对象的逻辑状态，所以声明为常量。然而，对共享内部状态的访问必须由互斥锁保护。为了锁定和解锁互斥锁，这两个操作（修改对象状态）和互斥锁本身都必须声明为mutable：
+
+\begin{cpp}
+template <typename T>
+class container
+{
+    std::vector<T>     data;
+    mutable std::mutex mt;
+public:
+    void add(T const & value)
+    {
+        std::lock_guard<std::mutex> lock(mt);
+        data.push_back(value);
+    }
+    bool contains(T const & value) const
+    {
+        std::lock_guard<std::mutex> lock(mt);
+        return std::find(std::begin(data), std::end(data), value)
+               != std::end(data);
+    }
+};
+\end{cpp}
+
+mutable 修饰符允许修改类型成员，即使包含实例声明为 const。就是 std::mutex 类型的 mt 成员的情况，即使在声明为 const 的 contains() 方法中也会进行修改。
+
+有时，一个方法或操作符会进行重载，同时具有常量和非常量版本。这通常发生在下标操作符或提供对内部状态直接访问的方法上。这样做的原因是，该方法应该既适用于常量对象，也适用于非常量对象。不过，行为应该不同：对于非常量实例，该方法应允许外部修改提供的数据；而对于常量对象，则不允许。因此，非常量下标操作符返回一个非常量实例的引用，而常量下标操作符则返回一个常量实例的引用：
+
+\begin{cpp}
+class contact {};
+class addressbook
+{
+    std::vector<contact> contacts;
+public:
+    contact& operator[](size_t const index);
+    contact const & operator[](size_t const index) const;
+};
+\end{cpp}
+
+\begin{myNotic}
+即使一个对象是常量的，如果一个成员函数是常量的，这个成员函数返回的数据也可能不是常量。
+\end{myNotic}
+
+使用const的一个重要用例是定义对临时实例的引用。临时实例是一个右值（rvalue），而非常量左值引用（non-const lvalue reference）不能绑定到一个右值。但通过使左值引用成为const可以做到，这会产生延长临时实例生命周期至常量引用生命周期的效果。但这只适用于基于栈的引用，而不适用于作为成员的引用。
+
+\mySubsubsection{}{There's more...}
+
+实例的const限定符可以通过\verb|const_cast|转换移除，但这只应在了解该实例最初并不是声明为常量的情况下使用。
+
+

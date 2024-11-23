@@ -1,0 +1,186 @@
+
+泛型代码是避免编写重复代码的关键，C++中可通过模板实现。类、函数和变量都可以模板化。尽管模板经常视为复杂且累赘的代名词，但其使得创建通用库成为可能，例如标准库，并可以编写更少且更好的代码。
+
+模板是C++语言的一等公民，详细讲解可能需要一整本书。事实上，这本书中的多个示例涉及模板的各种方面。本示例中，将介绍编写函数模板的基础知识。
+
+\mySubsubsection{}{How to do it...}
+
+要创建函数模板，请按照以下步骤操作：
+
+\begin{itemize}
+\item
+创建一个函数模板，在函数声明前加上template关键字，后面跟上尖括号中的模板参数列表：
+
+\begin{cpp}
+template <typename T>
+T minimum(T a, T b)
+{
+    return a <= b ? a : b;
+}
+minimum(3, 4);
+minimum(3.99, 4.01);
+\end{cpp}
+
+\item
+为了特化一个函数模板，保留模板参数列表为空，并在函数签名中用实际类型或值替换模板参数：
+
+\begin{cpp}
+template <>
+const char* minimum(const char* a, const char* b)
+{
+    return std::strcmp(a, b) <= 1 ? a : b;
+}
+minimum("abc", "acxyz");
+\end{cpp}
+
+\item
+为了重载一个函数模板，提供另一个定义，可以是模板，也可以是非模板：
+
+\begin{cpp}
+template <typename T>
+std::basic_string<T> minimum(std::basic_string<T> a,
+std::basic_string<T> b) // [1]
+{
+    return a.length() <= b.length() ? a : b;
+}
+std::string minimum(std::string a, std::string b) // [2]
+{
+    return a.length() <= b.length() ? a : b;
+}
+minimum(std::string("def"), std::string("acxyz")); // calls [2]
+minimum(std::wstring(L"def"), std::wstring(L"acxyz")); // calls [1]
+\end{cpp}
+
+\item
+为了确保特定函数模板或函数模板的某个特化版本不可调用（从重载集中删除），可将其声明为已删除：
+
+\begin{cpp}
+template <typename T>
+T* minimum(T* a, T* b) = delete;
+int a = 3;
+int b = 4;
+minimum(&a, &b); // error
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+至少从表面上看，函数模板与其他函数只有细微的不同。通过模板语法引入，并可以使用类型、值甚至其他模板进行参数化。由于模板只是创建实际代码的蓝图，函数模板基本上是一系列函数的蓝图。模板只存在于源代码中，直到使用它们。
+
+编译器根据模板的使用情况实例化模板，通过编译器替换模板参数来完成，这个过程称为模板实例化。例如，对于前面展示的minimum<T>函数模板，当以minimum<int>(1, 2)调用时，编译器将int类型代入T参数。有两种形式的实例化：
+
+\begin{itemize}
+\item
+隐式实例化发生在编译器，根据代码中使用的模板生成代码时，例如：minimum<T>函数在整个代码中可用int和double值调用，则会生成两个重载（一个带整数参数，一个带double参数）。这就是隐式实例化，如下面的代码片段所示：
+
+\begin{cpp}
+minimum<int>(1, 2);  // 显式int模板参数
+minimum(3.99, 4.50); // 推导出double模板参数
+\end{cpp}
+
+\item
+显式实例化发生在请求编译器即使该实例化，一个例子是在创建库（二进制）文件时，因为未实例化的模板（仅仅是蓝图）不会放入目标文件中。以下展示了char类型的minimum<T>函数的显式实例化示例。如果显式实例化不在与模板相同的命名空间中定义，名称必须在显式实例化定义时完全限定：
+
+\begin{cpp}
+template char minimum(char a, char b);
+\end{cpp}
+
+\end{itemize}
+
+模板可以有不同的参数类型，参数在template关键字后的尖括号中提供：
+
+\begin{itemize}
+\item
+类型模板参数，其中参数是类型的占位符。这是前面部分所有示例的情况。
+
+\item
+非类型模板参数，其中参数是结构类型的一个值。整数类型、浮点类型（C++20）、指针类型、枚举类型和左值引用类型都是结构类型。下面的示例中，T是类型模板参数，而S是非类型模板参数：
+
+\begin{cpp}
+template <typename T, std::size_t S>
+std::array<T, S> make_array()
+{
+    return std::array<T, S>{};
+}
+\end{cpp}
+\end{itemize}
+
+C++17起，非类型模板参数可以使用auto关键字声明：
+
+\begin{cpp}
+template <typename T, auto S>
+std::array<T, S> make_array()
+{
+    return std::array<T, S>{};
+}
+\end{cpp}
+
+\begin{itemize}
+\item
+双重模板参数，其中参数的类型是另一种类型。下面的示例中，trimin函数模板有两个模板参数，一个是类型模板参数T，另一个是双重模板参数M：
+
+\begin{cpp}
+template <typename T>
+struct Minimum
+{
+    T operator()(T a, T b)
+    {
+        return a <= b ? a : b;
+    }
+};
+template <typename T, template <typename> class M>
+T trimin(T a, T b, T c)
+{
+    return M<T>{}(a, M<T>{}(b, c));
+}
+trimin<int, Minimum>(5, 2, 7);
+\end{cpp}
+\end{itemize}
+
+虽然模板允许为多种类型（或更一般地说，为多种模板参数）编写一个实现，但有时为不同类型提供修改后的实现也有意义，甚至是必要的。为某些模板参数提供替代实现的过程称为特化，特化的模板称为主模板。有两种可能的形式：
+
+\begin{itemize}
+\item
+偏特化是指只为一些模板参数提供不同的实现。
+
+\item
+全特化是指为整个一组模板参数提供不同的实现。
+\end{itemize}
+
+函数模板仅支持全特化，偏特化仅适用于类模板。“How to do it”部分提供了一个全特化的例子，用const char*类型特化了minimum<T>函数模板。这里，不是按字典顺序比较函数的两个参数，而是根据其长度决定哪个更“小”。
+
+函数模板可以像其他函数一样重载。当存在多个重载版本，既有模板也有非模板时，编译器会优先选择非模板重载。前面已经提供了示例，这里只展示函数声明：
+
+\begin{cpp}
+template <typename T>
+std::basic_string<T> minimum(std::basic_string<T> a, std::basic_string<T> b);
+std::string minimum(std::string a, std::string b);
+minimum(std::string("def"), std::string("acxyz"));
+minimum(std::wstring(L"def"), std::wstring(L"acxyz"));
+\end{cpp}
+
+第一次调用minimum函数时，参数是std::string类型，将调用非模板重载。第二次调用时，参数是std::wstring类型，由于函数模板是唯一的匹配重载，将调用其std::wstring实例化。
+
+调用函数模板时指定模板参数并不总是必要的。以下两次调用等价：
+
+\begin{cpp}
+minimum(1, 2);
+minimum<int>(1, 2);
+\end{cpp}
+
+许多情况下，编译器可以从函数的调用中推导出模板参数。这个例子中，由于两个函数参数都是整数，编译器可以确定模板参数应该是int类型，没必要显式指定。然而，也有一些情况下编译器无法推导出类型。在这种情况下，必须显式提供类型：
+
+\begin{cpp}
+minimum(1, 2u); // 错误，模棱两可的模板参数T
+\end{cpp}
+
+两个参数一个是int，另一个是unsigned int。编译器不知道T类型应该是int还是unsigned int。为了解决这种模棱两可的情况，必须显式提供模板参数：
+
+\begin{cpp}
+minimum<unsigned>(1, 2u); // OK
+\end{cpp}
+
+推导模板参数时，编译器会在模板参数和用于调用函数的参数之间进行比较。为了使比较成功并且编译器能够成功推导出所有参数，这些参数必须具有一定的结构。然而，深入探讨这个过程超出了本示例的范围。可以查阅其他资源，包括我的书《Template Metaprogramming with C++》的第4章，也对此进行了详细讨论。
+
+正如引言中提到的，模板是一个很大的主题，不可能在一个示例中完全讲透。接下来的两个示例中，将介绍带有可变数量参数的函数模板。
+

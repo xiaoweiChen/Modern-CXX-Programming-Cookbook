@@ -1,0 +1,163 @@
+
+C++下标操作符 []，用来访问数组或类似容器的数据结构中的元素的基本方法。这个操作符可以重载，以便为自定义类提供对内部存储数据的访问能力。特别是在模拟容器的类中，重载下标操作符是一个常见的需求。本节将介绍如何重载下标操作符以及C++23带来的变化。
+
+\mySubsubsection{}{How to do it...}
+
+要为容器中的元素提供随机访问，可以按照以下方式重载下标操作符:
+
+\begin{itemize}
+\item
+对于一维容器，无论标准版本如何，都可以重载接受一个参数的下标操作符:
+
+\begin{cpp}
+template <typename T>
+struct some_buffer
+{
+    some_buffer(size_t const size):data(size)
+    {}
+    size_t size() const { return data.size(); }
+    T const& operator[](size_t const index) const
+    {
+        if(index >= data.size())
+        std::runtime_error("invalid index");
+        return data[index];
+    }
+    T & operator[](size_t const index)
+    {
+        if (index >= data.size())
+        std::runtime_error("invalid index");
+        return data[index];
+    }
+private:
+    std::vector<T> data;
+};
+\end{cpp}
+
+\item
+对于多维容器，从C++23开始，可以重载接受多个参数的下标操作符:
+
+\begin{cpp}
+template <typename T, size_t ROWS, size_t COLS>
+struct matrix
+{
+    T& operator[](size_t const row, size_t const col)
+    {
+        if(row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+    T const & operator[](size_t const row, size_t const col) const
+    {
+        if (row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+private:
+    std::array<T, ROWS* COLS> data;
+};
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+下标操作符通常用于访问数组中的元素，也可以作为成员函数在类中重载，特别是模拟容器（或一般意义上的集合）的类型。例如，标准容器如 std::vector, std::set 和 std::map 都提供了下标操作符的重载，可以编写如下代码:
+
+\begin{cpp}
+std::vector<int> v {1, 2, 3};
+v[2] = v[1] + v[0];
+\end{cpp}
+
+上面的部分中，了解了如何重载下标操作符。通常会有两个重载版本，常量版本和非常量版本。常量版本返回对常量对象的引用，而非常量版本返回对非常量对象的引用。
+
+C++23之前的版本中，下标操作符的主要问题是只能有一个参数，不能直接用于访问多维容器的元素，开发人员通常会使用调用操作符 operator() 来替代。例如:
+
+\begin{cpp}
+template <typename T, size_t ROWS, size_t COLS>
+struct matrix
+{
+    T& operator()(size_t const row, size_t const col)
+    {
+        if(row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+    T const & operator()(size_t const row, size_t const col) const
+    {
+        if (row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+private:
+    std::array<T, ROWS* COLS> data;
+};
+matrix<int, 2, 3> m;
+m(0, 0) = 1;
+\end{cpp}
+
+为了解决这个问题，C++11中可以使用 [\{expr1, expr2, ...\}] 这样的语法来重载下标操作符。下面是一个修改后的矩阵类的实现，就利用了这种语法:
+
+\begin{cpp}
+template <typename T, size_t ROWS, size_t COLS>
+struct matrix
+{
+    T& operator[](std::initializer_list<size_t> index)
+    {
+        size_t row = *index.begin();
+        size_t col = *(index.begin() + 1);
+        if (row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+    T const & operator[](std::initializer_list<size_t> index) const
+    {
+        size_t row = *index.begin();
+        size_t col = *(index.begin() + 1);
+        if (row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+    private:
+    std::array<T, ROWS* COLS> data;
+};
+matrix<int, 2, 3> m;
+m[{0, 0}] = 1;
+\end{cpp}
+
+这种语法较为笨拙，在实践中可能很少使用。因此，C++23标准允许使用多个参数来重载下标操作符。下面是一个修改后的矩阵类的示例：
+
+\begin{cpp}
+template <typename T, size_t ROWS, size_t COLS>
+struct matrix
+{
+    T& operator[](size_t const row, size_t const col)
+    {
+        if(row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+    T const & operator[](size_t const row, size_t const col) const
+    {
+        if (row >= ROWS || col >= COLS)
+        throw std::runtime_error("invalid index");
+        return data[row * COLS + col];
+    }
+    private:
+    std::array<T, ROWS* COLS> data;
+};
+matrix<int, 2, 3> m;
+m[0, 0] = 1;
+\end{cpp}
+
+这样做的结果是使得调用语法与访问一维容器保持一致，std::mdspan 类就是利用这一点来提供对对象序列的多维视图访问。std::mdspan 是C++23中引入的一个新类型，表示一个非拥有性的连续序列（如数组）的视图，但将该序列重新解释为多维数组。前面提到的矩阵类实际上可以用 std::mdspan 视图代替：
+
+\begin{cpp}
+int data[2*3] = {};
+auto m = std::mdspan<int, std::extents<2, 3>> (data);
+m[0, 0] = 1;
+\end{cpp}
+
+
+
+
+
+

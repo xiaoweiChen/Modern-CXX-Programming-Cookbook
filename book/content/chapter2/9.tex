@@ -1,0 +1,177 @@
+
+
+用户自定义字面量有两种形式：一种是经过编译器处理后传递给字面量操作符的形式，称为熟(cooked)形式；另一种是在传递给字面量操作符之前未经编译器处理的形式，称为生(raw)形式。后者仅适用于整型和浮点型。原始字面量对于改变编译器的常规行为非常有用。例如，像3.1415926这样的序列通常会编译器解释为浮点值，可通过使用原始用户自定义字面量，解释为用户定义的十进制值。本示例中，将介绍如何创建原始用户自定义字面量。
+
+\mySubsubsection{}{Getting ready}
+
+为了介绍如何创建原始用户自定义字面量，将定义二进制字面量。这些二进制字面量可以是8位、16位和32位（无符号）类型。这些类型将称为byte8、byte16和byte32，而要创建的字面量称为\verb|_b8|、\verb|_b16|和\verb|_b32|。
+
+\mySubsubsection{}{How to do it...}
+
+创建原始自定义字面量，应该遵循以下步骤：
+
+\begin{enumerate}
+\item
+在单独的命名空间中定义你的字面量以避免符号冲突。
+
+\item
+始终以前缀下划线（\verb|_|）开始用户自定义后缀。
+
+\item
+定义如下形式的字面量操作符或字面量操作符模板：
+
+\begin{cpp}
+T operator "" _suffix(const char*);
+template<char...> T operator "" _suffix();
+\end{cpp}
+\end{enumerate}
+
+下面的例子展示了8位、16位和32位二进制字面量的一种实现：
+
+\begin{cpp}
+namespace binary
+{
+    using byte8  = unsigned char;
+    using byte16 = unsigned short;
+    using byte32 = unsigned int;
+    namespace binary_literals
+    {
+        namespace binary_literals_internals
+        {
+            template <typename CharT, char... bits>
+            struct binary_struct;
+            template <typename CharT, char... bits>
+            struct binary_struct<CharT, '0', bits...>
+            {
+                static constexpr CharT value{
+                    binary_struct<CharT, bits...>::value };
+            };
+            template <typename CharT, char... bits>
+            struct binary_struct<CharT, '1', bits...>
+            {
+                static constexpr CharT value{
+                    static_cast<CharT>(1 << sizeof...(bits)) |
+                    binary_struct<CharT, bits...>::value };
+            };
+            template <typename CharT>
+            struct binary_struct<CharT>
+            {
+                static constexpr CharT value{ 0 };
+            };
+        }
+        template<char... bits>
+        constexpr byte8 operator""_b8()
+        {
+            static_assert(
+            sizeof...(bits) <= 8,
+            "binary literal b8 must be up to 8 digits long");
+            return binary_literals_internals::
+            binary_struct<byte8, bits...>::value;
+        }
+        template<char... bits>
+        constexpr byte16 operator""_b16()
+        {
+            static_assert(
+            sizeof...(bits) <= 16,
+            "binary literal b16 must be up to 16 digits long");
+            return binary_literals_internals::
+            binary_struct<byte16, bits...>::value;
+        }
+        template<char... bits>
+        constexpr byte32 operator""_b32()
+        {
+            static_assert(
+            sizeof...(bits) <= 32,
+            "binary literal b32 must be up to 32 digits long");
+            return binary_literals_internals::
+            binary_struct<byte32, bits...>::value;
+        }
+    }
+}
+\end{cpp}
+
+\mySubsubsection{}{How it work...}
+
+首先，在名为\verb|binary|的命名空间内部定义所有内容，并引入几个类型别名：\verb|byte8|、\verb|byte16|和\verb|byte32|，分别代表8位、16位和32位的整型。
+
+上述实现使我们能够定义形如\verb|1010_b8|（值为十进制10的\verb|byte8|）或\verb|000010101100_b16|（值为十进制2130496的\verb|byte16|）的二进制字面量。要确保不超出每种类型的数字数量，像\verb|111100001_b8|这样的值应该是非法的，编译器应该产生错误。
+
+字面量操作符模板定义在嵌套命名空间\verb|binary_literal_internals|中。这是一个好的实践，避免与其他命名空间中的其他字面量操作符产生符号冲突。如果发生这种情况，可以选择在正确的范围内使用适当的命名空间（比如：在一个函数或块中使用一个命名空间，在另一个函数或块中使用另一个命名空间）。
+
+三个字面量操作符模板非常相似。不同之处在于其名称（\verb|_b8|、\verb|_b16|和\verb|_b32|）、返回类型（\verb|byte8|、\verb|byte16|和\verb|byte32|），以及静态断言中检查数字数量的条件。
+
+后续的章节中会继续探讨变长模板参数包和模板递归；不过，为了更好地理解，这是该特定实现的工作方式：bits是一个模板参数包，不是一个值，而是模板实例化时可能拥有的所有值。例如，考虑字面量\verb|1010_b8|，则字面量操作符模板将实例化为\verb|operator"" _b8<'1', '0', '1', '0'>()|。进行计算二进制值的操作之前，先检查字面量中的数字数量。对于\verb|_b8|，这不应超过八位（包括任何尾随零）。同样地，对于\verb|_b16|，不应超过十六位，对于\verb|_b32|，不应超过三十二位。为此，使用\verb|sizeof...|操作符它返回参数包中元素的数量（即\verb|bits|）。
+
+如果数字数量正确，可以展开参数包并递归地计算由二进制字面量表示的十进制值，可通过一个类型模板及其特化来完成。这些模板定义在另一个嵌套的命名空间\verb|binary_literals_internals|中。这也是一个好的实践，隐藏了（除非有\verb|using namespace|指令使其在当前命名空间中可用）实现细节。
+
+\begin{myNotic}
+虽然看起来像是递归，但这并不是真正的运行时递归。当编译器展开了模板并生成了代码之后，最终得到的是对具有不同参数数量重载函数的调用。这一点在第3章中有详细解释。
+\end{myNotic}
+
+\verb|binary_struct| 类模板具有一个模板类型 \verb|CharT| 作为函数的返回类型（需要这个是因为字面量操作符模板应该返回 \verb|byte8|、\verb|byte16| 或 \verb|byte32|），以及一个参数包：
+
+\begin{cpp}
+template <typename CharT, char... bits>
+struct binary_struct;
+\end{cpp}
+
+该类模板有几个带有参数包分解的特化（参阅第3章）。当参数包的第一个数字是 \verb|'0'| 时，计算出的值保持不变，继续展开剩余部分。如果参数包的第一个数字是 \verb|'1'|，则新值是1，向左移动剩余包中数字的数量位，或者剩余包的值：
+
+\begin{cpp}
+template <typename CharT, char... bits>
+struct binary_struct<CharT, '0', bits...>
+{
+    static constexpr CharT value{ binary_struct<CharT, bits...>::value };
+};
+template <typename CharT, char... bits>
+struct binary_struct<CharT, '1', bits...>
+{
+    static constexpr CharT value{
+        static_cast<CharT>(1 << sizeof...(bits)) |
+        binary_struct<CharT, bits...>::value };
+};
+\end{cpp}
+
+最后一个特化处理的是参数包为空的情况，返回0：
+
+\begin{cpp}
+template <typename CharT>
+struct binary_struct<CharT>
+{
+    static constexpr CharT value{ 0 };
+};
+\end{cpp}
+
+定义了这些辅助类后，可以按预期实现 \verb|byte8|、\verb|byte16| 和 \verb|byte32| 二进制字面量。需要将 \verb|binary_literals| 命名空间的内容引入当前命名空间，才能使用字面量操作符模板：
+
+\begin{cpp}
+using namespace binary;
+using namespace binary_literals;
+auto b1 = 1010_b8;
+auto b2 = 101010101010_b16;
+auto b3 = 101010101010101010101010_b32;
+\end{cpp}
+
+以下定义会触发编译器错误：
+
+\begin{cpp}
+// binary literal b8 must be up to 8 digits long
+auto b4 = 0011111111_b8;
+// binary literal b16 must be up to 16 digits long
+auto b5 = 001111111111111111_b16;
+// binary literal b32 must be up to 32 digits long
+auto b6 = 0011111111111111111111111111111111_b32;
+\end{cpp}
+
+因为 \verb|static_assert| 中的条件没有满足，所以位于字面量操作符之前的字符序列长度都超过了预期。
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,295 @@
+
+C++ 语言定义了六个执行比较的关系操作符：==, !=, <, <=, >, 和 >=。尽管 != 可以基于 == 实现，<=, >= 和 > 可以基于 < 实现，但如果想让用户定义类型支持等值比较，仍需实现 == 和 != 操作符；如果想支持排序，则还需实现 <, <=, > 和 >= 操作符。
+
+如果希望类型——称之为 T——可比较，则需要实现 6 个函数；如果希望它们与另一种类型 U 可比较，则需要实现 12 个函数；如果还希望 U 类型的值与你的 T 类型可比较，则需要实现 18 个函数，依此类推。新的 C++20 标准通过引入一个新的比较操作符，即三向比较操作符，减少了这个数量到一两个，或者根据与其他类型的比较而定的多个。这个新操作符用符号 <=> 表示，因此通常称为宇宙飞船操作符。这个新操作符可编写更少的代码，更好地描述关系的强度，避免手动实现基于其他比较操作符所带来的性能问题。
+
+\mySubsubsection{}{Getting ready}
+
+定义或实现三向比较操作符时，有必要包含头文件 <compare>。这个新的 C++20 头文件是标准通用工具库的一部分，提供了实现比较所需的类、函数和概念。
+
+\mySubsubsection{}{How to do it...}
+
+为了在 C++20 中最优地实现比较，按以下步骤操作：
+
+\begin{itemize}
+\item
+如果希望类型支持等值比较（即 == 和 !=），只需实现 == 操作符并返回布尔值。可以默认实现，以便编译器执行成员级比较：
+
+\begin{cpp}
+class foo
+{
+    int value;
+public:
+    foo(int const v):value(v){}
+    bool operator==(foo const&) const = default;
+};
+\end{cpp}
+
+\item
+如果希望类型同时支持等值比较和排序，并且默认的成员级比较适用，只需定义 <=> 操作符，返回 auto，并默认其实现：
+
+\begin{cpp}
+class foo
+{
+    int value;
+public:
+    foo(int const v) :value(v) {}
+    auto operator<=>(foo const&) const = default;
+};
+\end{cpp}
+
+\item
+如果希望类型同时支持等值比较和排序并且需要执行自定义比较，那么实现 == 操作符（用于等值比较）和 <=> 操作符（用于排序）：
+
+\begin{cpp}
+class foo
+{
+    int value;
+public:
+    foo(int const v) :value(v) {}
+    bool operator==(foo const& other) const
+    { return value == other.value; }
+    auto operator<=>(foo const& other) const
+    { return value <=> other.value; }
+};
+\end{cpp}
+\end{itemize}
+
+实现三向比较操作符时，请遵循以下指导原则：
+
+\begin{itemize}
+\item
+只实现三向比较操作符，但在比较值时总是使用 <, <=, > 和 >= 这些二向比较操作符。
+
+\item
+即使你想让比较的第一个操作数不是类型，也要将三向比较操作符实现为成员函数。
+
+\item
+只有希望在两个参数上进行隐式转换（比较两个都不是类型实例）时，才将三向比较操作符实现为非成员函数。
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+新的三向比较操作符类似于 C 语言中的 memcmp() 和 strcmp() 函数，以及 std::string::compare() 方法。这些函数接受两个参数并返回一个整数值，如果第一个小于第二个，则该值小于零；如果相等，则为零；如果第一个大于第二个，则大于零。三向比较操作符不返回整数，而是返回比较类别类型的一个值。
+
+这可能是以下之一：
+
+\begin{itemize}
+\item
+\verb|std::strong_ordering| 表示三向比较的结果支持所有六个关系操作符，不允许不可比较的值（意味着 a < b, a == b 和 a > b 至少有一个为真），并且暗示可替代性。这是一种属性，即如果 a == b 且 f 是一个只读取比较相关状态（可通过参数的公共常量成员访问）的函数，则 f(a) == f(b)。
+
+\item
+\verb|std::weak_ordering| 支持所有六个关系操作符，不允许不可比较的值（意味着 a < b, a == b, 和 a > b 都不能为真），但也不暗示可替代性。弱排序的一个典型例子是不区分大小写的字符串类型。
+
+\item
+\verb|std::partial_ordering| 支持所有六个关系操作符，但不暗示可替代性，并且可能具有不可比较的值（例如，浮点 NaN 无法与其他值进行比较）。
+\end{itemize}
+
+\verb|std::strong_ordering| 类型是所有这些类别类型中最强大的。不能从任何其他类别隐式转换而来，但它可以隐式转换为 \verb|std::weak_ordering| 和 \verb|std::partial_ordering|。\verb|std::weak_ordering| 也可以隐式转换为 \verb|std::partial_ordering|。这些属性总结在下表中：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|l|}
+\hline
+\textbf{类别} & \textbf{操作符} & \textbf{可替代性} & \textbf{可比较值} & \textbf{隐式转换} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+std::strong\_ordering  & ==, !=, \textless{}, \textless{}=, \textgreater{}, \textgreater{}= & 是 & 是 & $\downarrow$ \\ \hline
+std::weak\_ordering    & ==, !=, \textless{}, \textless{}=, \textgreater{}, \textgreater{}= & 否  & 是 & $\downarrow$ \\ \hline
+std::partial\_ordering & ==, !=, \textless{}, \textless{}=, \textgreater{}, \textgreater{}= & 否  & 否  &              \\ \hline
+\end{longtable}
+
+\begin{center}
+表9.2：类型的属性
+\end{center}
+
+比较类别具有可以隐式与字面值零比较的值（但不能与零整数变量比较），其值列于下表：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{multirow}
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|lll|l|}
+\hline
+\multirow{2}{*}{\textbf{类别}} &
+\multicolumn{3}{l|}{\textbf{数值}} &
+\multirow{2}{*}{\textbf{非数值}} \\ \cline{2-4}
+& \multicolumn{1}{l|}{-1}   & \multicolumn{1}{l|}{0}          & 1       &           \\ \hline
+\endfirsthead
+%
+\endhead
+%
+strong\_ordering &
+\multicolumn{1}{l|}{小于} &
+\multicolumn{1}{l|}{\begin{tabular}[c]{@{}l@{}}相等\end{tabular}} &
+大于 &
+\\ \hline
+weak\_ordering    & \multicolumn{1}{l|}{小于} & \multicolumn{1}{l|}{相等} & 大于 &           \\ \hline
+partial\_ordering & \multicolumn{1}{l|}{小于} & \multicolumn{1}{l|}{相等} & 大于 & 无序 \\ \hline
+\end{longtable}
+
+\begin{center}
+表9.3：与0隐式可比较的比较类别的值
+\end{center}
+
+为了更好地理解，来看一个例子：
+
+\begin{cpp}
+class cost_unit_t
+{
+    // data members
+    public:
+    std::strong_ordering operator<=>(cost_unit_t const & other) const noexcept = default;
+};
+class project_t : public cost_unit_t
+{
+    int         id;
+    int         type;
+    std::string name;
+public:
+    bool operator==(project_t const& other) const noexcept
+    {
+        return (cost_unit_t&)(*this) == (cost_unit_t&)other &&
+        name == other.name &&
+        type == other.type &&
+        id == other.id;
+    }
+    std::strong_ordering operator<=>(project_t const & other) const noexcept
+    {
+        // compare the base class members
+        if (auto cmp = (cost_unit_t&)(*this) <=> (cost_unit_t&)other;
+        cmp != 0)
+            return cmp;
+        // compare this class members in custom order
+        if (auto cmp =  name.compare(other.name); cmp != 0)
+            return cmp < 0 ? std::strong_ordering::less :
+                std::strong_ordering::greater;
+        if (auto cmp = type <=> other.type; cmp != 0)
+            return cmp;
+        return id <=> other.id;
+    }
+};
+\end{cpp}
+
+\verb|cost_unit_t| 是一个基类，包含某些（未指定的）数据成员，并定义了 <=> 操作符，是编译器默认实现的。编译器不仅会提供 <, <=, > 和 >= 操作符，还会提供 == 和 != 操作符。\verb|project_t| 派生自 \verb|cost_unit_t|，包含几个数据字段：项目的标识符、类型和名称。但对于这种类型，不能默认实现操作符，因为不想按成员顺序比较，而是按照自定义顺序：首先是名称，然后是类型，最后是标识符。这种情况下，实现了返回布尔值的 == 操作符，用于测试成员字段的等值性，以及返回 \verb|std::strong_ordering| 的 <=> 操作符，该操作符使用自身来比较其两个参数的值。
+
+接下来的代码展示了一个 \verb|employee_t| 的类型，该类型模拟公司中的员工。一个员工可以有经理，一个担任经理的员工可以管理其他人：
+
+\begin{cpp}
+struct employee_t
+{
+    bool is_managed_by(employee_t const&) const { /* ... */ }
+    bool is_manager_of(employee_t const&) const { /* ... */ }
+    bool is_same(employee_t const&) const { /* ... */ }
+    bool operator==(employee_t const & other) const
+    {
+        return is_same(other);
+    }
+    std::partial_ordering operator<=>(employee_t const& other) const noexcept
+    {
+        if (is_same(other))
+            return std::partial_ordering::equivalent;
+        if (is_managed_by(other))
+            return std::partial_ordering::less;
+        if (is_manager_of(other))
+            return std::partial_ordering::greater;
+        return std::partial_ordering::unordered;
+    }
+};
+\end{cpp}
+
+\verb|is_same()|, \verb|is_manager_of()| 和 \verb|is_managed_by()| 返回两个员工之间的关系。然而，可能存在没有关系的员工；例如，不同团队的员工，或者没有上下级结构的团队。这里，可以实现等值性和排序。但是，不能相互比较所有员工，所以 <=> 操作符必须返回一个 \verb|std::partial_ordering| 值。如果值代表相同的员工，则返回值为 \verb|partial_ordering::equivalent|；如果当前员工受提供的员工管理，则返回 \verb|partial_ordering::less|；如果当前员工是提供的员工的管理者，则返回 \verb|partial_ordering::greater|；而其他情况，返回 \verb|partial_ordering::unordered|。
+
+再看一个例子，以了解三向比较操作符的工作方式。下面的示例中，ipv4 类建模了一个 IPv4 地址。支持与其他 ipv4 类型的对象以及无符号长整数值（因为有一个 \verb|to_ulong()| 方法可以将 IP 地址转换成一个 32 位无符号整数值）进行比较：
+
+\begin{cpp}
+struct ipv4
+{
+    explicit ipv4(unsigned char const a=0, unsigned char const b=0,
+    unsigned char const c=0, unsigned char const d=0) noexcept :
+        data{ a,b,c,d }
+    {}
+    unsigned long to_ulong() const noexcept
+    {
+        return
+        (static_cast<unsigned long>(data[0]) << 24) |
+        (static_cast<unsigned long>(data[1]) << 16) |
+        (static_cast<unsigned long>(data[2]) << 8) |
+        static_cast<unsigned long>(data[3]);
+    }
+    auto operator<=>(ipv4 const&) const noexcept = default;
+    bool operator==(unsigned long const other) const noexcept
+    {
+        return to_ulong() == other;
+    }
+    std::strong_ordering
+    operator<=>(unsigned long const other) const noexcept
+    {
+        return to_ulong() <=> other;
+    }
+private:
+    std::array<unsigned char, 4> data;
+};
+\end{cpp}
+
+这里重载了 <=> 操作符并允许其默认实现，但还显式地实现了 == 操作符和 <=> 操作符的重载版本，这些版本比较 ipv4 对象与无符号长整数值。由于这些操作符的存在，可以创建以下的表达式：
+
+\begin{cpp}
+ipv4 ip(127, 0, 0, 1);
+if(ip == 0x7F000001) {}
+if(ip != 0x7F000001) {}
+if(0x7F000001 == ip) {}
+if(0x7F000001 != ip) {}
+if(ip < 0x7F000001)  {}
+if(0x7F000001 < ip)  {}
+\end{cpp}
+
+这里需要注意两点：一是只重载了 == 操作符，但也可以使用 != 操作符；二是重载了 == 操作符和 <=> 操作符来比较 ipv4 值与无符号长整数值，也可以比较无符号长整数值与 ipv4 值。因为编译器执行对称的重载解析，对于形式为 a@b 的表达式，其中 @ 是一个双向关系操作符，编译器会对 a@b, a<=>b, 和 b<=>a 进行名称查找。下表显示了关系操作符的所有可能变换：
+
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+a == b & b == a    &           \\ \hline
+\endfirsthead
+%
+\endhead
+%
+a != b & !(a == b) & !(b == a) \\ \hline
+a \textless{}=\textgreater b & 0 \textless{}=\textgreater (b \textless{}=\textgreater a) &                                                  \\ \hline
+a \textless b                & (a \textless{}=\textgreater b) \textless 0                & 0 \textgreater (b \textless{}=\textgreater a)    \\ \hline
+a \textless{}= b             & (a \textless{}=\textgreater b) \textless{}= 0             & 0 \textgreater{}= (b \textless{}=\textgreater a) \\ \hline
+a \textgreater b             & (a \textless{}=\textgreater b) \textgreater 0             & 0 \textless (b \textless{}=\textgreater a)       \\ \hline
+a \textgreater{}= b          & (a \textless{}=\textgreater b) \textgreater{}= 0          & 0 \textless{}= (b \textless{}=\textgreater a)    \\ \hline
+\end{longtable}
+
+\begin{center}
+表9.4：关系操作符可能的转换
+\end{center}
+
+这减少了为了支持不同形式的比较，必须明确提供的重载数量。三向比较操作符可以作为成员函数或非成员函数来实现，通常应该优先选择成员实现。
+
+只有在两个参数上都进行隐式转换时，才应该使用非成员形式。下面是一个例子：
+
+\begin{cpp}
+struct A { int i; };
+struct B
+{
+    B(A a) : i(a.i) { }
+    int i;
+};
+inline auto
+operator<=>(B const& lhs, B const& rhs) noexcept
+{
+    return lhs.i <=> rhs.i;
+}
+assert(A{ 2 } > A{ 1 })
+\end{cpp}
+
+虽然 <=> 操作符是为类型 B 定义的，由于它是非成员函数，并且 A 可以隐式转换为 B，因此可以对 A 类型的对象进行比较。
+

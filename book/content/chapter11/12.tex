@@ -1,0 +1,186 @@
+
+Catch2 框架使用传统的测试用例和测试函数样式或带有场景和“给定-当-然后”（given-when-then）部分的行为驱动开发（BDD）样式编写测试。测试定义为测试用例的不同部分，并且可以根据需要嵌套得非常深。无论偏好哪种风格，测试都仅使用两个基本宏来定义。本示例将极少这两个宏是什么，以及它们是如何工作的。
+
+\mySubsubsection{}{How to do it...}
+
+要使用传统样式，包括测试用例和测试函数，编写测试，请按以下步骤操作：
+
+\begin{itemize}
+\item
+使用 \verb|TEST_CASE| 宏定义一个带有名称（作为字符串）的测试用例，可选地，还可以提供关联标签列表：
+
+\begin{cpp}
+TEST_CASE("test construction", "[create]")
+{
+    // define sections here
+}
+\end{cpp}
+
+\item
+使用 SECTION 宏在测试用例内部定义一个测试函数，名称也是字符串：
+
+\begin{cpp}
+TEST_CASE("test construction", "[create]")
+{
+    SECTION("test constructor")
+    {
+        auto p = point3d{ 1,2,3 };
+        REQUIRE(p.x() == 1);
+        REQUIRE(p.y() == 2);
+        REQUIRE(p.z() == 4);
+    }
+}
+\end{cpp}
+
+\item
+如果希望重用设置和清理代码或以层次结构组织测试，则可以定义嵌套部分：
+
+\begin{cpp}
+TEST_CASE("test operations", "[modify]")
+{
+    SECTION("test methods")
+    {
+        SECTION("test offset")
+        {
+            auto p = point3d{ 1,2,3 };
+            p.offset(1, 1, 1);
+            REQUIRE(p.x() == 2);
+            REQUIRE(p.y() == 3);
+            REQUIRE(p.z() == 3);
+        }
+    }
+}
+\end{cpp}
+\end{itemize}
+
+要使用 BDD 样式编写测试，请按以下步骤操作：
+
+\begin{itemize}
+\item
+使用 SCENARIO 宏定义场景，并为其指定名称：
+
+\begin{cpp}
+SCENARIO("modify existing object")
+{
+    // define sections here
+}
+\end{cpp}
+
+\item
+使用 GIVEN、WHEN 和 THEN 宏在场景中定义嵌套部分，并分别为每个部分指定名称：
+
+\begin{cpp}
+SCENARIO("modify existing object")
+{
+    GIVEN("a default constructed point")
+    {
+        auto p = point3d{};
+        REQUIRE(p.x() == 0);
+        REQUIRE(p.y() == 0);
+        REQUIRE(p.z() == 0);
+        WHEN("increased with 1 unit on all dimensions")
+        {
+            p.offset(1, 1, 1);
+            THEN("all coordinates are equal to 1")
+            {
+                REQUIRE(p.x() == 1);
+                REQUIRE(p.y() == 1);
+                REQUIRE(p.z() == 1);
+            }
+        }
+    }
+}
+\end{cpp}
+\end{itemize}
+
+要执行测试，请按以下步骤操作：
+
+\begin{itemize}
+\item
+要执行程序中的所有测试（除隐藏的测试外），请在没有以下代码描述的命令行参数的情况下运行测试程序。
+
+\item
+要仅执行一组特定的测试用例，请提供一个过滤器作为命令行参数。这可以包含测试用例名称、通配符、标签名称和标签表达式：
+
+\begin{shell}
+chapter11ca_02.exe "test construction"
+test construction
+test constructor
+-------------------------------------------------
+f:\chapter11ca_02\main.cpp(7)
+.................................................
+f:\chapter11ca_02\main.cpp(12): FAILED:
+REQUIRE( p.z() == 4 )
+with expansion:
+3 == 4
+=================================================
+test cases: 1 | 1 failed
+assertions: 6 | 5 passed | 1 failed
+\end{shell}
+
+\item
+要仅执行某个特定部分（或一组部分），请使用命令行参数 \verb|--section| 或 \verb|-c| 加上部分名称（可以多次使用以指定多个部分）：
+
+\begin{cpp}
+chapter11ca_02.exe "test construction" --section "test origin"
+Filters: test construction
+==================================================
+All tests passed (3 assertions in 1 test case)
+\end{cpp}
+
+\item
+要指定测试用例的执行顺序，请使用命令行参数 \verb|--order| 加上以下值：decl（声明顺序）、lex（按名称字典序排列）或 rand（使用 \verb|std::random_shuffle()| 确定的随机顺序）。以下是对此的一个示例：
+
+\begin{shell}
+chapter11ca_02.exe --order lex
+\end{shell}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+测试用例自我注册，除了定义测试用例和测试函数外，开发者无需设置测试程序。测试函数可定义为测试用例的部分（使用 SECTION 宏），并且可以嵌套。
+
+SECTION的嵌套深度没有限制。测试用例和测试函数，从现在起将称为SECTION，形成了一棵树结构，测试用例位于根节点，最内层的部分作为叶子节点。当测试程序运行时，执行的是叶子部分。每个叶子部分都在与其他叶子部分隔离的状态下执行。然而，执行路径从根测试用例开始，向下延伸至最内层的部分。路径上的所有代码在每次运行时都会完全执行。当多个部分共享来自父部分或测试用例的公共代码时，相同的代码会为每个部分执行一次，而不会在执行之间共享数据。一方面，这消除了对特殊装置方法的需求；另一方面，允许多个装置为每个部分服务（路径上遇到的所有内容），这是许多测试框架所缺乏的功能。
+
+编写测试用例的 BDD 样式由相同的两个宏提供动力，即 \verb|TEST_CASE| 和 SECTION，以及测试部分的能力。实际上，宏 SCENARIO 是 \verb|TEST_CASE| 的重新定义，而 GIVEN、WHEN、\verb|AND_WHEN|、THEN 和 \verb|AND_THEN| 是 SECTION 的重新定义：
+
+\begin{cpp}
+#define SCENARIO( ... ) TEST_CASE( "Scenario: " __VA_ARGS__ )
+#define GIVEN(desc)     INTERNAL_CATCH_DYNAMIC_SECTION("    Given: " << desc)
+#define AND_GIVEN(desc) INTERNAL_CATCH_DYNAMIC_SECTION("And given: " << desc)
+#define WHEN(desc)      INTERNAL_CATCH_DYNAMIC_SECTION("     When: " << desc)
+#define AND_WHEN(desc)  INTERNAL_CATCH_DYNAMIC_SECTION(" And when: " << desc)
+#define THEN(desc)      INTERNAL_CATCH_DYNAMIC_SECTION("     Then: " << desc)
+#define AND_THEN(desc)  INTERNAL_CATCH_DYNAMIC_SECTION("      And: " << desc)
+\end{cpp}
+
+当执行测试程序时，所有定义的测试都会运行。但这不包括使用以 . 开头的名字或以点开头的标签指定的隐藏测试。可以通过提供命令行参数 [.] 或 [hide] 强制运行隐藏测试。
+
+可以使用名称或标签来过滤要执行的测试用例。下表显示了一些可能的选项：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{参数}   & \textbf{说明}                                     \\ \hline
+\endfirsthead
+%
+\endhead
+%
+"test construction" & 名称为 test construction 的测试用例                   \\ \hline
+test*               & 所有以 test 开头的测试用例                      \\ \hline
+$\sim$"test construction"          & 除名为 test construction 的测试用例外的所有测试用例                                      \\ \hline
+$\sim$*equal*       & 不包含单词 equal 的所有测试用例 \\ \hline
+a* $\sim$ab* abc                   & 所有以 a 开头的测试用例，但排除以 ab 开头的，abc 除外 \\ \hline
+{[}modify{]}        & 标记为 {[}modify{]} 的所有测试用例                   \\ \hline
+{[}modify{]},{[}compare{]}{[}op{]} & \begin{tabular}[c]{@{}l@{}}标记为 {[}modify{]} 或同时标记为 {[}compare{]} 和 {[}op{]} 的\\所有测试用例\end{tabular}  \\ \hline
+-\#sourcefile       & 来自 sourcefile.cpp 文件的所有测试                  \\ \hline
+\end{longtable}
+
+\begin{center}
+表 11.5: 测试用例执行过滤器示例
+\end{center}
+
+通过使用命令行参数 \verb|--section| 或 \verb|-c| 指定一个或多个部分名称，也可以执行特定的测试函数，但此选项不支持通配符。如果指定了要运行的部分，从根测试用例到选定部分的整个测试路径都将执行。此外，如果没有首先指定测试用例或一组测试用例，那么所有测试用例都将被执行，尽管只有其中匹配的部分会执行。
+

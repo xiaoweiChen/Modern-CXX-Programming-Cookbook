@@ -1,0 +1,120 @@
+上一个示例中，已经了解了如何使用 \verb|std::optional| 类型来存储可能存在的值，其应用场景包括函数的可选参数和可能无法产生结果的函数的返回值。当需要将多个这样的函数串联在一起时，代码可能会变得复杂且冗长。C++23 标准为 \verb|std::optional| 类型添加了几个新方法(单子操作)，这些方法是 \verb|transform()|、\verb|and_then()| 和 \verb|or_else()|。本示例中，将介绍它们的作用。
+
+\begin{myNotic}
+简单来说，函数式编程中，单子是一个封装在其包装的值之上提供某些功能的容器。比如 C++ 中的 \verb|std::optional| 就是一个例子。另一方面，单子操作是从域 D 映射到自身 D 的函数。例如，恒等函数（返回其参数的函数）就是一种单子操作。新添加的函数 \verb|transform()|、\verb|and_then()| 和 \verb|or_else()| 是单子操作，因为它们接收一个 \verb|std::optional| 并返回一个 \verb|std::optional|。
+\end{myNotic}
+
+\mySubsubsection{}{Getting ready}
+
+下面的部分中，将参考这里展示的定义：
+
+\begin{cpp}
+struct booking
+{
+    int                        id;
+    int                        nights;
+    double                     rate;
+    std::string                description;
+    std::vector<std::string>   extras;
+};
+std::optional<booking> make_booking(std::string_view description,
+int nights, double rate);
+std::optional<booking> add_rental(std::optional<booking> b);
+std::optional<booking> add_insurance(std::optional<booking> b);
+double calculate_price(std::optional<booking> b);
+double apply_discount(std::optional<double> p);
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+可以根据用例使用以下单步操作：
+
+\begin{itemize}
+\item
+如果有一个可选值，并且想要应用一个函数 f ，并返回该调用的结果，请使用 \verb|transform()|：
+
+\begin{cpp}
+auto b = make_booking("Hotel California", 3, 300);
+auto p = b.transform(calculate_price);
+\end{cpp}
+
+\item
+如果有一个可选值，并且想要应用一个返回可选值的函数 f，然后返回该调用的结果，请使用 \verb|and_then()|：
+
+\begin{cpp}
+auto b = make_booking("Hotel California", 3, 300);
+     b = b.and_then(add_insurance);
+auto p = b.transform(calculate_price);
+\end{cpp}
+
+\item
+如果有一个可能是空的可选值，希望调用一个函数来处理这种情况（比如记录日志或抛出异常）并返回另一个可选值（可以是一个替代值或一个空的可选值），请使用 \verb|or_else()|：
+
+\begin{cpp}
+auto b = make_booking("Hotel California", 3, 300)
+        .or_else([]() -> std::optional<booking> {
+            std::cout << "creating the booking failed!\n";
+            return std::nullopt;
+        });
+\end{cpp}
+\end{itemize}
+
+一个更大的例子：
+
+\begin{cpp}
+auto p =
+    make_booking("Hotel California", 3, 300)
+    .and_then(add_rental)
+    .and_then(add_insurance)
+    .or_else([]() -> std::optional<booking> {
+        std::cout << "creating the booking failed!\n";
+        return std::nullopt; })
+    .transform(calculate_price)
+    .transform(apply_discount)
+    .or_else([]() -> std::optional<double> {
+        std::cout << "computing price failed!\n"; return -1; });
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+\verb|and_then()| 和 \verb|transform()| 成员函数非常相似。实际上，具有相同数量的重载和相同的签名，都接受一个参数，即一个函数或可调用对象，并且都返回一个可选值。如果可选值不持有任何值，\verb|and_then()| 和 \verb|transform()| 都会返回一个空的可选值。
+
+否则，如果可选值持有某个值，会使用存储的值调用函数或可调用实例。这就是其区别所在：
+
+\begin{itemize}
+\item
+传递给 \verb|and_then()| 的函数/可调用实例必须自己返回一个 \verb|std::optional| 特化的类型值。这将是 \verb|and_then()| 返回的值。
+
+\item
+传递给 \verb|transform()| 的函数/可调用实例，可以有任意非引用类型的返回值。但返回值本身将在\verb|transform()| 返回之前包装在一个 \verb|std::optional| 中。
+\end{itemize}
+
+为了更好地说明这一点，再次考虑以下函数：
+
+\begin{cpp}
+double calculate_price(std::optional<booking> b);
+\end{cpp}
+
+以前见过这段代码：
+
+\begin{cpp}
+auto b = make_booking("Hotel California", 3, 300);
+auto p = b.transform(calculate_price);
+\end{cpp}
+
+这里，p 的类型是 \verb|std::optional<double>|，因为 \verb|calculate_price()| 返回一个 double，所以 \verb|transform()| 将返回一个 \verb|std::optional<double>|。现在，改变 \verb|calculate_price()| 的签名，使其返回一个 \verb|std::optional<double>|：
+
+\begin{cpp}
+std::optional<double> calculate_price(std::optional<booking> b);
+\end{cpp}
+
+变量 p 现在的类型将是 \verb|std::optional<std::optional<double>>|。
+
+第三个单子函数 \verb|or_else()| 是 \verb|and_then()/transform()| 的对立面：如果可选对象包含一个值，就会原样返回可选对象不做任何事情。否则，会调用其唯一的参数，这是一个没有参数的函数或可调用对象，并返回此次调用的结果。该函数/可调用对象的返回类型必须是 \verb|std::optional<T>|。
+
+\verb|or_else()| 函数用于处理当预期值缺失时的错误情况。提供的函数可能向日志添加一条记录、抛出一个异常或执行其他操作。除非这个可调用对象抛出异常，否则必须返回一个值。可以是一个空的可选值，或一个持有默认值或其他替代值的可选值。
+
+\mySubsubsection{}{there's more}
+
+\verb|std::optional| 的最重要的应用场景之一是，从可能产生值的函数返回值。但当值缺失时，可能需要知道失败的原因。除非存储的类型是值和错误的组合，或者使用参数从函数中检索错误。因此，C++23 标准为这些 \verb|std::optional| 的应用场景提供了另一种选择，即 \verb|std::expected| 类型。
+

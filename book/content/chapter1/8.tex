@@ -1,0 +1,187 @@
+
+许多编程语言支持一种称为 for-each 的循环——即对集合中的元素重复执行一组语句。直到 C++11，才在核心语言层面支持这种特性，尽管之前标准库中有一个通用算法 std::for\_each，可以将一个函数应用于某个范围内的所有元素。C++11 引入了语言级别的 for-each 支持，称为基于范围的for循环 (Range-Based For Loops)。新的 C++17 标准对这一原始语言特性进行了改进。
+
+\mySubsubsection{}{Getting ready}
+
+C++11 中，基于范围的循环语法如下：
+
+\begin{cpp}
+for ( range_declaration : range_expression ) loop_statement
+\end{cpp}
+
+从 C++20 开始，在范围声明之前可以有一个初始化语句（必须以分号结束）：
+
+\begin{cpp}
+for(init-statement range-declaration : range-expression)
+loop-statement
+\end{cpp}
+
+为了举例说明使用基于范围循环的各种方式，将使用以下返回元素序列的函数：
+
+\begin{cpp}
+std::vector<int> getRates()
+{
+    return std::vector<int> {1, 1, 2, 3, 5, 8, 13};
+}
+std::multimap<int, bool> getRates2()
+{
+    return std::multimap<int, bool> {
+        { 1, true },
+        { 1, true },
+        { 2, false },
+        { 3, true },
+        { 5, true },
+        { 8, false },
+        { 13, true }
+    };
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+基于范围循环可用的多种方式：
+
+\begin{itemize}
+\item
+通过为序列中的元素指定特定类型：
+
+\begin{cpp}
+auto rates = getRates();
+for (int rate : rates)
+    std::cout << rate << '\n';
+for (int& rate : rates)
+    rate *= 2;
+\end{cpp}
+
+\item
+不指定类型，让编译器推断：
+
+\begin{cpp}
+for (auto&& rate : getRates())
+    std::cout << rate << '\n';
+for (auto & rate : rates)
+    rate *= 2;
+for (auto const & rate : rates)
+    std::cout << rate << '\n';
+\end{cpp}
+
+\item
+使用 C++17 中的结构化绑定和分解声明：
+
+\begin{cpp}
+for (auto&& [rate, flag] : getRates2())
+    std::cout << rate << '\n';
+\end{cpp}
+\end{itemize}
+
+
+\mySubsubsection{}{How it works...}
+
+"How to do it..."中展示的范围基循环表达式实际上是语法糖，编译器会将其转换成其他东西。C++17 之前，编译器生成的代码为：
+
+\begin{cpp}
+{
+    auto && __range = range_expression;
+    for (auto __begin = begin_expr, __end = end_expr;
+    __begin != __end; ++__begin) {
+        range_declaration = *__begin;
+        loop_statement
+    }
+}
+\end{cpp}
+
+begin\_expr 和 end\_expr 是什么取决于范围的类型：
+
+\begin{itemize}
+\item
+对于 C 风格数组：\_\_range 和 \_\_range + \_\_bound（其中 \_\_bound 是数组中的元素数量）。
+
+\item
+对于带有 begin 和 end 成员的类型（不论其类型和访问权限）：\_\_range.begin() 和 \_\_range.end()。
+
+\item
+对于其他类型，是 begin(\_\_range) 和 end(\_\_range)，这些通过参数依赖查找确定。
+\end{itemize}
+
+需要注意的是，如果一个类型包含名为 begin 或 end 的成员（无论是函数、数据成员还是枚举器），无论其类型和访问权限如何，这些成员都会选作 begin\_expr 和 end\_expr，所以这样的类型不能用于基于范围的循环。
+
+C++17 开始，编译器生成的代码略有不同：
+
+\begin{cpp}
+{
+    auto && __range = range_expression;
+    auto __begin = begin_expr;
+    auto __end = end_expr;
+    for (; __begin != __end; ++__begin) {
+        range_declaration = *__begin;
+        loop_statement
+    }
+}
+\end{cpp}
+
+新标准移除了 begin 表达式和 end 表达式必须是同种类型的限制。end 表达式不必是一个真正的迭代器，但必须能够与迭代器进行不等比较。原因是，范围可以由谓词界定。相反，end 表达式只会在首次使用时计算一次，而不是每次循环迭代时都重新计算，这会提高程序的性能。
+
+C++20 开始，范围声明前可以有一个初始化语句：
+
+\begin{cpp}
+{
+    init-statement
+    auto && __range = range_expression;
+    auto __begin = begin_expr;
+    auto __end = end_expr;
+    for (; __begin != __end; ++__begin) {
+        range_declaration = *__begin;
+        loop_statement
+    }
+}
+\end{cpp}
+
+初始化语句可以是空语句、表达式语句、简单声明，或者从 C++23 开始，还可以是别名声明：
+
+\begin{cpp}
+for (auto rates = getRates(); int rate : rates)
+{
+    std::cout << rate << '\n';
+}
+\end{cpp}
+
+C++23 之前，这对于避免范围表达式中的临时对象导致未定义行为很有帮助。范围表达式返回的临时对象的生命期会延长到循环结束。但如果这些临时对象会在范围表达式结束时销毁，则它们的生命周期不会延长。
+
+可以通过以下代码段来解释这一点:
+
+\begin{cpp}
+struct item
+{
+    std::vector<int> getRates()
+    {
+        return std::vector<int> {1, 1, 2, 3, 5, 8, 13};
+    }
+};
+item make_item()
+{
+    return item{};
+}
+// undefined behavior, until C++23
+for (int rate : make_item().getRates())
+{
+    std::cout << rate << '\n';
+}
+\end{cpp}
+
+由于 make\_item() 按值返回，在范围表达式中有一个临时对象。这会导致未定义行为，可以通过使用初始化语句来避免:
+
+\begin{cpp}
+for (auto item = make_item(); int rate : item.getRates())
+{
+    std::cout << rate << '\n';
+}
+\end{cpp}
+
+这个问题在 C++23 中不再出现，因为标准延长了范围表达式内所有临时对象的生命周期，会到循环结束。
+
+
+
+
+
+
+

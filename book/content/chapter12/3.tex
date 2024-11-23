@@ -1,0 +1,202 @@
+
+
+模板元编程是C++语言的重要组成部分，促进了通用库（包括标准库）的发展，但模板元编程并不简单。相反，复杂的任务在没有大量经验的情况下，可能乏味且难以正确完成。实际上，《C++核心指南》——由Bjarne Stroustrup和Herb Sutter发起的一项倡议——有一条规则叫做“仅在需要时才使用模板元编程”，其理由是：
+
+\begin{myTip}
+模板元编程很难正确掌握，会减慢编译速度，并且往往非常难以维护。
+\end{myTip}
+
+关于模板元编程的一个重要方面是类型模板参数的约束规范，以便对可用于实例化模板的类型施加限制。C++20概念库旨在解决这个问题。概念是一组约束的名称，而约束是模板参数的要求，用于选择适当的函数重载和模板特化。
+
+本示例中，将介绍如何使用C++20概念来指定模板参数的要求。
+
+\mySubsubsection{}{Getting ready}
+
+开始学习概念之前，考虑以下名为 NumericalValue 的类型模板，该模板应该保存一个整数或浮点类型的值。C++11使用了 \verb|std::enable_if| 来指定对 T 模板参数的要求：
+
+\begin{cpp}
+template <typename T>,
+          typename = typename std::enable_if_t<std::is_arithmetic_v<T>, T>>
+struct NumericalValue
+{
+    T value;
+};
+template <typename T>
+NumericalValue<T> wrap(T value) { return { value }; }
+template <typename T>
+T unwrap(NumericalValue<T> t) { return t.value; }
+auto nv = wrap(42);
+std::cout << nv.value << '\n';   // prints 42
+auto v = unwrap(nv);
+std::cout << v << '\n';          // prints 42
+using namespace std::string_literals;
+auto ns = wrap("42"s);           // error
+\end{cpp}
+
+这段代码将成为本示例中的基础。
+
+\mySubsubsection{}{How to do it...}
+
+可以按照以下方式指定模板参数的要求：
+
+\begin{itemize}
+\item
+使用 concept 关键字创建概念：
+
+\begin{cpp}
+template <class T>
+concept Numerical = std::is_arithmetic_v<T>;
+\end{cpp}
+
+\item
+或者，可以使用 <concepts> 头文件（或标准库的其他头文件之一）中定义的标准概念：
+
+\begin{cpp}
+template <class T>
+concept Numerical = std::integral<T> || std::floating_point<T>;
+\end{cpp}
+
+\item
+函数模板、类型模板或变量模板中使用概念名称代替 class 或 typename 关键字：
+
+\begin{cpp}
+template <Numerical T>
+struct NumericalValue
+{
+    T value;
+};
+template <Numerical T>
+NumericalValue<T> wrap(T value) { return { value }; }
+template <Numerical T>
+T unwrap(NumericalValue<T> t) { return t.value; }
+\end{cpp}
+
+\item
+使用相同的语法实例化类型模板和调用函数模板：
+
+\begin{cpp}
+auto nv = wrap(42);
+std::cout << nv.value << '\n';   // prints 42
+auto v = unwrap(nv);
+std::cout << v << '\n';          // prints 42
+using namespace std::string_literals;
+auto ns = wrap("42"s);           // error
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+概念是在命名空间作用域中定义的一组一个或多个约束，概念的定义类似于变量模板。下面的代码展示了概念如何用于变量模板：
+
+\begin{cpp}
+template <class T>
+concept Real = std::is_floating_point_v<T>;
+template<Real T>
+constexpr T pi = T(3.1415926535897932385L);
+std::cout << pi<double> << '\n';
+std::cout << pi<int>    << '\n'; // error
+\end{cpp}
+
+概念本身不能约束，也不能递归引用自身。迄今为止的示例中，Numerical 和 Real 概念由单个原子约束组成。然而，概念可以从多个约束中创建。使用逻辑操作符 \verb|&&| 创建的两个约束称为合取，而使用 || 创建的两个约束称为析取。
+
+“How to do it...”部分中定义的 Numerical 概念使用了 \verb|std::is_arithmetic_v| 类型特征，但可以有两个概念，Real 和 Integral：
+
+\begin{cpp}
+template <class T>
+concept Integral = std::is_integral_v<T>;
+template <class T>
+concept Real = std::is_floating_point_v<T>;
+\end{cpp}
+
+从这两个概念起，可以使用逻辑操作符 || 组合成 Numerical 概念。结果是一个析取：
+
+\begin{cpp}
+template <class T>
+concept Numerical = Integral<T> || Real<T>;
+\end{cpp}
+
+从语义上讲，这两个版本的 Numerical 概念之间没有区别，尽管以不同的方式定义。
+
+为了理解合取，来看另一个例子。考虑两个基类 IComparableToInt 和 IConvertibleToInt，应该是由支持与 int 比较或转换为 int 类型的派生类型：
+
+\begin{cpp}
+struct IComparableToInt
+{
+    virtual bool CompareTo(int const o) = 0;
+};
+struct IConvertibleToInt
+{
+    virtual int ConvertTo() = 0;
+};
+\end{cpp}
+
+一些类可以同时实现这两个接口，而另一些类只能实现其中一个。SmartNumericalValue<T> 类型就是这种实现，而 DullNumericalValue<T> 类型只实现了 IConvertibleToInt 接口：
+
+\begin{cpp}
+template <typename T>
+struct SmartNumericalValue : public IComparableToint, IConvertibleToInt
+{
+    T value;
+    SmartNumericalValue(T v) :value(v) {}
+    bool CompareTo(int const o) override
+    { return static_cast<int>(value) == o; }
+    int ConvertTo() override
+    { return static_cast<int>(value); }
+};
+template <typename T>
+struct DullNumericalValue : public IConvertibleToInt
+{
+    T value;
+    DullNumericalValue(T v) :value(v) {}
+    int ConvertTo() override
+    { return static_cast<int>(value); }
+};
+\end{cpp}
+
+想要做的是编写一个函数模板，该模板只接受既可比较又可以转换为 int 的参数。这里展示的 IntComparableAndConvertible 概念是 IntComparable 和 IntConvertible 概念的合取。可以这样实现：
+
+\begin{cpp}
+template <class T>
+concept IntComparable = std::is_base_of_v<IComparableToInt, T>;
+template <class T>
+concept IntConvertible = std::is_base_of_v<IConvertibleToInt, T>;
+template <class T>
+concept IntComparableAndConvertible = IntComparable<T> && IntConvertible<T>;
+template <IntComparableAndConvertible T>
+void print(T o)
+{
+    std::cout << o.value << '\n';
+}
+int main()
+{
+    auto snv = SmartNumericalValue<double>{ 42.0 };
+    print(snv);                      // prints 42
+    auto dnv = DullNumericalValue<short>{ 42 };
+    print(dnv);                      // error
+}
+\end{cpp}
+
+合取和析取是从左到右评估并且短路的。对于合取，只有当左边的约束满足时，右边的约束才会计算；而对于析取，只有当左边的约束不满足时，右边的约束才会计算。
+
+\begin{myNotic}
+约束的第三种类别是原子约束，由表达式 E 和从 E 中的类型参数到受限实体的模板参数之间的映射组成，称为参数映射。原子约束是在约束规范化过程中形成的，这是将约束表达式转换为原子约束的合取和析取序列的过程。原子约束通过将参数映射和模板参数代入表达式 E 来检查。结果必须是一个有效的 bool 类型的 prvalue 常量表达式；否则，不满足约束。
+\end{myNotic}
+
+标准库定义了一系列用于定义模板参数编译时要求的概念。虽然大多数概念都施加了语法和语义要求，但编译器通常只能确保前者。当语义要求未得到满足时，程序视为非法，编译器不必提供有关问题的诊断信息。标准概念在以下几个地方可用：
+
+\begin{itemize}
+\item
+在 <concepts> 头文件和 std 命名空间中的概念库中。这包括核心语言概念（如 \verb|same_as|、\verb|integral|、\verb|floating_point|、\verb|copy_constructible| 和 \verb|move_constructible|）、比较概念（如 \verb|equality_comparable| 和 \verb|totally_ordered|）、对象概念（如可复制、可移动和常规），以及可调用概念（如可调用和谓词）。
+
+\item
+在 <iterator> 头文件和 std 命名空间中的算法库中。这包括算法要求（如可排序、可排列和可合并）和间接可调用概念（如 \verb|indirect_unary_predicate| 和 \verb|indirect_binary_predicate|）。
+
+\item
+在 <ranges> 头文件和 std::ranges 命名空间中的范围库中。这包括特定于范围的概念，如 \verb|range|、\verb|view|、\verb|input_range|、\verb|output_range|、\verb|forward_range| 和 \verb|random_access_range|。
+\end{itemize}
+
+\mySubsubsection{}{There's more...}
+
+本示例中定义的概念使用了已有的类型特征。许多情况下，模板参数的要求无法用这种方式描述。为此，概念可以使用 requires 表达式定义，这是一种 bool 类型的 prvalue 表达式，描述了模板参数的要求，这将是下一个示例的主题。
+
+

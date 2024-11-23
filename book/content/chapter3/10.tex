@@ -1,0 +1,172 @@
+开发人员，尤其是那些实现库的人，有时需要以统一的方式调用可调用对象。这可以是一个函数、函数指针、成员函数指针或函数对象。这样的例子包括 std::bind、std::function、std::mem\_fn 和 std::thread::thread。C++17 定义了一个标准函数 std::invoke()，可以调用提供的参数列表中可调用的实例。这不是为了替换对函数或函数对象的直接调用，但在模板元编程中实现各种库函数时非常有用。
+
+\mySubsubsection{}{Getting ready}
+
+对于这个示例，应该熟悉如何定义和使用函数指针。
+
+为了举例说明 std::invoke() 如何在不同的上下文中使用，我们将使用以下函数和类型：
+
+\begin{cpp}
+int add(int const a, int const b)
+{
+    return a + b;
+}
+struct foo
+{
+    int x = 0;
+    void increment_by(int const n) { x += n; }
+};
+\end{cpp}
+
+下一节中，将探讨 std::invoke() 函数的可能使用场景。
+
+\mySubsubsection{}{How to do it...}
+
+std::invoke() 函数是一个可变参数函数模板，接受可调用对象作为第一个参数和一个可变参数列表，这些参数会传递给调用。std::invoke() 可以用来调用以下内容：
+
+\begin{itemize}
+\item
+独立函数：
+
+\begin{cpp}
+auto a1 = std::invoke(add, 1, 2);   // a1 = 3
+\end{cpp}
+
+\item
+通过函数指针调用独立函数：
+
+\begin{cpp}
+auto a2 = std::invoke(&add, 1, 2);  // a2 = 3
+int(*fadd)(int const, int const) = &add;
+auto a3 = std::invoke(fadd, 1, 2);  // a3 = 3
+\end{cpp}
+
+\item
+通过成员函数指针调用成员函数：
+
+\begin{cpp}
+foo f;
+std::invoke(&foo::increment_by, f, 10);
+\end{cpp}
+
+\item
+数据成员：
+
+\begin{cpp}
+foo f;
+auto x1 = std::invoke(&foo::x, f);  // x1 = 0
+\end{cpp}
+
+\item
+函数实例：
+
+\begin{cpp}
+foo f;
+auto x3 = std::invoke(std::plus<>(),
+    std::invoke(&foo::x, f), 3); // x3 = 3
+\end{cpp}
+
+\item
+Lambda 表达式：
+
+\begin{cpp}
+auto l = [](auto a, auto b) {return a + b; };
+auto a = std::invoke(l, 1, 2); // a = 3
+\end{cpp}
+\end{itemize}
+
+实际上，std::invoke() 应该在模板元编程中用于调用具有任意数量参数的函数。为了举例说明这种情况，将介绍 std::apply() 函数的一个可能实现，这也是 C++17 标准库的一部分，通过解包元组成员到函数的参数来调用函数：
+
+\begin{cpp}
+namespace details
+{
+    template <class F, class T, std::size_t... I>
+    auto apply(F&& f, T&& t, std::index_sequence<I...>)
+    {
+        return std::invoke(
+        std::forward<F>(f),
+        std::get<I>(std::forward<T>(t))...);
+    }
+}
+template <class F, class T>
+auto apply(F&& f, T&& t)
+{
+    return details::apply(
+    std::forward<F>(f),
+    std::forward<T>(t),
+    std::make_index_sequence<
+    std::tuple_size_v<std::decay_t<T>>> {});
+}
+\end{cpp}
+
+\mySubsubsection{}{How it work...}
+
+在了解 std::invoke() 是如何工作之前，先快速了解一下如何调用不同类型可调用类型实例。给定一个函数，显然，调用的方式是直接传递必要的参数。然而，也可以使用函数指针来调用函数。函数指针的问题在于定义指针类型的麻烦。可以使用 auto 简化（如下所示），但实际需要先定义函数指针的类型，然后再定义一个实例并用正确的函数地址对其进行初始化：
+
+\begin{cpp}
+// direct call
+auto a1 = add(1, 2);    // a1 = 3
+// call through function pointer
+int(*fadd)(int const, int const) = &add;
+auto a2 = fadd(1, 2);   // a2 = 3
+auto fadd2 = &add;
+auto a3 = fadd2(1, 2);  // a3 = 3
+\end{cpp}
+
+通过函数指针调用变得更加繁琐，需要通过一个类的对象实例调用类函数时尤其如此。定义指向成员函数的指针并调用其语法并不简单：
+
+\begin{cpp}
+foo f;
+f.increment_by(3);
+auto x1 = f.x;    // x1 = 3
+void(foo::*finc)(int const) = &foo::increment_by;
+(f.*finc)(3);
+auto x2 = f.x;    // x2 = 6
+auto finc2 = &foo::increment_by;
+(f.*finc2)(3);
+auto x3 = f.x;    // x3 = 9
+\end{cpp}
+
+无论这种调用看起来多么复杂，实际问题在于能够以统一方式调用所有这些类型可调用类型实例的库组件（函数或类），比如 std::invoke() 这样的标准函数。
+
+std::invoke() 的实现细节很复杂，但其工作原理可以用简单的术语来解释。假设调用的形式为 invoke(f, arg1, arg2, ..., argN)，可以考虑以下情况：
+
+\begin{itemize}
+\item
+如果 f 是 T 类的成员函数指针，则调用等同于：
+
+\begin{itemize}
+\item
+如果 arg1 是 T 的实例，则为 \verb|(arg1.*f)(arg2, ..., argN)|
+
+\item
+如果 \verb|arg1| 是 \verb|reference_wrapper| 的特化，则为 \verb|(arg1.get().*f)(arg2, ..., argN)|
+
+\item
+否则为 \verb|((*arg1).*f)(arg2, ..., argN)|
+\end{itemize}
+
+\item
+如果 f 是 T 类的数据成员指针且只有一个参数——调用的形式为 invoke(f, arg1)——则调用等同于：
+
+\begin{itemize}
+\item
+如果 \verb|arg1| 是 T 的实例，则为 \verb|arg1.*f|
+
+\item
+如果 \verb|arg1| 是 \verb|reference_wrapper| 的特化，则为 \verb|arg1.get().*f|
+
+\item
+否则为 \verb|(*arg1).*f|
+\end{itemize}
+
+\item
+如果 f 是函数对象，则调用等同于 \verb|f(arg1, arg2, ..., argN)|
+\end{itemize}
+
+标准库还提供了一系列相关的类型特征：一方面是 \verb|std::is_invocable| 和 \verb|std::is_nothrow_invocable|，另一方面是 \verb|std::is_invocable_r| 和 \verb|std::is_nothrow_invocable_r|。前者确定是否可以使用提供的参数调用函数，而后者确定是否可以使用提供的参数调用函数，并产生可以隐式转换为指定类型的返回值。这些类型特征的 nothrow 版本验证调用过程中不会抛出异常。
+
+自 C++20 起，std::invoke 函数成为 constexpr，可以在编译时调用可调用实例。
+
+在 C++23 中，添加了一个类似的工具 \verb|std::invoke_r|，增加了模板参数（第一个参数），这是一个表示返回值类型（除非是 void）或返回值可以隐式转换为的类型的模板参数。
+

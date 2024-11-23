@@ -1,0 +1,240 @@
+
+库提供了自动和手动两种方式来注册测试用例和测试套件，以便测试运行器执行。自动注册是最简单的方式，只需声明测试单元即可构建测试树。本示例中，将介绍如何使用库的单头文件版本创建测试套件和测试用例，以及如何运行测试。
+
+\mySubsubsection{}{Getting ready}
+
+为了举例说明测试套件和测试用例的创建，可使用以下类型，该类型表示一个三维点。此实现包含访问点属性的方法、比较操作符、流输出操作符，以及修改点位置的方法：
+
+\begin{cpp}
+class point3d
+{
+    int x_;
+    int y_;
+    int z_;
+    public:
+    point3d(int const x = 0,
+            int const y = 0,
+            int const z = 0):x_(x), y_(y), z_(z) {}
+    int x() const { return x_; }
+    point3d& x(int const x) { x_ = x; return *this; }
+    int y() const { return y_; }
+    point3d& y(int const y) { y_ = y; return *this; }
+    int z() const { return z_; }
+    point3d& z(int const z) { z_ = z; return *this; }
+    bool operator==(point3d const & pt) const
+    {
+        return x_ == pt.x_ && y_ == pt.y_ && z_ == pt.z_;
+    }
+    bool operator!=(point3d const & pt) const
+    {
+        return !(*this == pt);
+    }
+    bool operator<(point3d const & pt) const
+    {
+        return x_ < pt.x_ || y_ < pt.y_ || z_ < pt.z_;
+    }
+    friend std::ostream& operator<<(std::ostream& stream,
+    point3d const & pt)
+    {
+        stream << "(" << pt.x_ << "," << pt.y_ << "," << pt.z_ << ")";
+        return stream;
+    }
+    void offset(int const offsetx, int const offsety, int const offsetz)
+    {
+        x_ += offsetx;
+        y_ += offsety;
+        z_ += offsetz;
+    }
+    static point3d origin() { return point3d{}; }
+};
+\end{cpp}
+
+继续之前，请注意，本示例中的测试用例故意包含错误测试，以产生失败。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下宏来创建测试单元：
+
+\begin{itemize}
+\item
+要创建测试套件，请使用 \verb|BOOST_AUTO_TEST_SUITE(name)| 和 \verb|BOOST_AUTO_TEST_SUITE_END()|：
+
+\begin{cpp}
+BOOST_AUTO_TEST_SUITE(test_construction)
+// test cases
+BOOST_AUTO_TEST_SUITE_END()
+\end{cpp}
+
+\item
+要创建测试用例，请使用 \verb|BOOST_AUTO_TEST_CASE(name)|。测试用例应在 \verb|BOOST_AUTO_TEST_SUITE(name)| 和 \verb|BOOST_AUTO_TEST_SUITE_END()| 之间定义：
+
+\begin{cpp}
+BOOST_AUTO_TEST_CASE(test_constructor)
+{
+    auto p = point3d{ 1,2,3 };
+    BOOST_TEST(p.x() == 1);
+    BOOST_TEST(p.y() == 2);
+    BOOST_TEST(p.z() == 4); // will fail
+}
+BOOST_AUTO_TEST_CASE(test_origin)
+{
+    auto p = point3d::origin();
+    BOOST_TEST(p.x() == 0);
+    BOOST_TEST(p.y() == 0);
+    BOOST_TEST(p.z() == 0);
+}
+\end{cpp}
+
+\item
+要创建嵌套的测试套件，请在一个测试套件内定义另一个测试套件：
+
+\begin{cpp}
+BOOST_AUTO_TEST_SUITE(test_operations)
+BOOST_AUTO_TEST_SUITE(test_methods)
+BOOST_AUTO_TEST_CASE(test_offset)
+{
+    auto p = point3d{ 1,2,3 };
+    p.offset(1, 1, 1);
+    BOOST_TEST(p.x() == 2);
+    BOOST_TEST(p.y() == 3);
+    BOOST_TEST(p.z() == 3); // will fail
+}
+BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_SUITE_END()
+\end{cpp}
+
+\item
+要向测试单元添加装饰器，请在测试单元的宏中添加额外的参数。装饰器可能包括描述、标签、前置条件、依赖关系、固件等：
+
+\begin{cpp}
+BOOST_AUTO_TEST_SUITE(test_operations)
+BOOST_AUTO_TEST_SUITE(test_operators)
+BOOST_AUTO_TEST_CASE(
+test_equal,
+*boost::unit_test::description("test operator==")
+*boost::unit_test::label("opeq"))
+{
+    auto p1 = point3d{ 1,2,3 };
+    auto p2 = point3d{ 1,2,3 };
+    auto p3 = point3d{ 3,2,1 };
+    BOOST_TEST(p1 == p2);
+    BOOST_TEST(p1 == p3); // will fail
+}
+BOOST_AUTO_TEST_CASE(
+test_not_equal,
+*boost::unit_test::description("test operator!=")
+*boost::unit_test::label("opeq")
+*boost::unit_test::depends_on(
+"test_operations/test_operators/test_equal"))
+{
+    auto p1 = point3d{ 1,2,3 };
+    auto p2 = point3d{ 3,2,1 };
+    BOOST_TEST(p1 != p2);
+}
+BOOST_AUTO_TEST_CASE(test_less)
+{
+    auto p1 = point3d{ 1,2,3 };
+    auto p2 = point3d{ 1,2,3 };
+    auto p3 = point3d{ 3,2,1 };
+    BOOST_TEST(!(p1 < p2));
+    BOOST_TEST(p1 < p3);
+}
+BOOST_AUTO_TEST_SUITE_END()
+BOOST_AUTO_TEST_SUITE_END()
+\end{cpp}
+\end{itemize}
+
+要执行测试，请按照以下步骤操作（命令行是针对 Windows 的，替换为适用于 Linux 或 macOS 的命令行应该不难）：
+
+\begin{itemize}
+\item
+要执行整个测试树，请运行程序（测试模块）而不带任何参数：
+
+\begin{shell}
+chapter11bt_02.exe
+Running 6 test cases...
+f:/chapter11bt_02/main.cpp(12): error: in "test_construction/test_
+constructor": check p.z() == 4 has failed [3 != 4]
+f:/chapter11bt_02/main.cpp(35): error: in "test_operations/test_
+methods/test_offset": check p.z() == 3 has failed [4 != 3]
+f:/chapter11bt_02/main.cpp(55): error: in "test_operations/test_
+operators/test_equal": check p1 == p3 has failed [(1,2,3) !=
+(3,2,1)]
+*** 3 failures are detected in the test module "Testing point 3d"
+\end{shell}
+
+\item
+要执行单个测试套件，请运行带有 \verb|run_test| 参数的程序，并指定测试套件的路径：
+
+\begin{shell}
+chapter11bt_02.exe --run_test=test_construction
+Running 2 test cases...
+f:/chapter11bt_02/main.cpp(12): error: in "test_construction/test_
+constructor": check p.z() == 4 has failed [3 != 4]
+*** 1 failure is detected in the test module "Testing point 3d"
+\end{shell}
+
+\item
+要执行单个测试用例，请运行带有 \verb|run_test| 参数的程序，并指定测试用例的路径：
+
+\begin{cpp}
+chapter11bt_02.exe --run_test=test_construction/test_origin
+Running 1 test case...
+*** No errors detected
+\end{cpp}
+
+\item
+要执行定义在同一标签下的测试套件和测试用例的集合，请运行带有 \verb|run_test| 参数的程序，并指定以 @ 开头的标签名：
+
+\begin{cpp}
+chapter11bt_02.exe --run_test=@opeq
+Running 2 test cases...
+f:/chapter11bt_02/main.cpp(56): error: in "test_operations/test_
+operators/test_equal": check p1 == p3 has failed [(1,2,3) !=
+(3,2,1)]
+*** 1 failure is detected in the test module "Testing point 3d"
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+测试树是测试用例和测试套件的层次结构，还包括固件和其他附加依赖项。测试套件包含一个或多个测试用例，以及其他嵌套的测试套件。测试套件类似于命名空间，可以在同一个文件或不同文件中多次停止和重新启动。测试套件的自动注册是通过宏 \verb|BOOST_AUTO_TEST_SUITE|（需要一个名称）和 \verb|BOOST_AUTO_TEST_SUITE_END| 完成的。测试用例的自动注册通过 \verb|BOOST_AUTO_TEST_CASE| 完成，测试单元（无论是用例还是套件）成为最近的测试套件的成员。以文件作用域级别定义的测试单元成为主测试套件的成员——即使用 \verb|BOOST_TEST_MODULE| 声明隐式创建的测试套件。
+
+测试套件和测试用例可以用一系列属性来装饰。目前支持的装饰器：
+
+\begin{itemize}
+\item
+\verb|depends_on|: 当前测试单元与指定的测试单元之间的依赖关系。
+
+\item
+\verb|description|: 提供了测试单元的语义描述。
+
+\item
+\verb|enabled / disabled|: 设置测试单元的默认运行状态为真或假。
+
+\item
+\verb|enable_if<bool>|: 根据编译时表达式的计算结果将测试单元的默认运行状态设置为真或假。
+
+\item
+\verb|expected_failures|: 确定了测试单元预期的失败次数。
+
+\item
+\verb|fixture|: 确定了在执行测试单元前后调用的一对函数（启动和清理）。
+
+\item
+\verb|label|: 可以将测试单元与标签关联起来。相同的标签可以用于多个测试单元，且一个测试单元可以拥有多个标签。
+
+\item
+\verb|precondition|: 这将谓词与测试单元关联起来，用于运行时确定测试单元的运行状态。
+
+\item
+\verb|timeout|: 这为单元测试指定了超时时间，单位为挂壁时钟时间。如果测试持续时间超过指定的超时时间，测试将失败。
+
+\item
+\verb|tolerance|: 此装饰器指定了装饰测试单元中浮点类型 FTP 的默认比较容差。
+\end{itemize}
+
+如果测试用例的执行导致未处理的异常，框架将捕获异常并以失败终止测试用例的执行，框架提供了几个宏来测试特定代码块是否引发或不引发异常。
+
+组成模块测试树的测试单元可以全部或部分执行。这两种情况下，要执行测试单元，需要运行代表测试模块的（二进制）程序。若要仅执行部分测试单元，可以使用 \verb|--run_test| 命令行选项（如果想使用较短的名字，也可以使用 \verb|--t|）。此选项允许筛选测试单元，并指定路径或标签。路径由一系列测试套件和/或测试用例名称组成，例如 \verb|test_construction| 或 \verb|test_operations/test_methods/test_offset|。标签是指使用标签装饰器定义的名称，并且在 \verb|run_test| 参数中以 @ 开头。此参数可以重复使用，可以在此参数上指定多个过滤条件。
+

@@ -1,0 +1,370 @@
+任务是线程的高级替代方案，用于执行并发计算。std::async()可异步执行函数，无需处理底层线程细节。本示例中，将采用与前一个配方相同的任务，即实现map和fold函数的并行版本，但会使用任务，并观察和比较它与线程版本的表现。
+
+\mySubsubsection{}{How to do it...}
+
+要实现map函数的并行版本，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+定义一个接受范围的开始和结束迭代器，以及应用于所有元素的函数的函数模板：
+
+\begin{cpp}
+template <typename Iter, typename F>
+void parallel_map(Iter begin, Iter end, F&& f)
+{
+}
+\end{cpp}
+
+\item
+检查范围的大小。如果元素数量小于预定义的阈值（阈值为10,000），则以顺序方式执行映射：
+
+\begin{cpp}
+auto size = std::distance(begin, end);
+if(size <= 10000)
+    std::transform(begin, end, begin, std::forward<F>(f));
+\end{cpp}
+
+\item
+对于更大的范围，将工作拆分为多个任务，让每个任务映射范围的一部分。这些部分不应重叠，以避免同步线程对共享数据的访问：
+
+\begin{cpp}
+else
+{
+    auto no_of_tasks = get_no_of_threads();
+    auto part = size / no_of_tasks;
+    auto last = begin;
+    // continued at 4. and 5.
+}
+\end{cpp}
+
+\item
+启动异步函数，并在每个函数上运行映射的串行版本：
+
+\begin{cpp}
+std::vector<std::future<void>> tasks;
+for(unsigned i = 0; i < no_of_tasks; ++i)
+{
+    if(i == no_of_tasks - 1) last = end;
+    else std::advance(last, part);
+    tasks.emplace_back(std::async(
+    std::launch::async,
+        [=,&f]{std::transform(begin, last, begin,
+                              std::forward<F>(f));}));
+    begin = last;
+}
+\end{cpp}
+
+\item
+等待所有异步函数完成执行：
+
+\begin{cpp}
+for(auto & t : tasks) t.wait();
+\end{cpp}
+\end{enumerate}
+
+将上述步骤组合起来：
+
+\begin{cpp}
+template <typename Iter, typename F>
+void parallel_map(Iter begin, Iter end, F&& f)
+{
+    auto size = std::distance(begin, end);
+    if(size <= 10000)
+        std::transform(begin, end, begin, std::forward<F>(f));
+    else
+    {
+        auto no_of_tasks = get_no_of_threads();
+        auto part = size / no_of_tasks;
+        auto last = begin;
+        std::vector<std::future<void>> tasks;
+        for(unsigned i = 0; i < no_of_tasks; ++i)
+        {
+            if(i == no_of_tasks - 1) last = end;
+            else std::advance(last, part);
+            tasks.emplace_back(std::async(
+            std::launch::async,
+                [=,&f]{std::transform(begin, last, begin,
+                                      std::forward<F>(f));}));
+            begin = last;
+        }
+        for(auto & t : tasks) t.wait();
+    }
+}
+\end{cpp}
+
+要实现左\verb|fold|函数的并行版本，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+定义一个接受范围的开始和结束迭代器、初始值，以及应用于范围元素的二元函数的函数模板：
+
+\begin{cpp}
+template <typename Iter, typename R, typename F>
+auto parallel_fold(Iter begin, Iter end, R init, F&& op)
+{
+}
+\end{cpp}
+
+\item
+检查范围的大小。如果元素数量小于预定义的阈值（阈值为10,000），则以顺序方式执行折叠：
+
+\begin{cpp}
+auto size = std::distance(begin, end);
+if(size <= 10000)
+    return std::accumulate(begin, end, init, std::forward<F>(op));
+\end{cpp}
+
+\item
+对于更大的范围，将工作拆分为多个任务，让每个任务折叠范围的一部分。这些部分不应重叠，以避免同步线程对共享数据的访问。结果可以通过传递给异步函数的引用返回，避免同步：
+
+\begin{cpp}
+else
+{
+    auto no_of_tasks = get_no_of_threads();
+    auto part = size / no_of_tasks;
+    auto last = begin;
+    // continued at 4. and 5.
+}
+\end{cpp}
+
+\item
+启动异步函数，并在每个函数上执行折叠的串行版本：
+
+\begin{cpp}
+std::vector<std::future<R>> tasks;
+for(unsigned i = 0; i < no_of_tasks; ++i)
+{
+    if(i == no_of_tasks - 1) last = end;
+    else std::advance(last, part);
+    tasks.emplace_back(
+    std::async(
+        std::launch::async,
+        [=,&op]{return std::accumulate(
+                            begin, last, R{},
+                            std::forward<F>(op));}));
+    begin = last;
+}
+\end{cpp}
+
+\item
+等待所有异步函数完成执行，并将部分结果折叠成最终结果：
+
+\begin{cpp}
+std::vector<R> values;
+for(auto & t : tasks)
+    values.push_back(t.get());
+return std::accumulate(std::begin(values), std::end(values),
+                       init, std::forward<F>(op));
+\end{cpp}
+\end{enumerate}
+
+将上述步骤组合起来：
+
+\begin{cpp}
+template <typename Iter, typename R, typename F>
+auto parallel_fold(Iter begin, Iter end, R init, F&& op)
+{
+    auto size = std::distance(begin, end);
+    if(size <= 10000)
+        return std::accumulate(begin, end, init, std::forward<F>(op));
+    else
+    {
+        auto no_of_tasks = get_no_of_threads();
+        auto part = size / no_of_tasks;
+        auto last = begin;
+        std::vector<std::future<R>> tasks;
+        for(unsigned i = 0; i < no_of_tasks; ++i)
+        {
+            if(i == no_of_tasks - 1) last = end;
+            else std::advance(last, part);
+            tasks.emplace_back(
+            std::async(
+            std::launch::async,
+                [=,&op]{return std::accumulate(
+                                    begin, last, R{},
+                                    std::forward<F>(op));}));
+            begin = last;
+        }
+        std::vector<R> values;
+        for(auto & t : tasks)
+        values.push_back(t.get());
+        return std::accumulate(std::begin(values), std::end(values),
+                               init, std::forward<F>(op));
+    }
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+刚提出的实现仅与前一个配方稍有不同。线程使用异步函数所取代，异步函数从std::async()开始启动，结果通过返回的std::future提供。并发启动的异步函数数量等于实现可支持的线程数。这由静态方法\verb|std::thread::hardware_concurrency()|返回，但这只是一个提示值，不可靠。
+
+采取这种方法主要有两个原因：
+
+\begin{itemize}
+\item
+了解如何修改为线程并行执行设计的函数，以便使用异步函数，从而避免处理线程的底层细节。
+
+\item
+运行等于支持线程数目的异步函数，可以潜在地使每个线程运行一个函数；这可能会因为最小化上下文切换和等待时间开销，而提供最快的并行函数执行速度。
+\end{itemize}
+
+可以使用与前一个示例相同的方法来测试新map和fold的实现性能：
+
+\begin{cpp}
+std::vector<int> sizes
+{
+    10000, 100000, 500000,
+    1000000, 2000000, 5000000,
+    10000000, 25000000, 50000000
+};
+std::cout
+    << std::right << std::setw(8) << std::setfill(' ') << "size"
+    << std::right << std::setw(8) << "s map"
+    << std::right << std::setw(8) << "p map"
+    << std::right << std::setw(8) << "s fold"
+    << std::right << std::setw(8) << "p fold"
+    << '\n';
+for(auto const size : sizes)
+{
+    std::vector<int> v(size);
+    std::iota(std::begin(v), std::end(v), 1);
+    auto v1 = v;
+    auto s1 = 0LL;
+    auto tsm = perf_timer<>::duration([&] {
+        std::transform(std::begin(v1), std::end(v1), std::begin(v1),
+                       [](int const i) {return i + i; }); });
+    auto tsf = perf_timer<>::duration([&] {
+        s1 = std::accumulate(std::begin(v1), std::end(v1), 0LL,
+                             std::plus<>()); });
+    auto v2 = v;
+    auto s2 = 0LL;
+    auto tpm = perf_timer<>::duration([&] {
+        parallel_map(std::begin(v2), std::end(v2),
+                    [](int const i) {return i + i; }); });
+    auto tpf = perf_timer<>::duration([&] {
+        s2 = parallel_fold(std::begin(v2), std::end(v2), 0LL,
+                            std::plus<>()); });
+    assert(v1 == v2);
+    assert(s1 == s2);
+    std::cout
+        << std::right << std::setw(8) << std::setfill(' ') << size
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tsm).count()
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tpm).count()
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tsf).count()
+        << std::right << std::setw(8)
+        << std::chrono::duration<double, std::micro>(tpf).count()
+        << '\n';
+}
+\end{cpp}
+
+上述程序的一个可能输出如下，实际输出可能因执行而异，且不同机器之间的差异可能很大：
+
+\begin{shell}
+    size   s map   p map  s fold  p fold
+   10000      11      11      11      11
+  100000     117     260     113      94
+  500000     576     303     571     201
+ 1000000    1180     573    1165     283
+ 2000000    2371     911    2330     519
+ 5000000    5942    2144    5841    1886
+10000000   11954    4999   11643    2871
+25000000   30525   11737   29053    9048
+50000000   59665   22216   58689   12942
+\end{shell}
+
+类似于用线程展示的解决方案，平行map和fold实现的速度提升可以在下图中看到。
+
+负值表示顺序版本更快：
+
+\myGraphic{1.0}{content/chapter8/images/2.png}{图8.2: 使用异步函数的map（蓝色）和平行实现的fold（橙色）与顺序实现相比的速度提升}
+
+如果将其与使用线程的平行版本的结果进行比较，会发现这些是更快的执行时间，特别是对于fold函数，速度提升显著。下图显示了任务实现相对于线程实现的速度提升。在这张图中，小于1的值意味着线程实现更快：
+
+\myGraphic{1.0}{content/chapter8/images/3.png}{图8.3: 使用异步函数的平行实现与使用线程的平行实现相比，map（蓝色）和fold（橙色）的速度提升}
+
+\mySubsubsection{}{There's more...}
+
+前面展示的实现可以用来并行化map和fold函数的方法之一。
+
+一个可能的替代方案使用以下策略：
+
+\begin{itemize}
+\item
+将要处理的范围分成两个相等的部分。
+
+\item
+异步递归调用平行函数来处理范围的第一部分。
+
+\item
+同步递归调用平行函数来处理范围的第二部分。
+
+\item
+同步递归调用完成后，等待异步递归调用也结束，然后再完成执行。
+\end{itemize}
+
+这种分治算法可能会创建大量的任务。根据范围的大小，异步调用的数量可能会超过线程数量。这种情况下，会有大量的等待时间影响整体执行时间。
+
+map和fold函数可以使用分治算法实现：
+
+\begin{cpp}
+template <typename Iter, typename F>
+void parallel_map(Iter begin, Iter end, F f)
+{
+    auto size = std::distance(begin, end);
+    if(size <= 10000)
+    {
+        std::transform(begin, end, begin, std::forward<F>(f));
+    }
+    else
+    {
+        auto middle = begin;
+        std::advance(middle, size / 2);
+        auto result = std::async(
+            std::launch::deferred,
+            parallel_map<Iter, F>,
+            begin, middle, std::forward<F>(f));
+        parallel_map(middle, end, std::forward<F>(f));
+        result.wait();
+    }
+}
+template <typename Iter, typename R, typename F>
+auto parallel_fold(Iter begin, Iter end, R init, F op)
+{
+    auto size = std::distance(begin, end);
+    if(size <= 10000)
+        return std::accumulate(begin, end, init, std::forward<F>(op));
+    else
+    {
+        auto middle = begin;
+        std::advance(middle, size / 2);
+        auto result1 = std::async(
+            std::launch::async,
+            parallel_reduce<Iter, R, F>,
+            begin, middle, R{}, std::forward<F>(op));
+        auto result2 = parallel_fold(middle, end, init,
+                                     std::forward<F>(op));
+        return result1.get() + result2;
+    }
+}
+\end{cpp}
+
+此实现的执行时间列于此处，旁边是先前实现的执行时间：
+
+\begin{shell}
+    size   s map p1 map  p2 map  s fold p1 fold p2 fold
+   10000      11     11      10       7      10      10
+  100000     111    275     120      72      96     426
+  500000     551    230     596     365     210    1802
+ 1000000    1142    381    1209     753     303    2378
+ 2000000    2411    981    2488    1679     503    4190
+ 5000000    5962   2191    6237    4177    1969    7974
+10000000   11961   4517   12581    8384    2966   15174
+\end{shell}
+
+当我们比较这些执行时间时，可以看到这个版本（前文输出中标记为p2）对于map和fold来说都与顺序版本相似，且远不如前面展示的第一个并行版本（标记为p1）。
+
+
+

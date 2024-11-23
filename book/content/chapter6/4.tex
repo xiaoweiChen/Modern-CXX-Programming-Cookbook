@@ -1,0 +1,201 @@
+上一个示例中，介绍了如何使用标准库 chrono 处理时间段。同样，开发者也经常需要处理时间点。chrono 库提供了这样的组件，代表了一个时钟纪元以来的持续时间（根据时钟定义的时间起点）。本示例中，将介绍如何使用 chrono 库和时间点来测量函数的执行。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例中的例子，将使用以下函数，除了暂停当前线程一段时间外什么也不做：
+
+\begin{cpp}
+void func(int const interval = 1000)
+{
+    std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+要测量函数的执行，必须执行以下步骤：
+
+\begin{enumerate}
+\item
+使用标准时钟获取当前时刻：
+
+\begin{cpp}
+auto start = std::chrono::high_resolution_clock::now();
+\end{cpp}
+
+\item
+调用想要测量的函数：
+
+\begin{cpp}
+func();
+\end{cpp}
+
+\item
+再次获取当前时刻；两次时刻之间的差值就是函数的执行时间：
+
+\begin{cpp}
+auto diff = std::chrono::high_resolution_clock::now() - start;
+\end{cpp}
+
+\item
+将差值（以纳秒表示）转换为感兴趣的分辨率：
+
+\begin{cpp}
+std::cout
+    << std::chrono::duration<double, std::milli>(diff).count()
+    << "ms" << '\n';
+std::cout
+    << std::chrono::duration<double, std::nano>(diff).count()
+    << "ns" << '\n';
+\end{cpp}
+
+
+\end{enumerate}
+
+为了在一个可重用的组件中实现这种模式，请执行以下步骤：
+
+\begin{enumerate}
+\item
+创建一个以分辨率和时钟为参数的类模板。
+
+\item
+创建一个静态变参函数模板，接受一个函数及其参数。
+
+\item
+实现上述模式，调用带有参数的函数。
+
+\item
+返回一个持续时间，而不是时钟周期数。
+\end{enumerate}
+
+这在以下代码中得到了体现：
+
+\begin{cpp}
+template <typename Time = std::chrono::microseconds,
+          typename Clock = std::chrono::high_resolution_clock>
+struct perf_timer
+{
+    template <typename F, typename... Args>
+    static Time duration(F&& f, Args... args)
+    {
+        auto start = Clock::now();
+        std::invoke(std::forward<F>(f), std::forward<Args>(args)...);
+        auto end = Clock::now();
+        return std::chrono::duration_cast<Time>(end - start);
+    }
+};
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+时钟是一个定义了两件事的组件：
+
+\begin{itemize}
+\item
+一个称为纪元的时间起点；关于纪元是什么没有限制，但典型的实现使用 1970 年 1 月 1 日。
+
+\item
+一个定义了两个时间点之间增量的滴答率（如毫秒或纳秒）。
+\end{itemize}
+
+时间点是指自某个时钟纪元以来的时间持续。有几个特别重要的时间点：
+
+\begin{itemize}
+\item
+当前时间，由时钟的静态成员 now() 返回。
+
+\item
+纪元，即时间的起点；通过特定时钟的 \verb|time_point| 默认构造函数创建的时间点。
+
+\item
+时钟能够表示的最小时间，由 \verb|time_point| 的静态成员 min() 返回。
+
+\item
+时钟能够表示的最大时间，由 \verb|time_point| 的静态成员 max() 返回。
+\end{itemize}
+
+标准定义了几种时钟：
+
+\begin{itemize}
+\item
+\verb|system_clock|: 当前系统的实时钟来表示时间点。
+
+\item
+\verb|high_resolution_clock|: 使用当前系统上最短可能滴答周期的时钟。
+
+\item
+\verb|steady_clock|: 永远不会调整的时钟。与其它时钟不同，随着时光流逝，两个时间点之间的差异始终为正。
+
+\item
+\verb|utc_clock|: 这是一个 C++20 中用于协调世界时的时钟。
+
+\item
+\verb|tai_clock|: 这是一个 C++20 中用于国际原子时的时钟。
+
+\item
+\verb|gps_clock|: 这是一个 C++20 中用于全球定位系统时间的时钟。
+
+\item
+\verb|file_clock|: 这是一个 C++20 中用于表示文件时间的时钟。
+\end{itemize}
+
+以下示例打印了列表中前三个时钟（C++11 中可用的那些）的精度，无论是否稳定（或单调）：
+
+\begin{cpp}
+template <typename T>
+void print_clock()
+{
+    std::cout << "precision: "
+              << (1000000.0 * double(T::period::num)) /
+                 (T::period::den)
+              << '\n';
+    std::cout << "steady: " << T::is_steady << '\n';
+}
+print_clock<std::chrono::system_clock>();
+print_clock<std::chrono::high_resolution_clock>();
+print_clock<std::chrono::steady_clock>();
+\end{cpp}
+
+可能的输出如下：
+
+\begin{shell}
+precision: 0.1
+steady: 0
+precision: 0.001
+steady: 1
+precision: 0.001
+steady: 1
+\end{shell}
+
+\verb|system_clock| 的分辨率为 0.1 微秒且不是一个单调时钟。另一方面，另外两个时钟 \verb|high_resolution_clock| 和 \verb|steady_clock| 都有 1 纳秒的分辨率，并且是单调时钟。
+
+时钟的稳定性在测量函数执行时间时非常重要，如果函数运行过程中进行时钟调整，结果将不会反映真实的执行时间，甚至可能出现负值。测量函数执行时间应依赖于稳定的时钟。通常的选择是 \verb|high_resolution_clock|，这也是在“How to do it...”部分示例中使用的时钟。
+
+当测量执行时间时，需要在调用之前和调用之后获取当前时间。为此，可以使用时钟的 now() 静态方法。结果是一个 \verb|time_point|；当减去两个时间点时，结果是一个由时钟定义的持续时间。
+
+为了创建一个可以用来测量任何函数执行时间的可重用组件，这里定义了一个名为 \verb|perf_timer| 的类型模板。这个模板以感兴趣的分辨率（默认为微秒）和想要使用的时钟（默认为 \verb|high_resolution_clock|）为参数。模板有一个名为 duration() 的单一静态成员——一个变参函数模板——接受要执行的函数及其可变数量的参数。实现相对简单：获取当前时间，使用 std::invoke 调用函数（以便处理调用任何可调用对象的不同机制），然后再次获取当前时间，返回值是一个时间段（具有定义的分辨率）。以下代码展示了这一点：
+
+\begin{cpp}
+auto t = perf_timer<>::duration(func, 1500);
+std::cout << std::chrono::duration<double, std::milli>(t).count()
+          << "ms" << '\n';
+std::cout << std::chrono::duration<double, std::nano>(t).count()
+          << "ns" << '\n';
+\end{cpp}
+
+需要注意的是，不是从 duration() 函数返回一个时钟周期数，而是返回一个实际时间段的值。原因是返回一个时钟周期数会导致失去分辨率，所以不知道它们实际上代表什么。最好是在确实需要时钟周期数的时候才调用 count()。这在此处举例说明：
+
+\begin{cpp}
+auto t1 = perf_timer<std::chrono::nanoseconds>::duration(func, 150);
+auto t2 = perf_timer<std::chrono::microseconds>::duration(func, 150);
+auto t3 = perf_timer<std::chrono::milliseconds>::duration(func, 150);
+std::cout
+    << std::chrono::duration<double, std::micro>(t1 + t2 + t3).count()
+    << "us" << '\n';
+\end{cpp}
+
+这个例子中，使用三种不同的分辨率（纳秒、微秒和毫秒）测量了三个不同函数的执行时间。值 t1、t2 和 t3 表示持续时间，可以轻松地将其相加并将结果转换为微秒。
+
+
+
+

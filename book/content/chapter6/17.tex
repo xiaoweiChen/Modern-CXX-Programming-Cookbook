@@ -1,0 +1,114 @@
+
+前几个示例中，了解了类型支持库中的一些特性，特别是类型特征。另一个值得深入讨论的类型转换特性是 std::conditional，能够根据编译时的布尔表达式在两种类型之间进行选择。本示例中，将通过几个例子了解其工作原理以及如何使用。
+
+\mySubsubsection{}{How to do it...}
+
+以下是几个示例，展示了如何使用 \verb|<type_traits>| 头文件中提供的 std::conditional（和 \verb|std::conditional_t|）在编译时选择两种类型：
+
+\begin{itemize}
+\item
+类型别名或 typedef 中，根据平台（32位平台上指针大小为4字节，64位平台上为8字节）选择32位或64位整数类型：
+
+\begin{cpp}
+using long_type = std::conditional_t<
+    sizeof(void*) <= 4, long, long long>;
+auto n = long_type{ 42 };
+\end{cpp}
+
+\item
+别名模板中，根据用户指定（作为一个非类型模板参数）选择8位、16位、32位或64位整数类型：
+
+\begin{cpp}
+template <int size>
+using number_type =
+    typename std::conditional_t<
+        size<=1,
+        std::int8_t,
+        typename std::conditional_t<
+            size<=2,
+            std::int16_t,
+            typename std::conditional_t<
+                size<=4,
+                std::int32_t,
+                std::int64_t
+            >
+        >
+    >;
+auto n = number_type<2>{ 42 };
+static_assert(sizeof(number_type<1>) == 1);
+static_assert(sizeof(number_type<2>) == 2);
+static_assert(sizeof(number_type<3>) == 4);
+static_assert(sizeof(number_type<4>) == 4);
+static_assert(sizeof(number_type<5>) == 8);
+static_assert(sizeof(number_type<6>) == 8);
+static_assert(sizeof(number_type<7>) == 8);
+static_assert(sizeof(number_type<8>) == 8);
+static_assert(sizeof(number_type<9>) == 8);
+\end{cpp}
+
+\item
+类型模板参数中，根据类型模板参数是否为整型或浮点型来选择整数或实数均匀分布：
+
+\begin{cpp}
+template <typename T,
+          typename D = std::conditional_t<
+                       std::is_integral_v<T>,
+                       std::uniform_int_distribution<T>,
+                       std::uniform_real_distribution<T>>,
+          typename = typename std::enable_if_t<
+                        std::is_arithmetic_v<T>>>
+std::vector<T> GenerateRandom(T const min, T const max,
+                              size_t const size)
+{
+    std::vector<T> v(size);
+    std::random_device rd{};
+    std::mt19937 mt{ rd() };
+    D dist{ min, max };
+    std::generate(std::begin(v), std::end(v),
+        [&dist, &mt] {return dist(mt); });
+    return v;
+}
+auto v1 = GenerateRandom(1, 10, 10);     // integers
+auto v2 = GenerateRandom(1.0, 10.0, 10); // doubles
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::conditional 是一个类模板，定义了一个名为 type 的成员，该成员可以是其两个类型模板参数。这种选择是基于，作为非类型模板参数提供的编译时常量布尔表达式：
+
+\begin{cpp}
+template<bool Test, class T1, class T2>
+struct conditional
+{
+    typedef T2 type;
+};
+template<class T1, class T2>
+struct conditional<true, T1, T2>
+{
+    typedef T1 type;
+};
+\end{cpp}
+
+总结一下上一节的例子：
+
+\begin{itemize}
+\item
+第一个例子中，如果平台是32位的，那么指针类型的大小是4字节，编译时表达式 \verb|sizeof(void*) <= 4| 为真；结果，std::conditional 将其成员类型定义为 long。如果平台是64位的，因为指针类型的大小是8字节，所以条件评估为假，成员类型定义为 long long。
+
+\item
+第二个例子中遇到了类似的情况，多次使用 std::conditional 来模拟一系列 if...else 语句以选择适当类型。
+
+\item
+第三个例子中，使用别名模板 \verb|std::conditional_t| 来简化函数模板 GenerateRandom 的声明。这里，std::conditional 用于定义表示统计分布的类型模板参数的默认值。根据第一个类型模板参数 T 是否为整型或浮点型，默认分布类型在 \verb|std::uniform_int_distribution<T>| 和 \verb|std::uniform_real_distribution<T>| 之间选择。使用第三个模板参数 \verb|std::enable_if| 禁用了其他类型。
+\end{itemize}
+
+为了简化 std::conditional 的使用，C++14 提供了一个别名模板 \verb|std::conditional_t|，其定义为：
+
+\begin{cpp}
+template<bool Test, class T1, class T2>
+using conditional_t = typename conditional_t<Test,T1,T2>;
+\end{cpp}
+
+可以选择使用这个辅助类（以及许多类似的来自标准库的类），有助于编写更加简洁的代码。
+

@@ -1,0 +1,95 @@
+
+C++可以通过typedef创建用作类型名替代的同义词，比如：为类型创建更短或更有意义的名字，或者是为函数指针创建名字。然而，typedef声明不能与模板一起来创建模板类型别名。例如，std::vector<T>不是一个类型（std::vector<int>才是一个类型），而是一种类型族。当类型占位符T替换为实际类型时，就可以创建这些类型。
+
+从C++11开始，类型别名是指向另一种已经声明的类型的名称，而别名模板是指向另一种已经声明的模板的名称。这两种类型的别名可以使用using。
+
+\mySubsubsection{}{How to do it...}
+
+\begin{itemize}
+\item
+using identifier = type-id来创建类型别名：
+
+\begin{cpp}
+using byte     = unsigned char;
+using byte_ptr = unsigned char *;
+using array_t  = int[10];
+using fn       = void(byte, double);
+void func(byte b, double d) { /*...*/ }
+byte b{42};
+byte_ptr pb = new byte[10] {0};
+array_t a{0,1,2,3,4,5,6,7,8,9};
+fn* f = func;
+\end{cpp}
+
+\item
+template<template-params-list> identifier = type-id创建别名模板：
+
+\begin{cpp}
+template <class T>
+class custom_allocator { /* ... */ };
+template <typename T>
+using vec_t = std::vector<T, custom_allocator<T>>;
+vec_t<int>           vi;
+vec_t<std::string>   vs;
+\end{cpp}
+
+\end{itemize}
+
+为了保持一致性和可读性：
+
+\begin{itemize}
+\item
+创建别名时不混合使用typedef和using。
+
+\item
+创建函数指针类型名称时首选using。
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+typedef声明引入了类型名称的同义词（就是别名），不会引入新类型（像类、结构体、联合或枚举）。通过typedef声明引入的类型名称，遵循与标识符名称相同的隐藏规则。为了引用相同类型的同义词可以重新声明（只要是对同一类型的同义词，就可以在一个翻译单元中进行多次typedef声明）：
+
+\begin{cpp}
+typedef unsigned char   byte;
+typedef unsigned char * byte_ptr;
+typedef int array_t[10];
+typedef void(*fn)(byte, double);
+template<typename T>
+class foo {
+    typedef T value_type;
+};
+typedef std::vector<int> vint_t;
+typedef int INTEGER;
+INTEGER x = 10;
+typedef int INTEGER; // redeclaration of same type
+INTEGER y = 20;
+\end{cpp}
+
+类型别名声明等价于typedef声明，可以出现在块作用域、类型作用域或命名空间作用域中。根据C++11标准（第9.2.4段，文档版本N4917）：
+
+\begin{myTip}
+类型定义名称也可以通过别名声明来引入。关键字using之后的标识符成为一个类型定义名，紧跟在标识符后面的可选属性说明符序列属于该类型定义名。其语义与通过类型定义说明符引入的一样。特别是，它不定义新的类型，也不应该出现在类型ID中。
+\end{myTip}
+
+当涉及到为数组类型和函数指针类型创建别名时，别名声明更加易读，也更清晰地表明了别名的实际类型。在“How to do it...”部分的示例中，很容易理解array\_t是包含10个整数数组类型的名称，而fn是接受两个byte和double类型参数并返回void的函数类型的名称，与声明std::function对象的语法相一致（例如，std::function<void(byte, double)> f）。
+
+还需要注意以下几点：
+
+\begin{itemize}
+\item
+别名模板不能部分或显式特化。
+
+\item
+模板参数推导过程中，别名模板永远不会推导为模板参数。
+
+\item
+特化别名模板时产生的类型，不允许直接或间接地使用自定义类型。
+\end{itemize}
+
+新语法的主要目的是定义别名模板。这些模板在特化时，等同于将别名模板的模板参数替换到类型ID后得到的结果。
+
+
+
+
+
+

@@ -1,0 +1,160 @@
+
+框架为提供了自定义测试日志，和测试报告中显示的内容以及格式化结果的能力。目前支持两种格式：人类可读格式（或HRF）和XML（还包括JUNIT格式用于测试日志），也可以创建并添加自己的格式。
+
+\begin{myNotic}
+人类可读格式是指可以阅读的数据编码形式。无论是以ASCII还是Unicode编码的文本，都用于此目的。
+\end{myNotic}
+
+输出内容的配置既可以在运行时通过命令行开关进行，也可以在编译时通过各种API完成。测试执行期间，框架会收集所有的事件到日志中。最后，会产生一个报告，该报告代表了执行情况的摘要，包含不同程度的细节。发生失败的情况下，报告包含了关于位置和原因的详细信息，包括实际值和预期值。这有助于开发人员快速识别错误。这个示例中，将看到如何控制写入日志和报告的内容及其格式，将在运行时使用命令行选项来实现。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例中的例子，将使用以下测试模块：
+
+\begin{cpp}
+#define BOOST_TEST_MODULE Controlling output
+#include <boost/test/included/unit_test.hpp>
+BOOST_AUTO_TEST_CASE(test_case)
+{
+    BOOST_TEST(true);
+}
+BOOST_AUTO_TEST_SUITE(test_suite)
+BOOST_AUTO_TEST_CASE(test_case)
+{
+    int a = 42;
+    BOOST_TEST(a == 0);
+}
+BOOST_AUTO_TEST_SUITE_END()
+\end{cpp}
+
+下一节将介绍如何通过命令行选项控制测试日志和测试报告的输出。
+
+\mySubsubsection{}{How to do it...}
+
+要控制测试日志的输出，请按照以下步骤操作：
+
+\begin{itemize}
+\item
+使用 \verb|--log_format=<format>| 或 \verb|-f <format>| 命令行选项来指定日志格式。可能的格式有HRF（默认值）、XML和JUNIT。
+
+\item
+使用 \verb|--log_level=<level>| 或 \verb|-l <level>| 命令行选项来指定日志级别。日志级别包括错误（HRF和XML的默认值）、警告、全部和成功（JUNIT的默认值）。
+
+\item
+使用 \verb|--log_sink=<stream or file name>| 或 \verb|-k <stream or file name>| 命令行选项来指定框架应将测试日志写入的位置。可能的选项有stdout（HRF和XML的默认值）、stderr或任意文件名（JUNIT的默认值）。
+\end{itemize}
+
+要控制测试报告的输出，请按照以下步骤操作：
+
+\begin{itemize}
+\item
+使用 \verb|--report_format=<format>| 或 \verb|-m <format>| 命令行选项来指定报告格式。格式有HRF（默认值）和XML。
+
+\item
+使用 \verb|--report_level=<level>| 或 \verb|-r <level>| 命令行选项来指定报告级别。格式有确认（默认值）、无（不产生报告）、简短和详细。
+
+\item
+使用 \verb|--report_sink=<stream or file name>| 或 \verb|-e <stream or file name>| 命令行选项来指定框架应将报告日志写入的位置。选项有stderr（默认值）、stdout或任意文件名。
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+在控制台/终端运行测试模块时，会看到测试日志和测试报告，测试报告紧随测试日志之后。对于前面展示的测试模块，默认输出如下所示。前三行代表测试日志，而最后一行代表测试报告：
+
+\begin{shell}
+Running 2 test cases...
+f:/chapter11bt_05/main.cpp(14): error: in "test_suite/test_case":
+check a == 0 has failed [42 != 0]
+*** 1 failure is detected in the test module "Controlling output"
+\end{shell}
+
+测试日志和测试报告的内容可以以多种格式提供，默认格式为HRF；框架还支持XML格式，对于测试日志，还支持JUNIT格式。这是一种旨在供自动化工具使用的格式，如持续构建或集成工具。除了这些选项外，还可以通过实现派生自 \verb|boost::unit_test::unit_test_log_formatter| 的类来自定义测试日志的格式。
+
+下面的例子展示了如何使用XML格式化测试日志（第一个例子）和测试报告（第二个例子）（每个格式化部分用粗体标出）：
+
+\begin{shell}
+chapter11bt_05.exe -f XML
+<TestLog><Error file="f:/chapter11bt_05/main.cpp"
+
+line="14"><![CDATA[check a == 0 has failed [42 != 0]]]>
+
+</Error></TestLog>
+
+*** 1 failure is detected in the test module "Controlling output"
+chapter11bt_05.exe -m XML
+Running 2 test cases...
+f:/chapter11bt_05/main.cpp(14): error: in "test_suite/test_case":
+check a == 0 has failed [42 != 0]
+<TestResult><TestSuite name="Controlling output" result="failed"
+
+assertions_passed="1" assertions_failed="1" warnings_failed="0"
+
+expected_failures="0" test_cases_passed="1"
+
+test_cases_passed_with_warnings="0" test_cases_failed="1"
+
+test_cases_skipped="0" test_cases_aborted="0"></TestSuite>
+
+</TestResult>
+\end{shell}
+
+日志或报告级别代表输出的详细程度。日志的详细程度级别的可能值如下表所示，按从最低到最高级别排序。表格中较高的级别包含其上所有级别的消息：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{级别} & \textbf{报告的消息}                                       \\ \hline
+\endfirsthead
+%
+\endhead
+%
+nothing        & 没有任何日志记录。                                                        \\ \hline
+fatal\_error & \begin{tabular}[c]{@{}l@{}}系统或用户致命错误及所有描述 REQUIRE 级别断言失败的消息\\（例如 BOOST\_TEST\_REQUIRE 和 BOOST\_REQUIRE）。\end{tabular} \\ \hline
+system\_error  & 系统非致命错误。                                                  \\ \hline
+cpp\_exception & 未捕获的 C++ 异常。                                                   \\ \hline
+error          & CHECK 级别断言失败（BOOST\_TEST 和 BOOST\_CHECK\_）。     \\ \hline
+warning        & WARN 级别断言失败 (BOOST\_TEST\_WARN 和 BOOST\_WARN\_). \\ \hline
+message        & BOOST\_TEST\_MESSAGE 生成的消息。                               \\ \hline
+test\_suite    & 每个测试单元开始和结束状态的通知。            \\ \hline
+all/success    & 所有消息，包括通过的断言。                            \\ \hline
+\end{longtable}
+
+\begin{center}
+表 11.2：日志详细程度级别的可能值
+\end{center}
+
+测试报告的可用格式如下表所述：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{级别} & \textbf{描述}                                                             \\ \hline
+\endfirsthead
+%
+\endhead
+%
+no             & 不产生报告。                                                           \\ \hline
+confirm &
+\begin{tabular}[c]{@{}l@{}}通过的测试:\\ *** 未检测到错误。\\ 跳过的测试:\\ ***  测试套件<name>被跳过; 请参阅标准输出以获取详情。\\ 中断的测试:\\ ***  测试套件<name>被中断；请参阅标准输出以获取详情。\\ 断言失败但测试未失败：\\ *** 在测试套件<name>中检测到错误；请参阅标准输出以获取详情。\\ 失败的测试:\\ ***在测试套件<name>中检测到 N 个失败。\\ 部分预期失败的测试:\\ *** 在测试套件 <name>中检测到 N 个失败（预期 M 个失败）。\end{tabular} \\ \hline
+detailed &
+\begin{tabular}[c]{@{}l@{}}结果以层次结构方式报告（每个测试单元作为父测试单元的一部分报告），\\但仅显示相关信息。没有断言失败的测试用例不会在报告中生成条目。\\ 测试用例/套件 \textless{}name\textgreater 已通过/被跳过/被中断/失败：\\ N 个断言中有 M 个通过\\ N 个断言中有 M 个失败\\ N 个警告中有 M 个失败\\ 预期 X 个失败\end{tabular} \\ \hline
+short          & 类似于详细，但只报告主测试套件的信息。 \\ \hline
+\end{longtable}
+
+\begin{center}
+表 11.3：测试报告的可用格式
+\end{center}
+
+标准输出流（stdout）是测试日志的默认写入位置，标准错误流（stderr）是测试报告的默认位置。然而，测试日志和测试报告都可以重定向到另一个流或文件。
+
+除了这些选项外，还可以使用 \verb|--report_memory_leaks_to=<file name>| 命令行选项指定用于报告内存泄漏的单独文件。如果没有此选项且检测到内存泄漏，则报告给标准错误流。
+
+\mySubsubsection{}{There's more...}
+
+除了本示例中讨论的选项外，框架还提供了编译时API来控制输出。有关这些API的全面描述以及本示例中描述的功能，请查阅框架文档 \url{https://www.boost.org/doc/libs/1_83_0/libs/test/doc/html/index.html}。
+
+

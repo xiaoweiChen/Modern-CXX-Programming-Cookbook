@@ -1,0 +1,203 @@
+模板在C++中无处不在，但每次都要指定模板参数可能会令人厌烦。幸运的是，有些情况下编译器可以从上下文中推断出模板参数。这项C++17中引入的功能称为类型模板参数推导（Class Template Argument Deduction，CTAD），它使得编译器可以根据初始化器的类型推导出缺失的模板参数。在本示例中，将介绍如何利用这一特性。
+
+\mySubsubsection{}{How to do it...}
+
+C++17中遇到以下情况时，可以跳过指定模板参数，让编译器推导：
+
+\begin{itemize}
+\item
+声明变量或变量模板并初始化时:
+
+\begin{cpp}
+std::pair   p{ 42, "demo" };  // 推导为 std::pair<int, char const*>
+std::vector v{ 1, 2 };        // 推导为 std::vector<int>
+std::less   l;                // 推导为 std::less<void>
+\end{cpp}
+
+\item
+使用new表达式创建类型实例时：
+
+\begin{cpp}
+template <class T>
+struct foo
+{
+    foo(T v) :data(v) {}
+    private:
+    T data;
+};
+auto f = new foo(42);
+\end{cpp}
+
+\item
+执行函数风格的类型转换表达式时：
+
+\begin{cpp}
+std::mutex mx;
+// 推导为 std::lock_guard<std::mutex>
+auto lock = std::lock_guard(mx);
+std::vector<int> v;
+// 推导为 std::back_insert_iterator<std::vector<int>>
+std::fill_n(std::back_insert_iterator(v), 5, 42);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+C++17之前，初始化变量时必须指定所有的模板参数，这些参数都是实例化类模板所必需：
+
+\begin{cpp}
+std::pair<int, char const*> p{ 42, "demo" };
+std::vector<int>            v{ 1, 2 };
+foo<int>                    f{ 42 };
+\end{cpp}
+
+通过函数模板（如std::make\_pair()）可以避免显式指定模板参数的问题：
+
+\begin{cpp}
+auto p = std::make_pair(42, "demo");
+\end{cpp}
+
+对于这里展示的foo类模板，可以通过编写类似的make\_foo()函数模板来实现同样的行为：
+
+\begin{cpp}
+template <typename T>
+constexpr foo<T> make_foo(T&& value)
+{
+    return foo{ value };
+}
+auto f = make_foo(42);
+\end{cpp}
+
+C++17中，这种做法不再必要。以以下声明为例：
+
+\begin{cpp}
+std::pair p{ 42, "demo" };
+\end{cpp}
+
+std::pair并不是一个具体的类型，而是充当激活类模板参数推导的占位符。当编译器在带有初始化的变量声明或函数风格的类型转换时，会构建一组推导指南。这些推导指南就像是假设类型构造函数的集合。
+
+用户可以通过自定义推导规则来补充这组推导指南，这组推导指南用于执行模板参数推导和重载解析。
+
+以std::pair为例，编译器将构建一组推导指南，其中包括但不限于以下假设的函数模板：
+
+\begin{cpp}
+template <class T1, class T2>
+std::pair<T1, T2> F();
+template <class T1, class T2>
+std::pair<T1, T2> F(T1 const& x, T2 const& y);
+template <class T1, class T2, class U1, class U2>
+std::pair<T1, T2> F(U1&& x, U2&& y);
+\end{cpp}
+
+这些由编译器生成的推导指南是从类型模板的构造函数中创建的，如果没有构造函数，则为假设的默认构造函数创建推导指南。此外，都会为假设的复制构造函数创建推导指南。
+
+自定义推导指南是带有尾随返回类型的函数签名，但没有auto关键字（没有返回值的假设构造函数），必须定义在应用的类型模板的命名空间中。
+
+为了理解其工作原理，来看一个std::pair实例的例子：
+
+\begin{cpp}
+std::pair p{ 42, "demo" };
+\end{cpp}
+
+编译器推导出的类型是std::pair<int, char const*>。如果希望编译器将字符串 "demo" 的类型推导为 std::string，则需要几个自定义推导规则:
+
+\begin{cpp}
+namespace std {
+    template <class T>
+    pair(T&&, char const*)->pair<T, std::string>;
+    template <class T>
+    pair(char const*, T&&)->pair<std::string, T>;
+    pair(char const*, char const*)->pair<std::string, std::string>;
+}
+\end{cpp}
+
+这将使我们能够执行以下声明，其中字符串 "demo" 的类型始终推导为 std::string:
+
+\begin{cpp}
+std::pair  p1{ 42, "demo" };    // std::pair<int, std::string>
+std::pair  p2{ "demo", 42 };    // std::pair<std::string, int>
+std::pair  p3{ "42", "demo" };  // std::pair<std::string, std::string>
+\end{cpp}
+
+\begin{myNotic}{}
+推导指南不一定是函数模板！
+\end{myNotic}
+
+如果存在模板参数列表，无论指定了多少参数，都不会发生类模板参数推导。例如：
+
+\begin{cpp}
+std::pair<>    p1 { 42, "demo" };
+std::pair<int> p2 { 42, "demo" };
+\end{cpp}
+
+因为这两行声明都指定了模板参数列表，所以无效，会产生编译错误。
+
+还有一些已知的情况下，类模板参数推导不起作用：
+
+\begin{itemize}
+\item
+聚合模板，通过编写自定义推导指南来解决这个问题：
+
+\begin{cpp}
+template<class T>
+struct Point3D { T x; T y; T z; };
+
+Point3D p{1, 2, 2};   // error, requires Point3D<int>
+\end{cpp}
+
+\item
+类型别名，如以下示例所示（GCC，使用 -std=c++20 编译时可以工作）：
+
+\begin{cpp}
+template <typename T>
+using my_vector = std::vector<T>;
+std::vector v{1,2,3}; // OK
+my_vector mv{1,2,3};  // error
+\end{cpp}
+
+\item
+继承的构造函数，无论是隐式的还是用户定义的推导指南，在构造函数继承时都不会继承：
+
+\begin{cpp}
+template <typename T>
+struct box
+{
+    box(T&& t) : content(std::forward<T>(t)) {}
+    virtual void unwrap()
+    { std::cout << "unwrapping " << content << '\n'; }
+    T content;
+};
+template <typename T>
+struct magic_box : public box<T>
+{
+    using box<T>::box;
+    virtual void unwrap() override
+    { std::cout << "unwrapping " << box<T>::content << '\n'; }
+};
+int main()
+{
+    box b(42);        // OK
+    b.unwrap();
+    magic_box m(21);  // error, requires magic_box<int>
+    m.unwrap();
+}
+\end{cpp}
+
+\end{itemize}
+
+上述最后一个限制在C++23中已经移除，此时当构造函数继承时，推导指南也会继承。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

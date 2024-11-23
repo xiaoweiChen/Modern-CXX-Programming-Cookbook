@@ -1,0 +1,229 @@
+
+数字类型和字符串类型互相转换是一种常见的操作。C++11 前，将数字转换为字符串及反向转换的支持较少，开发者大多依赖于类型不安全的函数，并且通常会编写自己的实用函数以避免重复编写相同的代码。随着 C++11 的推出，标准库提供了用于在数字和字符串之间进行转换的实用函数。这个示例中，将介绍如何使用现代 C++ 标准函数在数字和字符串相互转换。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中提到的所有实用函数都可以在 <string> 头文件中找到。
+
+\mySubsubsection{}{How to do it...}
+
+需要在数字和字符串之间进行转换时，可以使用以下标准转换函数：
+
+\begin{itemize}
+\item
+将整数或浮点类型转换为字符串类型：std::to\_string() 或 std::to\_wstring()：
+
+\begin{cpp}
+auto si = std::to_string(42);      // si="42"
+auto sl = std::to_string(42L);     // sl="42"
+auto su = std::to_string(42u);     // su="42"
+auto sd = std::to_wstring(42.0);   // sd=L"42.000000"
+auto sld = std::to_wstring(42.0L); // sld=L"42.000000"
+\end{cpp}
+
+\item
+将字符串类型转换为整数类型：std::stoi()、std::stol()、std::stoll()、std::stoul() 或 std::stoull()：
+
+\begin{cpp}
+auto i1 = std::stoi("42");                  // i1 = 42
+auto i2 = std::stoi("101010"L, nullptr, 2); // i2 = 42
+auto i3 = std::stoi("052", nullptr, 8);     // i3 = 42
+auto i4 = std::stoi("0x2A"L, nullptr, 16);  // i4 = 42
+\end{cpp}
+
+\item
+将字符串类型转换为浮点类型：std::stof()、std::stod() 或 std::stold()：
+
+\begin{cpp}
+// d1 = 123.45000000000000
+auto d1 = std::stod("123.45");
+// d2 = 123.45000000000000
+auto d2 = std::stod("1.2345e+2");
+// d3 = 123.44999980926514
+auto d3 = std::stod("0xF.6E6666p3");
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+要将整数或浮点类型转换为字符串类型，可用 std::to\_string() 函数（转换为 std::string）或 std::to\_wstring() 函数（转换为 std::wstring）。这些函数在 <string> 头文件中可用，并且对有符号和无符号整数以及实数类型都有重载。产生的结果与调用带有相应格式说明符的 std::sprintf() 和 std::swprintf() 时相同，以下是这两个函数对 int 类型的重载示例：
+
+\begin{cpp}
+std::string to_string(int value);
+std::wstring to_wstring(int value);
+\end{cpp}
+
+除了 int 类型之外，这两个函数还对 long、long long、unsigned int、unsigned long、unsigned long long、float、double 和 long double 类型有重载。
+
+当涉及到相反方向的转换时，有一整套函数名格式为 ston（字符串转数字）的函数，其中 n 可以是 i（整数）、l（长整数）、ll（长长整数）、ul（无符号长整数）或 ull（无符号长长整数）。下面列表展示了 stoi 函数及其两个重载——一个接受 std::string 参数，另一个接受 std::wstring 参数。此外，还有类似的函数 stol、stoll、stoul、stoull、stof、stod 和 stold：
+
+\begin{cpp}
+int stoi(const std::string& str, std::size_t* pos = 0, int base = 10);
+int stoi(const std::wstring& str, std::size_t* pos = 0, int base = 10);
+\end{cpp}
+
+字符串到整数类型的转换函数的工作方式是，丢弃非空白字符前的所有空白字符，然后尽可能多地取字符来形成一个有符号或无符号数（视情况而定），最后将该数转换为相应的整数类型（stoi() 返回整数，stoul() 返回无符号长整数等）。以下示例中，结果都是整数 42(最后一个示例除外，其结果为 -42)：
+
+\begin{cpp}
+auto i1 = std::stoi("42");             // i1 = 42
+auto i2 = std::stoi("   42");          // i2 = 42
+auto i3 = std::stoi("   42fortytwo");  // i3 = 42
+auto i4 = std::stoi("+42");            // i4 = 42
+auto i5 = std::stoi("-42");            // i5 = -42
+\end{cpp}
+
+有效的整数可以由以下部分组成：
+
+\begin{itemize}
+\item
+符号，加号 (+) 或减号 (-)（可选）
+
+\item
+前缀 0 表示八进制基数（可选）
+
+\item
+前缀 0x 或 0X 表示十六进制基数（可选）
+
+\item
+数字序列
+\end{itemize}
+
+可选的八进制前缀 0 只在指定的基数为 8 或 0 时应用。同样地，可选的十六进制前缀 0x 或 0X 只在指定的基数为 16 或 0 时可用。
+
+将字符串转换为整数的函数有三个参数：
+
+\begin{itemize}
+\item
+输入字符串。
+
+\item
+当不是空指针时，将接收处理过的字符数的指针。这包括已丢弃的前导空白字符、符号和基数前缀，不应将其与整数值的位数混淆。
+
+\item
+表示基数的数字，默认为 10。
+\end{itemize}
+
+输入字符串中的有效数字取决于基数。对于二进制，唯一有效的数字是 0 和 1；对于五进制，有效数字是 01234。对于十一进制，有效数字是 0-9 和字符 A 和 a。这一直持续到三十六进制，其有效字符为 0-9、A-Z 和 a-z。
+
+以下是各种基数的数字字符串转换为十进制整数的其他示例，结果要么是 42，要么是 -42：
+
+\begin{cpp}
+auto i6 = std::stoi("052", nullptr, 8);      // i6 = 42
+auto i7 = std::stoi("052", nullptr, 0);      // i7 = 42
+auto i8 = std::stoi("0x2A", nullptr, 16);    // i8 = 42
+auto i9 = std::stoi("0x2A", nullptr, 0);     // i9 = 42
+auto i10 = std::stoi("101010", nullptr, 2); // i10 = 42
+auto i11 = std::stoi("22", nullptr, 20);    // i11 = 42
+auto i12 = std::stoi("-22", nullptr, 20);  // i12 = -42
+auto pos = size_t{ 0 };
+auto i13 = std::stoi("42", &pos);      // i13 = 42,  pos = 2
+auto i14 = std::stoi("-42", &pos);     // i14 = -42, pos = 3
+auto i15 = std::stoi("  +42dec", &pos);// i15 = 42,  pos = 5
+\end{cpp}
+
+需要注意的是，如果转换失败，转换函数会抛出异常。可能抛出两种异常：
+
+\begin{itemize}
+\item
+如果无法执行转换，则抛出 std::invalid\_argument：
+
+\begin{cpp}
+try
+{
+    auto i16 = std::stoi("");
+}
+catch (std::exception const & e)
+{
+    // prints "invalid stoi argument"
+    std::cout << e.what() << '\n';
+}
+\end{cpp}
+
+\item
+如果转换后的值超出结果类型的范围（或底层函数将 errno 设置为 ERANGE），则抛出 std::out\_of\_range：
+
+\begin{cpp}
+try
+{
+    // OK
+    auto i17 = std::stoll("12345678901234");
+    // throws std::out_of_range
+    auto i18 = std::stoi("12345678901234");
+}
+catch (std::exception const & e)
+{
+    // prints "stoi argument out of range"
+    std::cout << e.what() << '\n';
+}
+\end{cpp}
+\end{itemize}
+
+将字符串转换为浮点类型的另一组函数非常相似，没有用于数字基数的参数。有效的浮点值在输入字符串中，可以以不同的形式表示：
+
+\begin{itemize}
+\item
+十进制浮点表达式（可选符号、带有可选小数点的十进制数字序列、可选的 e 或 E 后跟带有可选符号的指数）
+
+\item
+二进制浮点表达式（可选符号、0x 或 0X 前缀、带有可选小数点的十六进制数字序列、可选的 p 或 P 后跟带有可选符号的指数）
+
+\item
+无穷大表达式（可选符号后跟不区分大小写的 INF 或 INFINITY）
+
+\item
+非数字表达式（可选符号后跟不区分大小写的 NAN，以及可能的其他字母数字字符）
+\end{itemize}
+
+以下是将字符串转换为双精度浮点数的各种示例：
+
+\begin{cpp}
+auto d1 = std::stod("123.45");         // d1 =  123.45000000000000
+auto d2 = std::stod("+123.45");        // d2 =  123.45000000000000
+auto d3 = std::stod("-123.45");        // d3 = -123.45000000000000
+auto d4 = std::stod("  123.45");       // d4 =  123.45000000000000
+auto d5 = std::stod("  -123.45abc");   // d5 = -123.45000000000000
+auto d6 = std::stod("1.2345e+2");      // d6 =  123.45000000000000
+auto d7 = std::stod("0xF.6E6666p3");   // d7 =  123.44999980926514
+auto d8 = std::stod("INF");            // d8 = inf
+auto d9 = std::stod("-infinity");      // d9 = -inf
+auto d10 = std::stod("NAN");           // d10 = nan
+auto d11 = std::stod("-nanabc");       // d11 = -nan
+\end{cpp}
+
+以二进制科学记数法表示的浮点数，如 0xF.6E6666p3。为了清晰理解，这里提供了一个简短的描述，但建议查阅其他参考资料以获取详细信息（例如 \url{https://en.cppreference.com/w/cpp/language/floating_literal})。以二进制科学记数法表示的浮点常量由几个部分组成:
+
+\begin{itemize}
+\item
+十六进制前缀 0x。
+
+\item
+整数部分；此示例中为 F，即十进制中的 15。
+
+\item
+小数部分；此示例中为 6E6666，即二进制中的 011011100110011001100110。将其转换为十进制，需要加上 2 的负幂：1/4 + 1/8 + 1/32 + 1/64 + 1/128 + ....
+
+\item
+后缀，表示 2 的幂；在此示例中，p3 表示 2 的三次方。
+\end{itemize}
+
+十进制等效值的确定方法是将有效数字（由整数部分和小数部分组成）乘以基数的指数次幂。
+
+对于给定的以二进制表示的十六进制浮点字面量，有效数字为 15.4312499...（注意，第七位之后的数字未显示），基数为 2，指数为 3。因此，结果为 15.4312499... * 8，即 123.44999980926514。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,167 @@
+
+多态性提供了对同一接口具有多种形式的能力。虚函数允许派生类重写基类的实现，代表了多态性的一种常见形式，即运行时多态性的最常见元素，在类层次结构中决定调用特定虚函数的操作发生在运行时。这也称为后期绑定，函数调用与函数调用之间的绑定在程序执行期间发生。与此相反的是早期绑定、静态多态性或编译时多态性，函数和操作符重载在编译时进行。
+
+另一方面，一种称为奇特递归模板模式（Curiously Recurring Template Pattern，简称 CRTP）的技术，在编译时通过从派生类为模板参数的基类模板派生类，来模拟基于虚函数的运行时多态性。这种技术在一些库中得到了广泛的应用，包括微软的 Active Template Library (ATL) 和 Windows Template Library (WTL)。本示例中，将介绍 CRTP，并了解如何实现它及其工作原理。
+
+\mySubsubsection{}{Getting ready}
+
+为了展示 CRTP 如何工作，将定义一组具有绘制控件功能的控件类。示例中，这是一个分为两步的操作：擦除背景，然后绘制控件。简单起见，这些将是仅在控制台上进行输出文本的操作。
+
+\mySubsubsection{}{How to do it...}
+
+为了实现奇特递归模板模式以达到静态多态性，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+提供一个类模板，将作为其他应在编译时多态处理的类的基类。多态函数从这个类型调用：
+
+\begin{cpp}
+template <class T>
+class control
+{
+    public:
+    void draw()
+    {
+        static_cast<T*>(this)->erase_background();
+        static_cast<T*>(this)->paint();
+    }
+};
+\end{cpp}
+
+\item
+派生类使用类模板作为其基类；派生类也作为基类的模板参数。派生类实现了从基类调用的函数：
+
+\begin{cpp}
+class button : public control<button>
+{
+public:
+    void erase_background()
+    {
+        std::cout << "erasing button background..." << '\n';
+    }
+    void paint()
+    {
+        std::cout << "painting button..." << '\n';
+    }
+};
+class checkbox : public control<checkbox>
+{
+public:
+    void erase_background()
+    {
+        std::cout << "erasing checkbox background..."
+        << '\n';
+    }
+    void paint()
+    {
+        std::cout << "painting checkbox..." << '\n';
+    }
+};
+\end{cpp}
+
+\item
+函数模板可以通过指向基类模板的指针或引用来多态地处理派生类：
+
+\begin{cpp}
+template <class T>
+void draw_control(control<T>& c)
+{
+    c.draw();
+}
+button b;
+draw_control(b);
+checkbox c;
+draw_control(c);
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+虚函数可能会带来性能问题，尤其是在其很小并且在一个循环中多次调用的情况下。现代硬件已经使得大多数这种情况变得无关紧要，但仍有一些应用类别，性能至关重要，任何性能提升都很重要。奇特递归模板模式，允许使用元编程在编译时模拟虚函数调用，最终转换为函数重载。
+
+这种模式乍一看可能显得有些奇怪，但完全合法。其思想是从一个模板类作为基类派生一个类，然后将派生类本身传递给基类的类型模板参数。然后，基类调用派生类的函数。在例子中，control<button>::draw() 在编译器知道 button 类之前就声明了。但control 类是一个类模板，所以只有当编译器遇到其使用的代码时，才会实例化，例如，button 类已经定义并为编译器所知，所以可以调用 \verb|button::erase_background()| 和 \verb|button::paint()|。
+
+为了从派生类调用函数，首先需要获得一个指向派生类的指针。这是通过 \verb|static_cast| 转换完成的，如 \verb|static_cast<T*>(this)->erase_background()| 所示。如果这样做很多次，则可以通过提供一个私有函数来简化代码：
+
+\begin{cpp}
+template <class T>
+class control
+{
+    T* derived() { return static_cast<T*>(this); }
+    public:
+    void draw()
+    {
+        derived()->erase_background();
+        derived()->paint();
+    }
+};
+\end{cpp}
+
+使用 CRTP 时需要注意一些陷阱：
+
+\begin{itemize}
+\item
+所有从基类模板调用的派生类中的函数都必须公有；否则，基类特化必须声明为派生类的友元：
+
+\begin{cpp}
+class button : public control<button>
+{
+    private:
+    friend class control<button>;
+    void erase_background()
+    {
+        std::cout << "erasing button background..." << '\n';
+    }
+    void paint()
+    {
+        std::cout << "painting button..." << '\n';
+    }
+};
+\end{cpp}
+
+\item
+不可能在如vector或list等同质容器中存储 CRTP 类型的示例，每个基类都是一个独特的类型（如 control<button> 和 control<checkbox>）。如果确实需要这样做，可以使用变通方法来实现。这将在下一节中讨论并举例说明。
+
+\item
+使用这种方法时，因为模板的实例化方式，程序的大小可能会增加。
+\end{itemize}
+
+\mySubsubsection{}{There's more...}
+
+当需要在容器中同质存储实现 CRTP 的类型实例时，必须使用其他惯用法。基类模板本身必须从另一个具有纯虚函数（和虚拟公共析构函数）的类派生。为了在 control 类上举例说明这一点，需要进行更改：
+
+\begin{cpp}
+class controlbase
+{
+public:
+    virtual void draw() = 0;
+    virtual ~controlbase() {}
+};
+template <class T>
+class control : public controlbase
+{
+public:
+    virtual void draw() override
+    {
+        static_cast<T*>(this)->erase_background();
+        static_cast<T*>(this)->paint();
+    }
+};
+\end{cpp}
+
+不需要对派生类（如 button 和 checkbox）进行更改，可以将指向抽象类的指针存储在容器中，如 std::vector：
+
+\begin{cpp}
+void draw_controls(std::vector<std::unique_ptr<controlbase>>& v)
+{
+    for (auto & c : v)
+    {
+        c->draw();
+    }
+}
+std::vector<std::unique_ptr<controlbase>> v;
+v.emplace_back(std::make_unique<button>());
+v.emplace_back(std::make_unique<checkbox>());
+draw_controls(v);
+\end{cpp}
+

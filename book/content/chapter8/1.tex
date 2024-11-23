@@ -1,0 +1,189 @@
+一个线程是一组指令序列，可以由调度器（例如操作系统）独立管理。线程可能是软件的也可能是硬件的，软件线程是由操作系统管理的执行线程。线程可以在单个处理单元上运行，通常通过时间片轮转的方式进行调度。这是一种机制，每个线程在一个处理单元上获得一段执行时间（以毫秒为单位），然后操作系统会安排另一个软件线程在同一处理单元上运行。硬件线程是在物理层面的执行线程，就是一个CPU或CPU核心。可以在多处理器或多核系统上同时运行，即并行运行。许多软件线程可以通过使用时间片轮转的方式，并发地在一个硬件线程上运行，C++库提供了对软件线程工作的支持。本示例中，将介绍如何创建和操作线程。
+
+\mySubsubsection{}{Getting ready}
+
+执行线程由<thread>头文件中的std命名空间下的thread类表示。其他线程工具同样位于该头文件下，但在std::this\_thread命名空间中提供。
+
+在下面的例子中，使用了print\_time()函数。这个函数将本地时间输出到控制台：
+
+\begin{cpp}
+inline void print_time()
+{
+    auto now = std::chrono::system_clock::now();
+    auto stime = std::chrono::system_clock::to_time_t(now);
+    auto ltime = std::localtime(&stime);
+    std::cout << std::put_time(ltime, "%c") << '\n';
+}
+\end{cpp}
+
+下一节中，将看到如何进行常见的线程操作。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下解决方案来管理线程：
+
+\begin{enumerate}
+\item
+要创建std::thread实例，而不启动新线程的执行，可以使用其默认构造函数：
+
+\begin{cpp}
+std::thread t;
+\end{cpp}
+
+\item
+通过构建std::thread实例，并传递函数作为参数来在另一个线程上执行函数：
+
+\begin{cpp}
+void func1()
+{
+    std::cout << "thread func without params" << '\n';
+}
+std::thread t1(func1);
+std::thread t2([]() {
+    std::cout << "thread func without params" << '\n'; });
+\end{cpp}
+
+\item
+通过构建一个std::thread实例，并向其构造函数传递函数及其参数，可在另一个线程上运行带有参数的函数：
+
+\begin{cpp}
+void func2(int const i, double const d, std::string const s)
+{
+    std::cout << i << ", " << d << ", " << s << '\n';
+}
+std::thread t(func2, 42, 42.0, "42");
+\end{cpp}
+
+\item
+使用std::thread实例上的join()方法等待线程完成其执行：
+
+\begin{cpp}
+t.join();
+\end{cpp}
+
+\item
+使用detach()方法允许线程独立于当前线程对象继续执行。线程将继续执行直到结束，而不会由std::thread实例管理，该实例将不再拥有线程：
+
+\begin{cpp}
+t.detach();
+\end{cpp}
+
+\item
+若要按引用传递参数给函数线程，请将其包装在std::ref或std::cref（如果引用是常量）中：
+
+\begin{cpp}
+void func3(int & i)
+{
+    i *= 2;
+}
+int n = 42;
+std::thread t(func3, std::ref(n));
+t.join();
+std::cout << n << '\n'; // 84
+\end{cpp}
+
+\item
+使用std::this\_thread::sleep\_for()停止线程的执行一段时间：
+
+\begin{cpp}
+void func4()
+{
+    using namespace std::chrono;
+    print_time();
+    std::this_thread::sleep_for(2s);
+    print_time();
+}
+std::thread t(func4);
+t.join();
+\end{cpp}
+
+\item
+使用std::this\_thread::sleep\_until()停止线程的执行直到指定的时间点：
+
+\begin{cpp}
+void func5()
+{
+    using namespace std::chrono;
+    print_time();
+    std::this_thread::sleep_until(
+        std::chrono::system_clock::now() + 2s);
+    print_time();
+}
+std::thread t(func5);
+t.join();
+\end{cpp}
+
+\item
+使用std::this\_thread::yield()暂停当前线程的执行，为其他线程提供执行机会：
+
+\begin{cpp}
+void func6(std::chrono::seconds timeout)
+{
+    auto now = std::chrono::system_clock::now();
+    auto then = now + timeout;
+    do
+    {
+        std::this_thread::yield();
+    } while (std::chrono::system_clock::now() < then);
+}
+std::thread t(func6, std::chrono::seconds(2));
+t.join();
+print_time();
+\end{cpp}
+
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+代表执行线程的std::thread类型有几个构造函数：
+
+\begin{itemize}
+\item
+默认构造函数仅创建线程实例，但不启动新线程的执行。
+
+\item
+移动构造函数创建一个新的线程实例，来表示先前构造的实例。新实例构造后，其他实例将不再与执行线程关联。
+
+\item
+带有可变数量参数的构造函数：第一个参数代表顶级线程函数的函数，其余的是要传递给线程函数的参数。参数需要按值传递给线程函数。如果线程函数接受按引用或常量引用传递的参数，则必须用std::ref或std::cref。这些是生成std::reference\_wrapper类型实例的辅助函数模板，该实例将引用包裹在一个可复制和可赋值的对象中。
+\end{itemize}
+
+而线程函数不能返回值，但函数可能具有非void的返回类型，返回值会被忽略。如果需要返回值，可以使用共享变量或函数参数来实现。
+
+如果函数以异常终止，则该异常无法在线程启动上下文中通过try...catch语句捕获，程序将调用std::terminate()的方式异常终止。所有异常都必须在执行线程内部捕获，但可以通过std::exception\_ptr实例跨线程传输。
+
+线程开始执行后，即可汇入也可以分离。汇入线程则阻塞当前线程的执行，直到已加入的线程结束其执行。分离线程则将线程对象与其表示的执行线程解耦，使得当前线程和分离线程可以同时执行。分离的线程有时也称为后台线程或守护线程。当程序终止（从主函数返回）时，不会等待仍在运行的分离线程。所以这些线程的栈不会展开，所以这些线程上实例的析构函数不会调用，这可能导致资源泄漏或资源损坏（文件、共享内存等）。
+
+通过调用join()汇入线程，通过调用detach()分离线程。调用了这两个方法中的任何一个，线程就认为是不可汇入的，线程实例可以安全销毁。当线程分离时，可能需要访问的共享数据，需要在整个执行过程中都可用。
+
+分离了一个线程后，就无法再汇入，尝试这样做会导致运行时错误。可以通过使用成员函数joinable()检查线程是否可以汇入，来防止这种情况。
+
+如果线程对象超出作用域并销毁，但未调用join()或detach()，则会调用std::terminate()。
+
+每个线程都有一个可以检索的标识符。对于当前线程，调用std::this\_thread::get\_id()函数。对于由线程实例表示的另一个执行线程，调用其get\_id()方法。
+
+std::this\_thread命名空间中还提供了几个附加的实用函数：
+
+\begin{itemize}
+\item
+yield()方法提示调度器激活另一个线程。这在实现忙等待例程时很有用，而实际行为特定于实现。调用此函数实际上不会影响线程的执行。
+
+\item
+sleep\_for()方法阻止当前线程至少执行指定的时间段（由于调度原因，线程实际睡眠的时间可能比请求的时间长）。
+
+\item
+sleep\_until()方法阻止当前线程至少执行到指定的时间点（由于调度原因，睡眠的实际持续时间可能比请求的时间长）。
+\end{itemize}
+
+std::thread类要求显式调用join()方法来等待线程完成，这可能会导致编程错误（如上所述）。C++20标准提供了一个新的线程类，名为std::jthread，解决了这一问题。
+
+
+
+
+
+
+
+
+
+
+

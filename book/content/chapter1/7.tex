@@ -1,0 +1,140 @@
+C++ 没有专门用于声明接口（只有纯虚函数的类）的语法，而且在声明虚函数方面也存在一些不足之处。在 C++ 中，虚函数通过 virtual 关键字引入。然而，virtual 关键字在派生类中声明重载方法时是可选的，这在处理大型类或层次结构时可能导致混淆。可能需要遍历整个层次结构，直至基类来确定一个函数是否是虚函数。另一方面，有时确保一个虚函数或派生类不能再重载或进一步派生也可用。本节中，将介绍如何使用 C++11 引入的特殊标识符 override 和 final 来声明虚函数或类型。
+
+\mySubsubsection{}{Getting ready}
+
+应该熟悉 C++ 中的继承和多态概念，以及抽象类型、纯虚函数、虚函数和重载方法的概念。
+
+\mySubsubsection{}{How to do it...}
+
+为了确保正确声明基类和派生类中的虚方法，同时提高可读性，请遵循以下步骤：
+
+\begin{itemize}
+\item
+派生类中声明用于覆盖基类虚函数的虚函数时使用 virtual 关键字。
+
+\item
+在虚函数声明或定义的声明符部分后面使用 override 特殊标识符:
+
+\begin{cpp}
+class Base
+{
+    virtual void foo() = 0;
+    virtual void bar() {}
+    virtual void foobar() = 0;
+};
+void Base::foobar() {}
+class Derived1 : public Base
+{
+    virtual void foo() override = 0;
+    virtual void bar() override {}
+    virtual void foobar() override {}
+};
+class Derived2 : public Derived1
+{
+    virtual void foo() override {}
+};
+\end{cpp}
+\end{itemize}
+
+\begin{myNotic}
+声明符是指函数类型中除了返回类型的部分。
+\end{myNotic}
+
+为了确保函数不能再进一步覆盖，或类不能再进一步派生，可以使用 final 标识符:
+
+\begin{itemize}
+\item
+虚函数声明或定义的声明符部分后面使用 final 防止派生类中的覆盖:
+
+\begin{cpp}
+class Derived2 : public Derived1
+{
+    virtual void foo() final {}
+};
+\end{cpp}
+
+\item
+类型声明的类型名后面使用 final 防止类型的派生:
+
+\begin{cpp}
+class Derived4 final : public Derived1
+{
+    virtual void foo() override {}
+};
+\end{cpp}
+
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+override 的工作方式非常简单；在虚函数声明或定义中，确保该函数实际上覆盖了基类中的函数；如果不是这样，编译器将报错。
+
+override 和 final 这两个特殊标识符仅在成员函数声明或定义中具有特殊含义。不是保留关键字，可以在程序的其他地方作为用户定义的标识符使用。
+
+使用 override 特殊标识符可以帮助编译器检测虚方法没有覆盖另一个方法的情况，如下例所示：
+
+\begin{cpp}
+class Base
+{
+    public:
+    virtual void foo() {}
+    virtual void bar() {}
+};
+class Derived1 : public Base
+{
+    public:
+    void foo() override {}
+    // 为了提高可读性，建议使用 virtual 关键字
+    virtual void bar(char const c) override {}
+    // 错误，Base 中没有 bar(char const) 函数
+};
+\end{cpp}
+
+如果没有 override 标识符的存在，Derived1 类中的 virtual bar(char const) 将不是一个覆盖函数，而是 Base 类型中 bar() 函数的一个重载。
+
+另一个特殊标识符 final 用于成员函数声明或定义中，表明该函数是虚函数并且不能在派生类中覆盖。如果派生类试图覆盖虚函数，编译器将报错：
+
+\begin{cpp}
+class Derived2 : public Derived1
+{
+    virtual void foo() final {}
+};
+class Derived3 : public Derived2
+{
+    virtual void foo() override {} // 错误
+};
+\end{cpp}
+
+final 标识符也可以用于类声明中，表明该类不能派生：
+
+\begin{cpp}
+class Derived4 final : public Derived1
+{
+    virtual void foo() override {}
+};
+class Derived5 : public Derived4 // 错误
+{
+};
+\end{cpp}
+
+由于 override 和 final 在特定上下文中使用时具有特殊含义，事实上并不是保留关键字，可以在 C++ 代码的其他地方使用。这确保了在 C++11 之前的代码，不会因为这些名称当作标识符而出现问题：
+
+\begin{cpp}
+class foo
+{
+    int final = 0;
+    void override() {}
+};
+\end{cpp}
+
+虽然前面的建议提到了在声明重载的虚方法时应同时使用 virtual 和 override，但 virtual 关键字实际上是可选的，可以省略以缩短声明。override 标识符的存在应该足以向读者表明该方法是虚方法。这更多是一个个人偏好问题，并不影响语义。
+
+
+
+
+
+
+
+
+
+

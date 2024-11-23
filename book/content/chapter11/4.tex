@@ -1,0 +1,161 @@
+
+测试模块越大，测试用例之间的相似度越高，就越有可能拥有需要相同设置、清理甚至相同数据的测试用例。包含这些组件称为测试固件（test fixture）或测试上下文（test context）。固件对于建立一个明确定义的测试运行环境至关重要，这样测试结果就可以重现。例子可能包括在执行测试之前将一组特定文件复制到某个位置，之后删除，或者从特定的数据源加载数据。
+
+Boost.Test 提供了几种方式来为测试用例、测试套件或模块（全局）定义测试固件。这个示例中，将介绍固件是如何工作的。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中的例子，使用了以下类型和函数来指定测试单元的固件：
+
+\begin{cpp}
+struct global_fixture
+{
+    global_fixture()  { BOOST_TEST_MESSAGE("global setup"); }
+    ~global_fixture() { BOOST_TEST_MESSAGE("global cleanup"); }
+    int g{ 1 };
+};
+struct standard_fixture
+{
+    standard_fixture()  {BOOST_TEST_MESSAGE("setup");}
+    ~standard_fixture() {BOOST_TEST_MESSAGE("cleanup");}
+    int n {42};
+};
+struct extended_fixture
+{
+    std::string name;
+    int         data;
+    extended_fixture(std::string const & n = "") : name(n), data(0)
+    {
+        BOOST_TEST_MESSAGE("setup "+ name);
+    }
+    ~extended_fixture()
+    {
+        BOOST_TEST_MESSAGE("cleanup "+ name);
+    }
+};
+void fixture_setup()
+{
+    BOOST_TEST_MESSAGE("fixture setup");
+}
+void fixture_cleanup()
+{
+    BOOST_TEST_MESSAGE("fixture cleanup");
+}
+\end{cpp}
+
+前两个是类型的构造函数表示设置函数，析构函数表示清除函数。样本的末尾有一对函数，\verb|fixture_setup()| 和 \verb|fixture_cleanup()|，表示测试的设置和清除函数。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下方法为一个或多个测试单元定义测试固件：
+
+\begin{itemize}
+\item
+为了定义特定测试用例的固件，使用 \verb|BOOST_FIXTURE_TEST_CASE| 宏：
+
+\begin{cpp}
+BOOST_FIXTURE_TEST_CASE(test_case, extended_fixture)
+{
+    data++;
+    BOOST_TEST(data == 1);
+}
+\end{cpp}
+
+\item
+为了定义测试套件中所有测试用例的固件，使用 \verb|BOOST_FIXTURE_TEST_SUITE|：
+
+\begin{cpp}
+BOOST_FIXTURE_TEST_SUITE(suite1, extended_fixture)
+BOOST_AUTO_TEST_CASE(case1)
+{
+    BOOST_TEST(data == 0);
+}
+BOOST_AUTO_TEST_CASE(case2)
+{
+    data++;
+    BOOST_TEST(data == 1);
+}
+BOOST_AUTO_TEST_SUITE_END()
+\end{cpp}
+
+\item
+为了定义测试套件中除了一个或几个测试单元外的所有测试单元的固件，使用 \verb|BOOST_FIXTURE_TEST_SUITE|。可以通过 \verb|BOOST_FIXTURE_TEST_CASE| 为测试用例覆盖特定的固件，通过 \verb|BOOST_FIXTURE_TEST_SUITE| 为嵌套的测试套件覆盖特定的固件：
+
+\begin{cpp}
+BOOST_FIXTURE_TEST_SUITE(suite2, extended_fixture)
+BOOST_AUTO_TEST_CASE(case1)
+{
+    BOOST_TEST(data == 0);
+}
+BOOST_FIXTURE_TEST_CASE(case2, standard_fixture)
+{
+    BOOST_TEST(n == 42);
+}
+BOOST_AUTO_TEST_SUITE_END()
+\end{cpp}
+
+\item
+为了定义测试用例或测试套件的多个固件，使用 \verb|boost::unit_test::fixture| 与 \verb|BOOST_AUTO_TEST_SUITE| 和 \verb|BOOST_AUTO_TEST_CASE| 宏：
+
+\begin{cpp}
+BOOST_AUTO_TEST_CASE(test_case_multifix,
+    * boost::unit_test::fixture<extended_fixture>(std::string("fix1"))
+    * boost::unit_test::fixture<extended_fixture>(std::string("fix2"))
+    * boost::unit_test::fixture<standard_fixture>())
+{
+    BOOST_TEST(true);
+}
+\end{cpp}
+
+\item
+为了在固件的情况下使用自由函数作为设置和清除操作，可使用 \verb|boost::unit_test::fixture|：
+
+\begin{cpp}
+BOOST_AUTO_TEST_CASE(test_case_funcfix,
+    * boost::unit_test::fixture(&fixture_setup, &fixture_cleanup))
+{
+    BOOST_TEST(true);
+}
+\end{cpp}
+
+\item
+为了定义模块的固件，使用 \verb|BOOST_GLOBAL_FIXTURE|：
+
+\begin{cpp}
+BOOST_GLOBAL_FIXTURE(global_fixture);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+库支持几种固件模型：
+
+\begin{itemize}
+\item
+一个类模型，其中构造函数充当设置函数，析构函数充当清除函数。扩展模型允许构造函数有一个参数。前面的例子中，\verb|standard_fixture| 实现了第一个模型，而 \verb|extended_fixture| 实现了第二个模型。
+
+\item
+一对自由函数：一个定义设置，另一个可选的实现清除代码。前面的例子中， \verb|fixture_setup()| 和 \verb|fixture_cleanup()| 就是。
+\end{itemize}
+
+作为类实现的固件也可以具有数据成员，这些成员可供测试单元使用。如果为测试套件定义了一个固件，就会隐式地对属于该测试套件的所有测试单元可用。然而，有可能包含在一个测试套件中的测试单元重新定义固件。这时，作用域中定义的固件就是对测试单元可用的那个。
+
+可以为一个测试单元定义多个固件，可通过 \verb|boost::unit_test::fixture()| 装饰器完成。这时，测试套件和测试用例是用 \verb|BOOST_TEST_SUITE/BOOST_AUTO_TEST_SUITE| 和 \verb|BOOST_TEST_CASE/BOOST_AUTO_TEST_CASE| 宏定义的。多个 \verb|fixture()| 装饰器可以通过操作符 * 组合在一起，这种装饰器的目的是定义在测试单元执行前后调用的设置和清除函数。可以有两种形式，要么是一对函数，要么是一个类，其中构造函数和析构函数分别扮演设置/清除函数的角色。使用带有成员数据类型固件装饰器的缺点或是误导是，这些成员对测试单元不可用。
+
+每当执行测试用例时，都会为每个测试用例构建一个新固件实例，而在测试用例结束时销毁该实例。
+
+\begin{myNotic}
+固件状态不会在测试用例之间共享，构造函数和析构函数每个测试用例调用一次。必须确保这些特殊函数不包含在整个模块中执行一次的代码。如果确实如此，应该为整个模块设置一个全局固件。
+\end{myNotic}
+
+全局固件使用通用测试类模型（默认构造函数模型），可以定义任意数量的全局固件（必要时可以根据类别组织设置和清除）。全局固件是使用 \verb|BOOST_GLOBAL_FIXTURE| 宏定义的，并且必须在测试文件的作用域内定义（不在测试单元内部），其目的是定义由类的构造函数和析构函数表示的设置和清除函数。如果类型定义了其他成员，比如数据，这些成员在测试单元中不可用：
+
+\begin{cpp}
+BOOST_GLOBAL_FIXTURE(global_fixture);
+BOOST_AUTO_TEST_CASE(test_case_globals)
+{
+    BOOST_TEST(g == 1); // error, g not accessible
+    BOOST_TEST(true);
+}
+\end{cpp}
+

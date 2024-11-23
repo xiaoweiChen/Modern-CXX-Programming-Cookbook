@@ -1,0 +1,116 @@
+C++ 预处理器提供了两个操作符，用于将标识符转换为字符串和将标识符连接在一起。第一个是操作符 \verb|#|，称为字符串化操作符，而第二个是操作符 \verb|##|，称为标记粘贴、合并或连接操作符。尽管使用场景有限，但了解其工作原理很重要。
+
+\mySubsubsection{}{Getting ready}
+
+对于这个示例，需要知道如何使用预处理指令 \verb|#define| 定义宏。
+
+\mySubsubsection{}{How to do it...}
+
+要使用预处理操作符 \verb|#| 从标识符创建字符串，使用以下模式：
+
+\begin{enumerate}
+\item
+定义一个接受一个参数的辅助宏，该参数展开为 \verb|#|，后面跟着参数：
+
+\begin{cpp}
+#define MAKE_STR2(x) #x
+\end{cpp}
+
+\item
+定义使用的宏，接受一个参数，该参数展开为辅助宏：
+
+\begin{cpp}
+#define MAKE_STR(x) MAKE_STR2(x)
+\end{cpp}
+\end{enumerate}
+
+要使用预处理操作符 \verb|##| 将标识符连接在一起，使用以下模式：
+
+\begin{itemize}
+\item
+定义一个或多个参数的辅助宏，使用标记粘贴操作符 \verb|##| 将参数连接起来:
+
+\begin{cpp}
+#define MERGE2(x, y)    x##y
+\end{cpp}
+
+\item
+通过使用辅助宏定义要使用的宏：
+
+\begin{cpp}
+#define MERGE(x, y)     MERGE2(x, y)
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+为了理解这些操作符是如何工作的，可考虑前面定义的 \verb|MAKE_STR| 和 \verb|MAKE_STR2| 宏。当其与其他文本一起使用时，会产生包含该文本的字符串。以下示例展示了如何使用这两个宏定义包含文本 \verb|"sample"| 的字符串：
+
+\begin{cpp}
+std::string s1 { MAKE_STR(sample) };  // s1 = "sample"
+std::string s2 { MAKE_STR2(sample) }; // s2 = "sample"
+\end{cpp}
+
+当宏作为参数传递时，结果则不同。以下示例中，\verb|NUMBER| 是一个展开为整数 \verb|42| 的宏。当用作 \verb|MAKE_STR| 的参数时，确实产生了字符串 "42"；但当用作 \verb|MAKE_STR2| 的参数时，产生了字符串 "NUMBER"：
+
+\begin{cpp}
+#define NUMBER 42
+std::string s3 { MAKE_STR(NUMBER) };    // s3 = "42"
+std::string s4 { MAKE_STR2(NUMBER) };   // s4 = "NUMBER"
+\end{cpp}
+
+C++ 标准定义了函数式宏中参数替换的以下规则（C++ 标准文档编号 N4917 第 15.6.2 段落）：
+
+\begin{myTip}
+确定了调用函数式宏的参数之后，参数替换就开始了。除非参数前面有 \verb|#| 或 \verb|##| 预处理标记，或者后面有 \verb|##| 预处理标记（见下文），否则替换列表中的参数将其内部包含的所有宏展开后的相应参数替换。替换之前，每个参数的预处理标记都会完全进行宏替换，直到没有其他预处理标记可用。
+\end{myTip}
+
+所以宏参数在替换到宏体之前展开，除非宏体中的参数前面有 \verb|#| 或 \verb|##| 操作符：
+
+\begin{itemize}
+\item
+\verb|MAKE_STR2(NUMBER)|，替换列表中的 NUMBER 参数前面有 \verb|#|，因此在替换宏体中的参数之前不会展开；因此，替换后有 \verb|#NUMBER|，这变成了 "NUMBER"。
+
+\item
+对于 \verb|MAKE_STR(NUMBER)|，替换列表是 \verb|MAKE_STR2(NUMBER)|，没有 \verb|#| 或 \verb|##|；因此，NUMBER 参数在其替换之前替换成相应的参数 42。结果是 \verb|MAKE_STR2(42)|，然后再次扫描，展开后变成 "42"。
+\end{itemize}
+
+同样的处理规则也适用于使用标记粘贴操作符的宏，为了确保字符串化和连接宏适用于所有情况，可使用本示例中描述的间接模式。
+
+标记粘贴操作符通常用于宏中，以避免反复书写相同的代码。以下简单示例展示了标记粘贴操作符的实际用途；给定一组类，提供工厂方法来创建每个类型实例：
+
+\begin{cpp}
+#define DECL_MAKE(x)    DECL_MAKE2(x)
+#define DECL_MAKE2(x)   x* make##_##x() { return new x(); }
+struct bar {};
+struct foo {};
+DECL_MAKE(foo)
+DECL_MAKE(bar)
+auto f = make_foo(); // f is a foo*
+auto b = make_bar(); // b is a bar*
+\end{cpp}
+
+熟悉 Windows 平台的人可能已经使用过 \verb|_T|（或 \verb|_TEXT|）宏来声明可能是转换为 Unicode 或 ANSI 字符串（单字节或多字节字符字符串）的字符串字面量：
+
+\begin{cpp}
+auto text{ _T("sample") }; // text is either "sample" or L"sample"
+\end{cpp}
+
+Windows SDK 如下定义 \verb|_T| 宏。注意，当定义了 \verb|_UNICODE| 时，标记粘贴操作符被定义为将 L 前缀和传递给宏的实际字符串连接起来：
+
+\begin{cpp}
+#ifdef _UNICODE
+#define __T(x)   L ## x
+#else
+#define __T(x)   x
+#endif
+#define _T(x)    __T(x)
+#define _TEXT(x) __T(x)
+\end{cpp}
+
+一个宏调用另一个宏似乎没有必要，但这种间接层次对于让 \verb|#| 和 \verb|##| 操作符与其他宏一起工作至关重要。
+
+
+
+
+

@@ -1,0 +1,100 @@
+前一个示例中，介绍了如何使用 \verb|directory_iterator| 和 \verb|recursive_directory_iterator| 来枚举目录的内容。展示目录内容，只是需要这样做的情景之一。另一种主要的情景是在目录中搜索特定条目，如具有特定名称、扩展名等的文件。本示例中，将介绍如何使用目录迭代器和前面展示的迭代模式，来查找符合给定条件的文件。
+
+\mySubsubsection{}{How to do it...}
+
+要查找符合特定标准的文件，请使用以下模式：
+
+\begin{enumerate}
+\item
+使用 \verb|recursive_directory_iterator| 来迭代目录中的所有条目，并递归地迭代其子目录。
+
+\item
+考虑常规文件（以及需要处理的其他类型的文件）。
+
+\item
+使用函数对象（如lambda表达式）来过滤只匹配标准文件。
+
+\item
+将选定的条目添加到容器中（如vector）。
+\end{enumerate}
+
+这种模式在如下的 \verb|find_files()| 函数中得到了体现：
+
+\begin{cpp}
+std::vector<fs::path> find_files(
+    fs::path const & dir,
+    std::function<bool(fs::path const&)> filter)
+{
+    auto result = std::vector<fs::path>{};
+    if (fs::exists(dir))
+    {
+        for (auto const & entry :
+        fs::recursive_directory_iterator(
+        dir,
+        fs::directory_options::follow_directory_symlink))
+        {
+            if (fs::is_regular_file(entry) &&
+            filter(entry))
+            {
+                result.push_back(entry);
+            }
+        }
+    }
+    return result;
+}
+\end{cpp}
+
+\mySubsubsection{}{Hot it works...}
+
+当想要在目录中查找文件时，目录的结构以及其条目（包括子目录）访问的顺序可能并不重要。因此，可以使用 \verb|recursive_directory_iterator| 来迭代。
+
+\verb|find_files()| 函数接收两个参数：一个路径和一个用于选择应返回的条目的函数包装器。返回类型是一个包含 \verb|filesystem::path| 实例的vector。不过，也可以是一个包含 \verb|filesystem::directory_entry| 实例的vector。例子中，使用的递归目录迭代器不会跟随符号链接，而是返回链接本身而非目标。通过使用具有 \verb|filesystem::directory_options| 类型参数的构造函数重载并传递 \verb|follow_directory_symlink| 参数，可以改变这种行为。
+
+前面的例子中，只考虑常规文件并忽略其他类型的文件系统实例。谓词应用于目录条目，如果返回 true，则该条目会添加到结果中。
+
+下面的例子使用 \verb|find_files()| 函数，来查找测试目录中所有以 \verb|file_| 前缀开始的文件：
+
+\begin{cpp}
+auto results = find_files(
+        fs::current_path() / "test",
+        [](fs::path const & p) {
+    auto filename = p.wstring();
+    return filename.find(L"file_") != std::wstring::npos;
+});
+for (auto const & path : results)
+{
+    std::cout << path << '\n';
+}
+\end{cpp}
+
+执行这个程序的输出，路径相对于当前路径：
+
+\begin{shell}
+test\file_1.txt
+test\file_2.txt
+test\file_3.log
+\end{shell}
+
+第二个例子展示了如何查找具有特定扩展名的文件，扩展名为 .dat：
+
+\begin{cpp}
+auto results = find_files(
+        fs::current_path() / "test",
+        [](fs::path const & p) {
+            return p.extension() == L".dat";});
+for (auto const & path : results)
+{
+    std::cout << path << '\n';
+}
+\end{cpp}
+
+输出再次相对于当前路径，如下所示：
+
+\begin{shell}
+test\data\input.dat
+test\data\output.dat
+\end{shell}
+
+这两个例子非常相似。唯一不同的是lambda函数中的代码，可检查作为参数接收的路径。
+
+

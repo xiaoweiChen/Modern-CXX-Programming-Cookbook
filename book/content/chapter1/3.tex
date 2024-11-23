@@ -1,0 +1,297 @@
+
+C++11引入了统一初始化，是一种初始化数据的新方法，也称为大括号初始化。这种初始化方式旨在减少不同初始化语法之间的差异，提高代码的一致性和可读性。
+
+\mySubsubsection{}{Getting ready}
+
+要继续了解本示例，读者们需要熟悉直接初始化，即通过一组显式的构造函数参数来初始化对象；以及复制初始化，即通过另一个对象来初始化对象。下面是一个简单的示例，展示了两种初始化的方式：
+
+\begin{cpp}
+std::string s1("test");   // 直接初始化
+std::string s2 = "test";  // 复制初始化
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+为了统一地初始化不同类型的对象，可以使用大括号初始化的形式 \{\}，其既适用于直接初始化也适用于复制初始化。当与大括号初始化一起使用时，分别称为直接列表初始化和复制列表初始化：
+
+\begin{cpp}
+T object {other};   // 直接列表初始化
+T object = {other}; // 复制列表初始化
+\end{cpp}
+
+统一初始化的例子：
+
+\begin{itemize}
+\item
+标准容器：
+
+\begin{cpp}
+std::vector<int> v { 1, 2, 3 };
+std::map<int, std::string> m { {1, "one"}, { 2, "two" }};
+\end{cpp}
+
+\item
+动态分配的数组：
+
+\begin{cpp}
+int* arr2 = new int[3]{ 1, 2, 3 };
+\end{cpp}
+
+\item
+数组:
+
+\begin{cpp}
+int arr1[3] { 1, 2, 3 };
+\end{cpp}
+
+\item
+内置类型:
+
+\begin{cpp}
+int i { 42 };
+double d { 1.2 };
+\end{cpp}
+
+\item
+自定义类型:
+
+\begin{cpp}
+class foo
+{
+    int a_;
+    double b_;
+    public:
+    foo():a_(0), b_(0) {}
+    foo(int a, double b = 0.0):a_(a), b_(b) {}
+};
+foo f1{};
+foo f2{ 42, 1.2 };
+foo f3{ 42 };
+\end{cpp}
+
+\item
+自户定义的普通数据类型（POD）:
+
+\begin{cpp}
+struct bar { int a_; double b_;};
+bar b{ 42, 1.2 };
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+C++11之前，不同类型的实例需要基于其类型采用不同的初始化方式：
+
+\begin{itemize}
+\item
+基本类型可以使用赋值方式进行初始化：
+
+\begin{cpp}
+int a = 42;
+double b = 1.2;
+\end{cpp}
+
+\item
+如果类型实例有转换构造函数（C++11前，单个参数的构造函数称为转换构造函数），也可以通过从单个值赋值进行初始化：
+
+\begin{cpp}
+class foo
+{
+    int a_;
+    public:
+    foo(int a):a_(a) {}
+};
+foo f1 = 42;
+\end{cpp}
+
+\item
+非聚合类型在提供参数时可以用括号（函数形式）初始化，而在执行默认初始化时则只能在没有括号的情况下初始化（调用默认构造函数）。下面的例子中，foo 是在“How to do it...”中定义的类型：
+
+\begin{cpp}
+foo f1;           // default initialization
+foo f2(42, 1.2);
+foo f3(42);
+foo f4();         // function declaration
+\end{cpp}
+
+\item
+聚合类型和POD类型可以用大括号初始化。下面的例子中，bar是“How to do it...”中定义的结构体：
+
+\begin{cpp}
+bar b = {42, 1.2};
+int a[] = {1, 2, 3, 4, 5};
+\end{cpp}
+\end{itemize}
+
+\begin{myNotic}
+普通数据类型（POD）是一种既简单（具有编译器提供的特殊成员或显式默认成员，并占用连续内存区域）又符合标准布局（不包含与C语言不兼容的语言特性，如虚函数，且所有成员具有相同的访问控制）的类型。POD类型的概念在C++20中已弃用，取而代之的是简单类型和标准布局类型。
+\end{myNotic}
+
+除了不同的初始化方法外，还有一些限制。例如，初始化标准容器（除了复制构造之外）唯一的方法是先声明一个实例，然后插入元素；std::vector 是例外，其可以从预先使用聚合初始化初始化的数组中赋值。另外，动态分配的聚合类型无法直接初始化。
+
+“How to do it...”中所有示例中都使用了直接初始化，但使用大括号初始化也可以进行复制初始化。这两种形式——直接初始化和复制初始化——大多数情况下可能等价，但复制初始化由于其隐式转换序列中不考虑显式构造函数，所以不如直接初始化宽容，后者期望从初始化器到构造函数参数有一个隐式转换。因此，动态分配的数组只能使用直接初始化。
+
+前面示例中显示的类型中，foo 是唯一一个既有默认构造函数，又有带参数构造函数的类型。要使用默认构造函数执行默认初始化，需要使用空的大括号——\{\}。要使用带参数的构造函数，需要在大括号 \{\} 中提供所有参数的值。对于非聚合类型而言，默认初始化会调用默认构造函数；而对于聚合类型，默认初始化会使用零值初始化。
+
+标准容器（如 vector 和 map）也可以统一初始化，所有标准容器在 C++11 中多了一个构造函数，该构造函数接受一个 std::initializer\_list<T> 类型的参数。这是一个轻量级的代理，用于包装一个 T const 类型元素的数组。这些构造函数会使用初始化列表中的值，初始化内部数据。
+
+使用 std::initializer\_list 进行初始化的方式：
+
+\begin{itemize}
+\item
+编译器解析初始化列表中元素的类型（所有元素必须为相同的类型）。
+
+\item
+编译器创建一个包含初始化列表中元素的数组。
+
+\item
+编译器创建一个 std::initializer\_list<T> 对象来封装先前创建的数组。
+
+\item
+std::initializer\_list<T> 对象作为参数传递给构造函数。
+\end{itemize}
+
+当使用大括号初始化时，初始化列表总是优先于其他构造函数。如果有这样的构造函数，则在执行大括号初始化时会调用这个构造函数：
+
+\begin{cpp}
+class foo
+{
+    int a_;
+    int b_;
+public:
+    foo() :a_(0), b_(0) {}
+    foo(int a, int b = 0) :a_(a), b_(b) {}
+    foo(std::initializer_list<int> l) {}
+};
+foo f{ 1, 2 }; // calls constructor with initializer_list<int>
+\end{cpp}
+
+优先规则不仅适用于构造函数，也适用于任何函数。下面的例子中，存在同一个函数的两个版本。用初始化列表调用函数时，会解析为调用带有 std::initializer\_list 参数的版本：
+
+\begin{cpp}
+void func(int const a, int const b, int const c)
+{
+    std::cout << a << b << c << '\n';
+}
+void func(std::initializer_list<int> const list)
+{
+    for (auto const & e : list)
+    std::cout << e << '\n';
+}
+func({ 1,2,3 }); // calls second overload
+\end{cpp}
+
+但这种情况有可能导致错误，以 std::vector 类型为例。vector 的构造函数中，有一个接受单个参数表示要分配的初始元素数量的构造函数，还有一个接受 std::initializer\_list 参数的构造函数。如果要创建一个预分配大小的 vector，因为带有 std::initializer\_list 参数的构造函数会优先调用，所以使用大括号初始化将不起作用：
+
+\begin{cpp}
+std::vector<int> v {5};
+\end{cpp}
+
+上述代码并没有创建一个包含五个元素的 vector，而是创建了一个只有一个元素且值为 5 的 vector。为了真正创建一个包含五个元素的 vector，必须使用圆括号形式的初始化：
+
+\begin{cpp}
+std::vector<int> v (5);
+\end{cpp}
+
+另一点需要注意的是，大括号初始化不允许窄化转换。根据 C++ 标准（参见标准第 9.4.5 段，文档版本 N4917），窄化转换是一种隐式转换：
+
+\begin{myTip}
+* 从浮点类型转换到整数类型。
+
+* 从 long double 转换到 double 或 float，或者从 double 转换到 float。除非是常量表达式，且转换后的实际值在目标类型可以表示的范围内（即使不能精确表示）。
+
+* 从整数类型或未限定的作用域枚举类型转换到浮点类型。除非是常量表达式，且转换后的实际值适合目标类型，并且在转换回原始类型时能够产生原始值。
+
+* 从整数类型或未限定的作用域枚举类型，转换到不能表示原始类型所有值的整数类型。除非是常量表达式，且转换后的实际值适合目标类型，并且在转换回原始类型时能够产生原始值。
+\end{myTip}
+
+下列声明会触发编译器错误(因为窄化转换)：
+
+\begin{cpp}
+int i{ 1.2 };           // 错误
+double d = 47 / 13;
+float f1{ d };          // 错误, 在 gcc 中仅产生警告
+\end{cpp}
+
+要解决这个错误，必须进行显式转换：
+
+\begin{cpp}
+int i{ static_cast<int>(1.2) };
+double d = 47 / 13;
+float f1{ static_cast<float>(d) };
+\end{cpp}
+
+\begin{myNotic}
+大括号初始化列表不是一个表达式，也没有类型。decltype 不能用于大括号初始化列表，模板类型推导也无法从大括号初始化列表中推断出匹配的类型。
+\end{myNotic}
+
+再看一个例子：
+
+\begin{cpp}
+float f2{47/13};        // OK, f2=3
+\end{cpp}
+
+上述声明正确，存在从 int 到 float 的隐式转换。表达式 47/13 首先计算为整数值 3，然后赋值给类型为 float 的变量 f2。
+
+\mySubsubsection{}{There’s more...}
+
+以下示例展示了几个直接列表初始化和复制列表初始化的例子。C++11后，所有这些表达式的推导类型都是 std::initializer\_list<int>：
+
+\begin{cpp}
+auto a = {42};   // std::initializer_list<int>
+auto b {42};     // std::initializer_list<int>
+auto c = {4, 2}; // std::initializer_list<int>
+auto d {4, 2};   // std::initializer_list<int>
+\end{cpp}
+
+C++17 修改了列表初始化的规则，区分了直接列表初始化和复制列表初始化。新类型的推导规则：
+
+\begin{itemize}
+\item
+对于复制列表初始化，如果列表中的所有元素具有相同的类型，auto 推导将得出一个 std::initializer\_list<T>，否则形式非法。
+
+\item
+对于直接列表初始化，如果列表中只有一个元素，auto 推导将得出一个 T；如果有多个元素，则形式非法。
+\end{itemize}
+
+根据这些新规则，前面的例子将变化如下（注释中提到推导的类型）：
+
+\begin{cpp}
+auto a = {42};   // std::initializer_list<int>
+auto b {42};     // int
+auto c = {4, 2}; // std::initializer_list<int>
+auto d {4, 2};   // error, too many
+\end{cpp}
+
+a 和 c 推导为 std::initializer\_list<int>，b 推导为 int，而 d 使用直接初始化并且大括号初始化列表中有多个值，从而触发编译器错误。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

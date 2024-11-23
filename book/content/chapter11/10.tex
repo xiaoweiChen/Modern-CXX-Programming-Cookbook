@@ -1,0 +1,127 @@
+
+默认情况下，Google Test 程序的输出会发送到标准流，并以人类可读的格式打印。框架提供了几种自定义输出的选项，包括以基于 JUnit 的格式将 XML 打印到磁盘文件中。
+
+本示例将介绍可用于控制输出的选项。
+
+\mySubsubsection{}{Getting ready}
+
+为了本示例的目的，看看以下测试程序：
+
+\begin{cpp}
+#include <gtest/gtest.h>
+TEST(Sample, Test)
+{
+    auto a = 42;
+    ASSERT_EQ(a, 0);
+}
+int main(int argc, char **argv)
+{
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
+\end{cpp}
+
+其输出如下：
+
+\begin{shell}
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Sample
+[ RUN      ] Sample.Test
+f:\chapter11gt_05\main.cpp(6): error: Expected equality of these values:
+    a
+        Which is: 42
+    0
+[  FAILED  ] Sample.Test (1 ms)
+[----------] 1 test from Sample (1 ms total)
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (3 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Sample.Test
+1 FAILED TEST
+\end{shell}
+
+使用这个简单的测试程序，来演示可以用来控制程序输出的各种选项，这些选项在接下来的部分中举例说明。
+
+\mySubsubsection{}{How to do it...}
+
+要控制测试程序的输出：
+
+\begin{itemize}
+\item
+使用 \verb|--gtest_output| 命令行选项或 \verb|GTEST_OUTPUT| 环境变量与 \verb|xml:filepath| 字符串一起指定 XML 报告要写入的文件位置：
+
+\begin{shell}
+chapter11gt_05.exe --gtest_output=xml:report.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="1" failures="1" disabled="0" errors="0"
+time="0.007" timestamp="2020-05-18T19:00:17"
+name="AllTests">
+<testsuite name="Sample" tests="1" failures="1" disabled="0"
+errors="0" time="0.002"
+timestamp="2020-05-18T19:00:17">
+<testcase name="Test" status="run" result="completed" time="0"
+timestamp="2020-05-18T19:00:17" classname="Sample">
+<failure message="f:\chapter11gt_05\main.cpp:6&#x0A;Expected equality of these values:&#x0A;  a&#x0A;    Which is: 42&#x0A;  0&#x0A;" type=""><![CDATA[f:\chapter11gt_05\main.cpp:6
+Expected equality of these values:
+a
+Which is: 42
+0
+]]></failure>
+</testcase>
+</testsuite>
+</testsuites>
+\end{shell}
+
+\item
+使用 \verb|--gtest_color| 命令行选项或 \verb|GTEST_COLOR| 环境变量，并指定 \verb|auto|, \verb|yes|, 或 \verb|no| 来指示报告是否应使用颜色输出到终端：
+
+\begin{shell}
+chapter11gt_05.exe --gtest_color=no
+\end{shell}
+
+\item
+使用 \verb|--gtest_print_time| 命令行选项或 \verb|GTEST_PRINT_TIME| 环境变量并设置值为 0 来抑制打印每个测试执行所需的时间：
+
+\begin{shell}
+chapter11gt_05.exe --gtest_print_time=0
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Sample
+[ RUN      ] Sample.Test
+f:\chapter11gt_05\main.cpp(6): error: Expected equality of these values:
+    a
+        Which is: 42
+    0
+[  FAILED  ] Sample.Test
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran.
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] Sample.Test
+1 FAILED TEST
+\end{shell}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+生成 XML 格式的报告不会影响打印到终端的人类可读报告。输出路径可以指向文件、目录（将创建一个与可执行文件同名的文件——如果已存在，则通过附加数字后缀来创建一个新名称的文件），或者为空，报告将写入当前目录下的名为 \verb|test_detail.xml| 的文件中。
+
+XML 报告格式基于 JUnitReport Ant 任务，包含以下元素：
+
+\begin{itemize}
+\item
+<testsuites>: 根元素，对应整个测试程序。
+
+\item
+<testsuite>: 对应一个测试套件。
+
+\item
+<testcase>: 对应一个测试函数，正如 Google Test 函数相当于其他框架中的测试用例一样。
+\end{itemize}
+
+默认情况下，框架报告每个测试执行所需的时间。此功能可以通过使用 \verb|--gtest_print_time| 命令行选项或 \verb|GTEST_PRINT_TIME| 环境变量来抑制，如前所述。
+
+
+

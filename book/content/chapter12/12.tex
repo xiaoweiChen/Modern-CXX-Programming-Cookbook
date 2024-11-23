@@ -1,0 +1,286 @@
+
+上一个示例中，介绍了如何创建一个协程任务，该任务能够进行异步计算。使用了 \verb|co_await| 操作符来暂停执行直到恢复，以及 \verb|co_return| 关键字来完成执行并返回一个值。还有一个关键字 \verb|co_yield| 也可以定义一个函数为协程，会暂停协程的执行并返回一个值。这使得协程可以返回多个值，每次恢复时返回一个值。为了支持这一特性，需要另一种类型的协程，这种类型称为生成器（generator）。它就像一个流，以惰性的方式（当迭代时）产生一系列类型为 T 的值。本示例中，将介绍如何实现一个简单的生成器。
+
+\mySubsubsection{}{Getting ready}
+
+本示例的目标是创建一个生成器协程类型，能够编写如下所示的代码：
+
+\begin{cpp}
+generator<int> iota(int start = 0, int step = 1) noexcept
+{
+    auto value = start;
+    for (int i = 0;; ++i)
+    {
+        co_yield value;
+        value += step;
+    }
+}
+generator<std::optional<int>> iota_n(
+int start = 0, int step = 1,
+int n = std::numeric_limits<int>::max()) noexcept
+{
+    auto value = start;
+    for (int i = 0; i < n; ++i)
+    {
+        co_yield value;
+        value += step;
+    }
+}
+generator<int> fibonacci() noexcept
+{
+    int a = 0, b = 1;
+    while (true)
+    {
+        co_yield b;
+        auto tmp = a;
+        a = b;
+        b += tmp;
+    }
+}
+int main()
+{
+    for (auto i : iota())
+    {
+        std::cout << i << ' ';
+        if (i >= 10) break;
+    }
+    for (auto i : iota_n(0, 1, 10))
+    {
+        if (!i.has_value()) break;
+        std::cout << i.value() << ' ';
+    }
+    int c = 1;
+    for (auto i : fibonacci())
+    {
+        std::cout << i << ' ';
+        if (++c > 10) break;
+    }
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+要创建一个支持同步延迟生产值序列的生成器协程类型，请按照以下步骤操作：
+
+\begin{itemize}
+\item
+创建一个名为 generator 的类型模板，包含以下内容（每个部分的详细内容将在下面的项目符号中呈现）：
+
+\begin{cpp}
+template <typename T>
+struct generator
+{
+    // struct promise_type
+    // struct iterator
+    // member functions
+    // iterators
+private:
+    std::coroutine_handle<promise_type> handle_ = nullptr;
+};
+\end{cpp}
+
+\item
+创建一个内部类 promise\_type（名称是强制的），包含以下内容：
+
+\begin{cpp}
+struct promise_type
+{
+    T const*             value_;
+    std::exception_ptr   eptr_;
+    auto get_return_object()
+    { return generator{ *this }; }
+    auto initial_suspend() noexcept
+    { return std::suspend_always{}; }
+    auto final_suspend() noexcept
+    { return std::suspend_always{}; }
+    void unhandled_exception() noexcept
+    {
+        eptr_ = std::current_exception();
+    }
+    void rethrow_if_exception()
+    {
+        if (eptr_)
+        {
+            std::rethrow_exception(eptr_);
+        }
+    }
+    auto yield_value(T const& v)
+    {
+        value_ = std::addressof(v);
+        return std::suspend_always{};
+    }
+    void return_void() {}
+    template <typename U>
+    U&& await_transform(U&& v)
+    {
+        return std::forward<U>(v);
+    }
+};
+\end{cpp}
+
+\item
+创建一个名为 iterator 的内部类型：
+
+\begin{cpp}
+struct iterator
+{
+    using iterator_category = std::input_iterator_tag;
+    using difference_type   = ptrdiff_t;
+    using value_type        = T;
+    using reference         = T const&;
+    using pointer           = T const*;
+    std::coroutine_handle<promise_type> handle_ = nullptr;
+    iterator() = default;
+    iterator(nullptr_t) : handle_(nullptr) {}
+    iterator(std::coroutine_handle<promise_type> arg)
+    : handle_(arg)
+    {}
+    iterator& operator++()
+    {
+        handle_.resume();
+        if (handle_.done())
+        {
+            std::exchange(handle_, {}).promise()
+                                      .rethrow_if_exception();
+        }
+        return *this;
+    }
+    void operator++(int)
+    {
+        ++*this;
+    }
+    bool operator==(iterator const& _Right) const
+    {
+        return handle_ == _Right.handle_;
+    }
+    bool operator!=(iterator const& _Right) const
+    {
+        return !(*this == _Right);
+    }
+    reference operator*() const
+    {
+        return *handle_.promise().value_;
+    }
+    pointer operator->() const
+    {
+        return std::addressof(handle_.promise().value_);
+    }
+};
+\end{cpp}
+
+\item
+提供一个默认构造函数，从 promise\_type 实例显式构造的构造函数，一个移动构造函数和一个移动赋值操作符，以及一个析构函数。删除复制构造函数和复制赋值操作符，使类型仅能移动：
+
+\begin{cpp}
+explicit generator(promise_type& p)
+    : handle_(
+        std::coroutine_handle<promise_type>::from_promise(p))
+{}
+generator() = default;
+generator(generator const&) = delete;
+generator& operator=(generator const&) = delete;
+generator(generator&& other) : handle_(other.handle_)
+{
+    other.handle_ = nullptr;
+}
+generator& operator=(generator&& other)
+{
+    if (this != std::addressof(other))
+    {
+        handle_ = other.handle_;
+        other.handle_ = nullptr;
+    }
+    return *this;
+}
+~generator()
+{
+    if (handle_)
+    {
+        handle_.destroy();
+    }
+}
+\end{cpp}
+
+\item
+提供 begin() 和 end() 函数以启用对生成器序列的迭代：
+
+\begin{cpp}
+iterator begin()
+{
+    if (handle_)
+    {
+        handle_.resume();
+        if (handle_.done())
+        {
+            handle_.promise().rethrow_if_exception();
+            return { nullptr };
+        }
+    }
+    return { handle_ };
+}
+iterator end()
+{
+    return { nullptr };
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+本示例中实现的 promise\_type 类似于前一个示例中的实现，尽管有一些不同点：
+
+\begin{itemize}
+\item
+作为一个内部类型实现，名称为 \verb|promise_type|，协程框架要求协程类型具有此名称的内部promise类型。
+
+\item
+支持处理未捕获而离开协程块的异常。前一个示例中，这种情况未得到处理，\verb|unhandled_exception()| 调用了 \verb|std::terminate()| 来异常终止进程。然而，此实现捕获当前异常的指针并将其存储在一个 \verb|std::exception_ptr| 实例中。当遍历生成的序列时（无论是调用 \verb|begin()| 还是递增迭代器时），该异常会重新抛出。
+
+\item
+不提供 \verb|return_value()| 和 \verb|return_void()| 函数，而是替换为 \verb|yield_value()|，当解析 \verb|co_yield| 表达式时调用它。
+\end{itemize}
+
+生成器类型与前一示例中的任务类型有一些相似之处：
+
+\begin{itemize}
+\item
+默认可构造的。
+
+\item
+可以从promise实例构造。
+
+\item
+不是复制可构造的或可复制的。
+
+\item
+是移动可构造的和可移动的。
+
+\item
+析构函数可销毁协程帧。
+\end{itemize}
+
+此类不会重载 \verb|co_await| 操作符，因为等待生成器没有意义；相反，提供了 \verb|begin()| 和 \verb|end()| 函数，这两个函数返回迭代器实例，用于遍历值序列。这个生成器为惰性，不会在协程恢复之前生成新的值，恢复可以由调用 \verb|begin()| 或递增迭代器触发。协程是在挂起状态下创建的，其首次执行仅在调用 \verb|begin()| 函数时开始。执行要么持续到第一个 \verb|co_yield| 语句，要么持续到协程完成执行。同样地，递增迭代器将恢复协程的执行，执行要么持续到下一个 \verb|co_yield| 语句，要么持续到协程完成。
+
+以下示例展示了一个产生多个整数值的协程，不是通过使用循环而是通过重复 \verb|co_yield| 语句来实现的：
+
+\begin{cpp}
+generator<int> get_values() noexcept
+{
+    co_yield 1;
+    co_yield 2;
+    co_yield 3;
+}
+int main()
+{
+    for (auto i : get_values())
+    {
+        std::cout << i << ' ';
+    }
+}
+\end{cpp}
+
+需要注意的一个重要点是，协程只能使用 \verb|co_yield| 关键字并同步生成值。在协程内使用 \verb|co_await| 操作符不支持。要能够使用 \verb|co_await| 操作符来挂起执行，需要一个不同的实现。
+
+\mySubsubsection{}{There's more...}
+
+前一个示例中提到的 libcoro 库有一个 \verb|generator<T>| 类型，可以用来替代这里创建的类型。实际上，将 \verb|generator<T>| 替换为 \verb|coro::generator<T>|，前面的代码将继续按预期工作。

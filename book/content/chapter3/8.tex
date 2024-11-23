@@ -1,0 +1,317 @@
+前面的章节中，已经在多个示例中使用了通用算法 std::transform() 和 std::accumulate()，用于实现字符串工具以创建字符串的大写或小写副本，或者用于计算范围内的值之和。
+
+这些是高阶函数 map 和 fold 的实现。高阶函数是指接受一个或多个其他函数作为参数，并将其应用于范围（list、vector、map、树等），从而生成新的范围或单一值的函数。本节中，将介绍如何实现 map 和 fold 函数，使其能够与 C++ 标准容器一起工作。
+
+\mySubsubsection{}{Getting ready}
+
+map 是一种高阶函数，将一个函数应用到一个范围的元素上，并返回一个新的相同顺序的范围。
+
+fold 是一种高阶函数，将一个组合函数应用到范围的元素上以产生单个结果。
+
+由于处理顺序可能很重要，两个函数有两个版本。一个是 \verb|fold_left|，从左到右处理元素；另一个是 \verb|fold_right|，从右到左组合元素。
+
+\begin{myNotic}
+大多数关于函数 map 的描述都指出其应用于list，但这是一个通用术语，可以指代不同的序列类型，如list、vector和array，也可以指代map、queue等。在描述这些高阶函数时，本书更倾向于使用范围这个词。
+\end{myNotic}
+
+例如，map操作可以将字符串范围转换为，表示每个字符串长度的整数范围。然后，fold 操作可以将这些长度相加以确定所有字符串的总长度。
+
+\mySubsubsection{}{How to do it...}
+
+为了实现 map 函数：
+
+\begin{itemize}
+\item
+对于支持迭代和元素赋值的容器，如 std::vector 或 std::list，使用 std::transform：
+
+\begin{cpp}
+template <typename F, typename R>
+R mapf(F&& func, R range)
+{
+    std::transform(
+        std::begin(range), std::end(range), std::begin(range),
+        std::forward<F>(func));
+    return range;
+}
+\end{cpp}
+
+\item
+对于不支持元素赋值的容器，如 std::map 和 std::queue，使用其他方式，如显式迭代和插入：
+
+\begin{cpp}
+template<typename F, typename T, typename U>
+std::map<T, U> mapf(F&& func, std::map<T, U> const & m)
+{
+    std::map<T, U> r;
+    for (auto const kvp : m)
+    r.insert(func(kvp));
+    return r;
+}
+template<typename F, typename T>
+std::queue<T> mapf(F&& func, std::queue<T> q)
+{
+    std::queue<T> r;
+    while (!q.empty())
+    {
+        r.push(func(q.front()));
+        q.pop();
+    }
+    return r;
+}
+\end{cpp}
+
+\end{itemize}
+
+为了实现 fold 函数：
+
+\begin{itemize}
+\item
+对于支持迭代的容器，使用 std::accumulate()：
+
+\begin{cpp}
+template <typename F, typename R, typename T>
+constexpr T fold_left(F&& func, R&& range, T init)
+{
+    return std::accumulate(
+        std::begin(range), std::end(range),
+        std::move(init),
+        std::forward<F>(func));
+}
+template <typename F, typename R, typename T>
+constexpr T fold_right(F&& func, R&& range, T init)
+{
+    return std::accumulate(
+        std::rbegin(range), std::rend(range),
+        std::move(init),
+        std::forward<F>(func));
+}
+\end{cpp}
+
+\item
+对于不支持迭代的容器，如 std::queue，使用其他方式显式处理：
+
+\begin{cpp}
+template <typename F, typename T>
+constexpr T fold_left(F&& func, std::queue<T> q, T init)
+{
+    while (!q.empty())
+    {
+        init = func(init, q.front());
+        q.pop();
+    }
+    return init;
+}
+\end{cpp}
+
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+前面的示例中，以功能化的方式实现了 map 高阶函数，所以保留了原始范围并返回一个新的范围。函数的参数是要应用的函数和范围。为了避免与 std::map 容器混淆，可称这个函数为 mapf。如前所述，mapf 有几个重载：
+
+\begin{itemize}
+\item
+第一个重载是针对支持迭代和元素赋值的容器；这包括 std::vector、std::list 和 std::array，也包括 C 的数组。该函数接受一个函数的右值引用和一个定义了 std::begin() 和 std::end() 的范围。范围按值传递，这样修改本地副本不会影响原始范围。通过使用标准算法 std::transform() 将给定函数应用于每个元素来转换范围，然后返回转换后的范围。
+
+\item
+第二个重载针对不支持直接赋值给其元素（std::pair<T, U>）的 std::map，这个重载创建了一个新的映射，然后使用基于范围的 for 循环遍历其元素，并将输入函数应用于原始映射的每个元素的结果插入新映射中。
+
+\item
+第三个重载针对不支持迭代的 std::queue，队列不是典型的映射结构。但为了演示不同的可能实现，为了遍历队列中的元素，必须更改队列——需要从前端弹出元素直到列表为空。这就是第三个重载所做的——处理输入队列（按值传递）的每个元素，并将给定函数应用于剩余队列前端元素的结果推入新队列。
+\end{itemize}
+
+现在已经实现了这些重载，可以应用于许多容器，如下例所示：
+
+\begin{itemize}
+\item
+保留vector中的绝对值，vector包含负值和正值。应用mapf后，结果是一个只包含正值的新vector：
+
+\begin{cpp}
+auto vnums =
+    std::vector<int>{0, 2, -3, 5, -1, 6, 8, -4, 9};
+auto r =mapf([](int const i) { return std::abs(i); }, vnums);
+// r = {0, 2, 3, 5, 1, 6, 8, 4, 9}
+\end{cpp}
+
+\item
+计算列表中数值的平方，列表包含整数值。应用mapf后，结果是一个包含初始值平方的列表：
+
+\begin{cpp}
+auto lnums = std::list<int>{1, 2, 3, 4, 5};
+auto l = mapf([](int const i) { return i*i; }, lnums);
+// l = {1, 4, 9, 16, 25}
+\end{cpp}
+
+\item
+四舍五入浮点数。这个示例中，需要使用 std::round()；但其对所有浮点类型都有重载，这使得编译器无法选择正确的那个。因此，要么写一个接受特定浮点类型参数并返回对该值应用 std::round() 后的结果的 lambda 表达式，要么创建一个封装 std::round() 的函数实例模板，并仅对浮点类型启用其调用操作符：
+
+\begin{cpp}
+template<class T = double>
+struct fround
+{
+    typename std::enable_if_t<std::is_floating_point_v<T>, T>
+    operator()(const T& value) const
+    {
+        return std::round(value);
+    }
+};
+auto amounts =
+std::array<double, 5> {10.42, 2.50, 100.0, 23.75, 12.99};
+auto a = mapf(fround<>(), amounts);
+// a = {10.0, 3.0, 100.0, 24.0, 13.0}
+\end{cpp}
+
+\item
+将单词map的字符串键转换为大写（其中键是单词，值是文本中出现的次数）。注意，创建字符串的大写副本就是一个映射操作。因此，使用 mapf 对表示键的字符串的元素应用 toupper() 以生成大写的副本：
+
+\begin{cpp}
+auto words = std::map<std::string, int>{
+    {"one", 1}, {"two", 2}, {"three", 3}
+};
+auto m = mapf(
+[](std::pair<std::string, int> const kvp) {
+    return std::make_pair(
+        funclib::mapf(toupper, kvp.first),
+        kvp.second);
+},
+words);
+// m = {{"ONE", 1}, {"TWO", 2}, {"THREE", 3}}
+\end{cpp}
+
+\item
+从优先级队列中规范化值；最初，值是从 1 到 100，但可将它们归一化为两个值，1=高，2=普通。所有初始优先级值不超过 30 的都赋予高优先级；其余的则获得普通优先级：
+
+\begin{cpp}
+auto priorities = std::queue<int>();
+priorities.push(10);
+priorities.push(20);
+priorities.push(30);
+priorities.push(40);
+priorities.push(50);
+auto p = mapf(
+    [](int const i) { return i > 30 ? 2 : 1; },
+    priorities);
+// p = {1, 1, 1, 2, 2}
+\end{cpp}
+\end{itemize}
+
+为了实现 fold，必须考虑两种可能的折叠类型——即从左到右和从右到左。因此，提供了两个函数，分别称为 \verb|fold_left|（左折叠）和 \verb|fold_right|（右折叠），都接受一个函数、范围和初始值，并调用 std::accumulate() 来将范围中的值折叠成一个单独的值。\verb|fold_left| 使用直接迭代器，而 \verb|fold_right| 使用反向迭代器来遍历和处理范围。第二个重载是针对不具有迭代器的 std::queue 类型的特化。
+
+基于这些折叠实现，可以实现以下示例：
+
+\begin{itemize}
+\item
+计算整数向量的值之和，无论是左折叠还是右折叠都会产生相同的结果。下面的例子中，将传递一个接受一个和数和一个数字并返回新和数的 lambda 表达式，或者从标准库中传递一个将加法操作符应用于相同类型的两个操作数的函数对象 std::plus<>（类似于闭包）。
+
+\begin{cpp}
+auto vnums =
+    std::vector<int>{0, 2, -3, 5, -1, 6, 8, -4, 9};
+auto s1 = fold_left(
+    [](const int s, const int n) {return s + n; },
+    vnums, 0);                // s1 = 22
+auto s2 = fold_left(
+    std::plus<>(), vnums, 0); // s2 = 22
+auto s3 = fold_right(
+    [](const int s, const int n) {return s + n; },
+    vnums, 0);                // s3 = 22
+auto s4 = fold_right(
+    std::plus<>(), vnums, 0); // s4 = 22
+\end{cpp}
+
+\item
+将vector中的字符串连接成一个字符串：
+
+\begin{cpp}
+auto texts =
+    std::vector<std::string>{"hello"s, " "s, "world"s, "!"s};
+auto txt1 = fold_left(
+    [](std::string const & s, std::string const & n) {
+        return s + n;},
+    texts, ""s);    // txt1 = "hello world!"
+auto txt2 = fold_right(
+    [](std::string const & s, std::string const & n) {
+        return s + n; },
+    texts, ""s);    // txt2 = "!world hello"
+\end{cpp}
+
+\item
+将字符数组连接成一个字符串：
+
+\begin{cpp}
+char chars[] = {'c','i','v','i','c'};
+auto str1 = fold_left(std::plus<>(), chars, ""s);
+// str1 = "civic"
+Auto str2 = fold_right(std::plus<>(), chars, ""s);
+// str2 = "civic"
+\end{cpp}
+
+\item
+基于已经计算出的出现次数（存储在一个 \verb|map<string, int>| 中）统计文本中的单词数量：
+
+\begin{cpp}
+auto words = std::map<std::string, int>{
+    {"one", 1}, {"two", 2}, {"three", 3} };
+auto count = fold_left(
+    [](int const s, std::pair<std::string, int> const kvp) {
+        return s + kvp.second; },
+    words, 0); // count = 6
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{There's more...}
+
+这些函数可以管道化——用一个函数的结果调用另一个函数。下面的例子展示了如何通过将 \verb|std::abs()| 函数应用于元素，将整数范围映射为正整数范围。然后，再将结果映射到另一个平方数范围。最后，通过在范围内应用左折叠将它们求和：
+
+\begin{cpp}
+auto vnums = std::vector<int>{ 0, 2, -3, 5, -1, 6, 8, -4, 9 };
+auto s = fold_left(
+    std::plus<>(),
+    mapf(
+        [](int const i) {return i*I; },
+        mapf(
+            [](int const i) {return std::abs(i); },
+            vnums)),
+    0); // s = 236
+\end{cpp}
+
+作为一个练习，我们可以按照前面看到的方法实现一个可变参数函数模板形式的 fold 函数。执行实际折叠的函数作为参数提供：
+
+\begin{cpp}
+template <typename F, typename T1, typename T2>
+auto fold_left(F&&f, T1 arg1, T2 arg2)
+{
+    return f(arg1, arg2);
+}
+template <typename F, typename T, typename... Ts>
+auto fold_left(F&& f, T head, Ts… rest)
+{
+    return f(head, fold_left(std::forward<F>(f), rest...));
+}
+\end{cpp}
+
+把这个实现与之前实现的 \verb|add()| 函数模板进行比较时，可以注意到几个不同之处：
+
+\begin{itemize}
+\item
+第一个参数是一个函数，当递归调用 \verb|fold_left| 时，会完美转发。
+
+\item
+结束条件是一个需要两个参数的函数，因为用于折叠的函数是一个二元函数（接受两个参数）。
+
+\item
+编写的两个函数的返回类型声明为 \verb|auto|，必须匹配提供的二元函数 f 的返回类型，而这直到调用 \verb|fold_left| 时才可知。
+\end{itemize}
+
+\verb|fold_left()| 函数可按如下方式使用：
+
+\begin{cpp}
+auto s1 = fold_left(std::plus<>(), 1, 2, 3, 4, 5);
+// s1 = 15
+auto s2 = fold_left(std::plus<>(), "hello"s, ' ', "world"s, '!');
+// s2 = "hello world!"
+auto s3 = fold_left(std::plus<>(), 1); // error, too few arguments
+\end{cpp}
+
+注意，最后一次调用会产生编译错误，因为可变参数函数模板 \verb|fold_left()| 至少需要传递两个参数，以便调用提供的二元函数。
+
+

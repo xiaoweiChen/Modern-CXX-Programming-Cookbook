@@ -1,0 +1,210 @@
+
+
+当涉及到使能数据类型反射或内省的功能，或者标准机制来定义语言扩展时，C++ 曾经欠缺这方面的能力。因此，编译器为这些目的定义了自己的特定扩展，例如：VC++ 的 \verb|__declspec()| 说明符和 GCC 的 \verb|__attribute__((...))|。然而，C++11 引入了属性的概念，使得编译器能够以标准方式实现扩展，甚至嵌入领域特定语言。更新的 C++ 标准定义了所有编译器都应该实现的若干属性，而这将是本示例的主题。
+
+
+\mySubsubsection{}{How to do it...}
+
+使用标准属性来为编译器提供关于各种设计目标的提示，如以下场景所示，但不限于这些：
+
+\begin{itemize}
+\item
+为了确保不能忽略函数的返回值，用 \verb|[[nodiscard]]| 属性声明该函数。C++20 中，可以指定一个形如 \verb|[[nodiscard(text)]]| 的字符串字面量来解释为什么结果不应该被丢弃：
+
+\begin{cpp}
+[[nodiscard]] int get_value1()
+{
+    return 42;
+}
+get_value1();
+// warning: ignoring return value of function
+//          declared with 'nodiscard' attribute get_value1();
+\end{cpp}
+
+\item
+或者，可以用 \verb|[[nodiscard]]| 属性声明作为函数返回类型的枚举和类型；返回此类类型的任何函数的返回值都不能忽略：
+
+\begin{cpp}
+enum class[[nodiscard]] ReturnCodes{ OK, NoData, Error };
+ReturnCodes get_value2()
+{
+    return ReturnCodes::OK;
+}
+struct[[nodiscard]] Item{};
+Item get_value3()
+{
+    return Item{};
+}
+// warning: ignoring return value of function
+//          declared with 'nodiscard' attribute
+get_value2();
+get_value3();
+\end{cpp}
+
+\item
+为了确保编译器以警告标志认为是过时的函数或类型的使用，用 \verb|[[deprecated]]| 属性声明：
+
+\begin{cpp}
+[[deprecated("Use func2()")]] void func()
+{
+}
+// warning: 'func' is deprecated : Use func2()
+func();
+class [[deprecated]] foo
+{
+};
+// warning: 'foo' is deprecated
+foo f;
+\end{cpp}
+
+\item
+为了确保编译器不对未使用的变量发出警告，使用 \verb|[[maybe_unused]]| 属性：
+
+\begin{cpp}
+double run([[maybe_unused]] int a, double b)
+{
+    return 2 * b;
+}
+[[maybe_unused]] auto i = get_value1();
+\end{cpp}
+
+\item
+为了确保编译器不对 switch 语句中故意的穿透情况标签发出警告，使用 \verb|[[fallthrough]]| 属性：
+
+\begin{cpp}
+void option1() {}
+void option2() {}
+int alternative = get_value1();
+switch (alternative)
+{
+    case 1:
+    option1();
+    [[fallthrough]]; // this is intentional
+    case 2:
+    option2();
+}
+\end{cpp}
+
+\item
+为了帮助编译器优化更有可能或不太可能执行的执行路径，使用 C++20 的 \verb|[[likely]]| 和 \verb|[[unlikely]]| 属性：
+
+\begin{cpp}
+void execute_command(char cmd)
+{
+    switch(cmd)
+    {
+        [[likely]]
+        case 'a': /* add */ break;
+        [[unlikely]]
+        case 'd': /* delete */ break;
+        case 'p': /* print */ break;
+        default:  /* do something else */ break;
+    }
+}
+\end{cpp}
+
+\item
+为了帮助编译器根据用户给定的假设优化代码，使用 C++23 的 \verb|[[assume]]| 属性：
+
+\begin{cpp}
+void process(int* data, size_t len)
+{
+    [[assume(len > 0)]];
+    for(size_t i = 0; i < len; ++i)
+    {
+        // do something with data[i]
+    }
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+属性是 C++ 的一个非常灵活的特性；几乎可以在任何地方使用，但每个特定属性的实际使用都是具体定义的。可以用于类型、函数、变量、名称、代码块或整个转换单元。
+
+属性是在双方括号之间指定的（例如，\verb|[[attr1]]|），并且可以在一个声明中指定多个属性（例如，\verb|[[attr1, attr2, attr3]]|）。
+
+属性可以有参数，例如 \verb|[[mode(greedy)]]|；也可以完全限定，例如 \verb|[[sys::hidden]]| 或 \verb|[[using sys: visibility(hidden), debug]]|。
+
+属性可以出现在它们应用的实体名称之前或之后，或者两者都有，这种情况下它们会进行合并。以下是几个示例，举例说明了这一点：
+
+\begin{cpp}
+// attr1 applies to a, attr2 applies to b
+int a [[attr1]], b [[attr2]];
+// attr1 applies to a and b
+int [[attr1]] a, b;
+// attr1 applies to a and b, attr2 applies to a
+int [[attr1]] a [[attr2]], b;
+\end{cpp}
+
+属性不能出现在命名空间声明中，但可以在命名空间中的任何地方作为单行声明出现。这时，每个属性是否应用于随后的声明、命名空间或转换单元是特定的：
+
+\begin{cpp}
+namespace test
+{
+    [[debug]];
+}
+\end{cpp}
+
+标准确实定义了几种所有编译器都必须实现的属性，可以写出更好的代码。前一节给出的例子中已经看到了其中的一些。这些属性是在不同版本的标准中定义的：
+
+\begin{itemize}
+\item
+C++11：
+
+\begin{itemize}
+\item
+\verb|[[noreturn]]| 属性表明一个函数不会返回。
+
+\item
+\verb|[[carries_dependency]]| 属性表明内存序 \verb|std::memory_order| 中的依赖链会在函数内外传播，允许编译器跳过不必要的内存栅栏指令。
+\end{itemize}
+
+\item
+C++14：
+
+\begin{itemize}
+\item
+\verb|[[deprecated]]| 和 \verb|[[deprecated("原因")]]| 属性表明用这些属性声明的实体是过时的，不应使用。这些属性可以用于类、非静态数据成员、typedef、函数、枚举和模板特化。“原因”字符串是一个可选参数。
+\end{itemize}
+
+\item
+C++17：
+
+\begin{itemize}
+\item
+\verb|[[fallthrough]]| 属性表明 switch 语句中标签之间的穿透是有意为之。该属性必须单独出现在 case 标签之前的一行上。
+
+\item
+\verb|[[nodiscard]]| 属性表明不能忽略函数的返回值。
+
+\item
+\verb|[[maybe_unused]]| 属性表明一个实体可能未使用，但编译器不应为此发出警告。此属性可以应用于变量、类、非静态数据成员、枚举、枚举值和 typedef。
+\end{itemize}
+
+\item
+C++20：
+
+\begin{itemize}
+\item
+\verb|[[nodiscard(text)]]| 属性是 C++17 \verb|[[nodiscard]]| 属性的扩展，提供了描述为什么结果不应该丢弃的文本。
+
+\item
+\verb|[[likely]]| 和 \verb|[[unlikely]]| 属性向编译器提供提示，表明一条执行路径更有可能或不太可能执行，从而允许编译器相应地优化。可以应用于语句（但不是声明）和标签，但两者互斥，只能应用其中一个。
+
+\item
+\verb|[[no_unique_address]]| 属性可以应用于非静态数据成员（不包括位字段），告诉编译器该成员不必具有唯一地址。当应用于具有空类型成员时，编译器可以优化它，使其不占用空间，就像它是空基类一样。另一方面，如果成员的类型不为空，编译器可能会重用来存储其他数据成员。
+\end{itemize}
+
+\item
+C++23：
+
+\begin{itemize}
+\item
+\verb|[[assume(expr)]]| 表明一个表达式将始终评估为真，其目的是使编译器能够进行代码优化，而不是记录函数的前提条件。但表达式永远不会进行评估，一个具有未定义行为或抛出异常的表达式将评估为假。一个不成立的假设会导致未定义行为，所以应该谨慎使用assume。另一方面，编译器也可能根本不使用assume。
+\end{itemize}
+
+\end{itemize}
+
+属性通常现代 C++ 编程书籍和教程忽视或简要提及，原因可能是开发者实际上并不能编写属性，因为该语言特性是为了编译器实现而设计的。不过，对于某些编译器来说，可以定义用户提供的属性；一个这样的编译器是 GCC，支持添加功能到编译器的插件，这些插件也可以用来定义新的属性。
+

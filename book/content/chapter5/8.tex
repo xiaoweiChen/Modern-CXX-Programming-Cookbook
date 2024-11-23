@@ -1,0 +1,211 @@
+标准库提供了几种用于集合操作的算法，们能够对已排序的范围执行并集、交集或差集操作。本示例中，将介绍这些算法是什么，以及其工作原理。
+
+\mySubsubsection{}{Getting ready}
+
+集合操作的算法使用迭代器工作，可以用于标准容器、数组或具有输入迭代器可用的自定义类型的序列。本示例中的所有例子都将使用 std::vector。
+
+接下来部分的所有例子中，将使用以下范围：
+
+\begin{cpp}
+std::vector<int> v1{ 1, 2, 3, 4, 4, 5 };
+std::vector<int> v2{ 2, 3, 3, 4, 6, 8 };
+std::vector<int> v3;
+\end{cpp}
+
+下面的部分中，将探索标准集合操作算法的使用。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下通用算法进行集合操作：
+
+\begin{itemize}
+\item
+使用\verb|std::set_union()|计算两个范围的并集到第三个范围：
+
+\begin{cpp}
+std::set_union(v1.cbegin(), v1.cend(),
+               v2.cbegin(), v2.cend(),
+               std::back_inserter(v3));
+// v3 = {1, 2, 3, 3, 4, 4, 5, 6, 8}
+\end{cpp}
+
+\item
+使用 \verb|std::merge()| 合并两个范围的内容到第三个范围；与 \verb|std::set_union()| 类似，不同之处在于将输入范围的全部内容复制到输出范围，而不仅仅是其并集：
+
+\begin{cpp}
+std::merge(v1.cbegin(), v1.cend(),
+           v2.cbegin(), v2.cend(),
+           std::back_inserter(v3));
+// v3 = {1, 2, 2, 3, 3, 3, 4, 4, 4, 5, 6, 8}
+\end{cpp}
+
+\item
+使用 \verb|std::set_intersection()| 计算两个范围的交集到第三个范围：
+
+\begin{cpp}
+std::set_intersection(v1.cbegin(), v1.cend(),
+                      v2.cbegin(), v2.cend(),
+                      std::back_inserter(v3));
+// v3 = {2, 3, 4}
+\end{cpp}
+
+\item
+使用 \verb|std::set_difference()| 计算两个范围的差集到第三个范围；输出范围将包含来自第一个范围但不在第二个范围中的元素：
+
+\begin{cpp}
+std::set_difference(v1.cbegin(), v1.cend(),
+                    v2.cbegin(), v2.cend(),
+                    std::back_inserter(v3));
+// v3 = {1, 4, 5}
+\end{cpp}
+
+\item
+使用 \verb|std::set_symmetric_difference()| 计算两个范围的对称差集到第三个范围；输出范围将包含出现在输入范围中，但只出现在一个范围中的元素：
+
+\begin{cpp}
+std::set_symmetric_difference(v1.cbegin(), v1.cend(),
+                              v2.cbegin(), v2.cend(),
+                              std::back_inserter(v3));
+// v3 = {1, 3, 4, 5, 6, 8}
+\end{cpp}
+
+\item
+使用 \verb|std::includes()| 检查一个范围是否是另一个范围的子集（所有元素也都在另一个范围中出现）：
+
+\begin{cpp}
+std::vector<int> v1{ 1, 2, 3, 4, 4, 5 };
+std::vector<int> v2{ 2, 3, 3, 4, 6, 8 };
+std::vector<int> v3{ 1, 2, 4 };
+std::vector<int> v4{ };
+auto i1 = std::includes(v1.cbegin(), v1.cend(),
+                        v2.cbegin(), v2.cend()); // i1 = false
+auto i2 = std::includes(v1.cbegin(), v1.cend(),
+                        v3.cbegin(), v3.cend()); // i2 = true
+auto i3 = std::includes(v1.cbegin(), v1.cend(),
+                        v4.cbegin(), v4.cend()); // i3 = true
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+所有从两个输入范围生成新范围的集合操作都有相同的接口，并以相似的方式工作：
+
+\begin{itemize}
+\item
+接受两个输入范围，每个范围由第一个和最后一个输入迭代器定义。
+
+\item
+接受一个输出迭代器，用于指向将插入元素的输出范围。
+
+\item
+有一个重载版本，接受一个参数，该参数表示一个比较二元函数对象，该对象必须在第一个参数小于第二个参数时返回 true。如果没有指定比较函数对象，则使用 operator<。
+
+\item
+返回一个指向构造后的输出范围末尾之后的迭代器。
+
+\item
+输入范围必须使用 operator< 或提供的比较函数排序，具体取决于使用的重载版本。
+
+\item
+输出范围不得与两个输入范围中的任何一个重叠。
+\end{itemize}
+
+可通过 Task 的 POD 类型的vector示例，来演示它们的工作方式：
+
+\begin{cpp}
+struct Task
+{
+    int         priority;
+    std::string name;
+};
+bool operator<(Task const & lhs, Task const & rhs) {
+    return lhs.priority < rhs.priority;
+}
+bool operator>(Task const & lhs, Task const & rhs) {
+    return lhs.priority > rhs.priority;
+}
+std::vector<Task> v1{
+    { 10, "Task 1.1"s },
+    { 20, "Task 1.2"s },
+    { 20, "Task 1.3"s },
+    { 20, "Task 1.4"s },
+    { 30, "Task 1.5"s },
+    { 50, "Task 1.6"s },
+};
+std::vector<Task> v2{
+    { 20, "Task 2.1"s },
+    { 30, "Task 2.2"s },
+    { 30, "Task 2.3"s },
+    { 30, "Task 2.4"s },
+    { 40, "Task 2.5"s },
+    { 50, "Task 2.6"s },
+};
+\end{cpp}
+
+每个算法生成输出范围的具体方式如下：
+
+\begin{itemize}
+\item
+\verb|std::set_union()| 将存在于一个或两个输入范围中的所有元素复制到输出范围，生成一个新的已排序范围。如果一个元素在第一个范围中出现了 $M$ 次，在第二个范围中出现了 $N$ 次，所有 $M$ 个元素将按照现有的顺序从第一个范围复制到输出范围，然后如果有 $N > M$，则从第二个范围复制 $N – M$ 个元素到输出范围；否则不复制任何元素：
+
+\begin{cpp}
+std::vector<Task> v3;
+std::set_union(v1.cbegin(), v1.cend(),
+v2.cbegin(), v2.cend(),
+std::back_inserter(v3));
+// v3 = {{10, "Task 1.1"},{20, "Task 1.2"},{20, "Task 1.3"},
+//       {20, "Task 1.4"},{30, "Task 1.5"},{30, "Task 2.3"},
+//       {30, "Task 2.4"},{40, "Task 2.5"},{50, "Task 1.6"}}
+\end{cpp}
+
+\item
+\verb|std::merge()| 将两个输入范围中的所有元素复制到输出范围，生成一个根据比较函数排序的新范围：
+
+\begin{cpp}
+std::vector<Task> v4;
+std::merge(v1.cbegin(), v1.cend(),
+           v2.cbegin(), v2.cend(),
+           std::back_inserter(v4));
+// v4 = {{10, "Task 1.1"},{20, "Task 1.2"},{20, "Task 1.3"},
+//       {20, "Task 1.4"},{20, "Task 2.1"},{30, "Task 1.5"},
+//       {30, "Task 2.2"},{30, "Task 2.3"},{30, "Task 2.4"},
+//       {40, "Task 2.5"},{50, "Task 1.6"},{50, "Task 2.6"}}
+\end{cpp}
+
+\item
+\verb|std::set_intersection()| 将同时存在于两个输入范围中的所有元素复制到输出范围，生成一个根据比较函数排序的新范围：
+
+\begin{cpp}
+std::vector<Task> v5;
+std::set_intersection(v1.cbegin(), v1.cend(),
+                      v2.cbegin(), v2.cend(),
+                      std::back_inserter(v5));
+// v5 = {{20, "Task 1.2"},{30, "Task 1.5"},{50, "Task 1.6"}}
+\end{cpp}
+
+\item
+\verb|std::set_difference()| 将仅存在于第一个输入范围中的所有元素复制到输出范围。对于两个范围中都存在的等效元素，适用以下规则：如果某个元素在第一个范围中出现了 $M$ 次，第二个范围中出现了 $N$ 次，且 $M > N$，则复制 $M – N$ 次；否则不进行复制：
+
+\begin{cpp}
+std::vector<Task> v6;
+std::set_difference(v1.cbegin(), v1.cend(),
+                    v2.cbegin(), v2.cend(),
+                    std::back_inserter(v6));
+// v6 = {{10, "Task 1.1"},{20, "Task 1.3"},{20, "Task 1.4"}}
+\end{cpp}
+
+\item
+\verb|std::set_symmetric_difference()| 将仅存在于两个输入范围之一中的所有元素复制到输出范围。如果一个元素在第一个范围中出现了 $M$ 次，在第二个范围中出现了 $N$ 次；如果 $M > N$，则将第一个范围中的最后 $M – N$ 个这样的元素复制到输出范围；否则，将第二个范围中的最后 $N – M$ 个这样的元素复制到输出范围：
+
+\begin{cpp}
+std::vector<Task> v7;
+std::set_symmetric_difference(v1.cbegin(), v1.cend(),
+                              v2.cbegin(), v2.cend(),
+                              std::back_inserter(v7));
+// v7 = {{10, "Task 1.1"},{20, "Task 1.3"},{20, "Task 1.4"}
+//       {30, "Task 2.3"},{30, "Task 2.4"},{40, "Task 2.5"}}
+\end{cpp}
+\end{itemize}
+
+另一方面，std::includes() 不生成输出范围；仅检查第二个范围是否包含在第一个范围中。返回一个布尔值，如果第二个范围为空或其所有元素都包含在第一个范围中，则返回 true；否则返回 false。还有两个重载版本，其中一个指定了一个比较二元函数实例。
+

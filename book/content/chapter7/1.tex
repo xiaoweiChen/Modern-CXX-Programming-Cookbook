@@ -1,0 +1,348 @@
+某些程序必须以各种方式将数据持久化到磁盘文件中，包括在数据库或平面文件中存储数据，无论是文本还是二进制数据。本示例专注于从二进制文件中持久化和加载原始数据和对象。
+
+原始数据指的是未结构化的数据，这里将考虑写入和读取一个缓冲区（即连续的内存序列）的内容，这可以是一个数组、一个std::vector或一个std::array。
+
+\mySubsubsection{}{Getting ready}
+
+应该熟悉标准流I/O库，尽管接下来会提供一些必要的解释来帮助理解本示例。应该了解二进制文件和文本文件之间的区别。
+
+本示例中，将使用<fstream>头文件中std命名空间下的ofstream和ifstream类。
+
+\mySubsubsection{}{How to do it...}
+
+要将缓冲区的内容（例子中是一个std::vector）写入二进制文件，应该按照以下步骤操作：
+
+\begin{enumerate}
+\item
+创建一个std::ofstream类的实例，以二进制模式打开一个用于写入的文件流：
+
+\begin{cpp}
+std::ofstream ofile("sample.bin", std::ios::binary);
+\end{cpp}
+
+\item
+向文件写入数据之前确保文件已打开：
+
+\begin{cpp}
+if(ofile.is_open())
+{
+    // streamed file operations
+}
+\end{cpp}
+
+\item
+提供指向字符数组的指针和要写入的字符数来写入数据。下面的例子中，将vector的部分内容写入文件：
+
+\begin{cpp}
+std::vector<unsigned char> output {0,1,2,3,4,5,6,7,8,9};
+ofile.write(reinterpret_cast<char*>(output.data()), output.size());
+\end{cpp}
+
+\item
+可选地，可以通过调用flush()方法将流的输出缓冲区的内容刷新到实际的磁盘文件。这使得流中的未提交更改与外部目标同步，这种情况下是磁盘文件。
+
+\item
+通过调用close()关闭流。反过来又会调用flush()，所以前一步骤好像没那么必要：
+
+\begin{cpp}
+ofile.close();
+\end{cpp}
+\end{enumerate}
+
+要将整个二进制文件的内容读取到缓冲区，应该按照以下步骤操作：
+
+\begin{enumerate}
+\item
+创建std::ifstream类型的实例，以二进制模式打开一个用于读取的文件流。文件路径可以是相对于当前工作目录的绝对路径或相对路径（不是相对于可执行文件的路径）。本例中，是相对路径：
+
+\begin{cpp}
+std::ifstream ifile("sample.bin", std::ios::binary);
+\end{cpp}
+
+\item
+从文件读取数据之前确保文件已打开：
+
+\begin{cpp}
+if(ifile.is_open())
+{
+    // streamed file operations
+}
+\end{cpp}
+
+\item
+将输入位置指示器定位到文件末尾，读取其值。将指示器移动到开头，以确定文件长度：
+
+\begin{cpp}
+ifile.seekg(0, std::ios_base::end);
+auto length = ifile.tellg();
+ifile.seekg(0, std::ios_base::beg);
+\end{cpp}
+
+\item
+分配内存以读取文件内容：
+
+\begin{cpp}
+std::vector<unsigned char> input;
+input.resize(static_cast<size_t>(length));
+\end{cpp}
+
+\item
+提供指向字符数组的指针，以接收数据和要读取的字符数，从而将文件内容读取到分配的缓冲区：
+
+\begin{cpp}
+ifile.read(reinterpret_cast<char*>(input.data()), length);
+\end{cpp}
+
+\item
+检查读取操作是否成功完成：
+
+\begin{cpp}
+auto success = !ifile.fail() && length == ifile.gcount();
+\end{cpp}
+
+\item
+最后，关闭文件流：
+
+\begin{cpp}
+ifile.close();
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{Hot it works...}
+
+标准流基I/O库提供了多个实现高级输入、输出或同时输入输出文件流、字符串流和字符数组操作的类，控制这些流行为的操纵符，以及几个预定义的流对象（cin/wcin、cout/wcout、cerr/wcerr和clog/wclog）。
+
+这些流作为类模板实现。对于文件，库提供了几个（不可复制的）类型：
+
+\begin{itemize}
+\item
+\verb|basic_filebuf|实现了针对原始文件的I/O操作，其语义类似于C语言中的FILE流。
+
+\item
+\verb|basic_ifstream|实现了由\verb|basic_istream|流接口定义的高级文件流输入操作，内部使用了一个\verb|basic_filebuf|实例。
+
+\item
+\verb|basic_ofstream|实现了由\verb|basic_ostream|流接口定义的高级文件流输出操作，内部使用了一个\verb|basic_filebuf|实例。
+
+\item
+\verb|basic_fstream|实现了由\verb|basic_iostream|流接口定义的高级文件流输入和输出操作，内部使用了一个\verb|basic_filebuf|实例。
+\end{itemize}
+
+为了更好地理解这些类型的关系，在下面的类图中进行展示：
+
+\myGraphic{0.8}{content/chapter7/images/1.png}{图7.1: 流的类型图}
+
+该图还展示了几个设计为与基于字符串的流一起工作的类型，这里就不多加讨论了。
+
+<fstream>头文件中，std命名空间下也定义了前面提到的类模板的一些类型定义。前面的例子中使用的ofstream和ifstream实例就是这些类型定义的同义词：
+
+\begin{cpp}
+typedef basic_ifstream<char>    ifstream;
+typedef basic_ifstream<wchar_t> wifstream;
+typedef basic_ofstream<char>    ofstream;
+typedef basic_ofstream<wchar_t> wofstream;
+typedef basic_fstream<char>     fstream;
+typedef basic_fstream<wchar_t>  wfstream;
+\end{cpp}
+
+上一节中，了解了如何将原始数据写入和从文件流中读取。现在，将更详细地介绍这一过程。
+
+要将数据写入文件，创建了一个std::ofstream类型的实例。构造函数中，传递了要打开的文件名和流的打开模式，其中指定了std::ios::binary表示二进制模式。以这种方式打开文件会丢弃先前的文件内容。如果想向现有文件追加内容，可以使用std::ios::app标志（即std::ios::app | std::ios::binary）。此构造函数内部对其底层的原始文件实例（\verb|basic_filebuf|实例）调用了open()。如果此操作失败，则会设置一个错误位。为了检查流是否已成功关联到文件设备，使用了\verb|is_open()|（内部调用了底层\verb|basic_filebuf|方法的同名方法）。通过write()方法将数据写入文件流，该方法接受一个指向要写入的字符字符串的指针和要写入的字符数。由于此方法以字符字符串操作，如果数据是其他类型，例子中的unsigned char，则需要进行\verb|reinterpret_cast|。写入操作在失败时不设置错误位，但会抛出\verb|std::ios_base::failure|异常。然而，数据不直接写入文件设备，而是存储在\verb|basic_filebuf|实例中。为了将其写入文件，需要刷新缓冲区，可通过调用flush()完成。关闭文件流时，此操作会自动完成，如前面的例子所示。
+
+要从文件读取数据，可以创建了一个std::ifstream类型的实例。构造函数中，传递了与打开文件写入时相同的参数，以指定文件名和打开模式（即std::ios::binary）。构造函数内部对其底层的\verb|std::basic_filebuf|实例调用了open()。为了检查流是否已成功关联到文件设备，这里使用了\verb|is_open()|（内部调用了底层\verb|basic_filebuf|方法的同名方法）。这个例子中，将整个文件内容读取到了内存缓冲区，特别是std::vector中。在读取数据之前，必须知道文件的大小，以便分配足够大的缓冲区来容纳这些数据。为此，使用seekg()将输入位置指示器移动到文件末尾。
+
+然后，调用tellg()返回当前位置，以表示文件的大小（以字节为单位），然后将输入位置指示器移动回文件开头，以便可以从开头开始读取。通过在构造函数（或open()方法）中使用std::ios::ate打开标志，可以避免调用seekg()将位置指示器移动到末尾的操作，这样可以立即将位置指示器移动到文件末尾。在为文件内容分配足够的内存后，使用read()方法将数据从文件复制到内存。可接受一个指向接收从流中读取数据的字符串指针，和要读取的字符长度。由于流以字符操作，如果缓冲区包含其他类型的数据，例如例子中的unsigned char，则需要\verb|reinterpret_cast|对类型进项转换。
+
+如果发生错误，此操作会抛出\verb|std::basic_ios::failure|异常。为了确定从流中成功读取的字符数，可以使用gcount()方法。完成读取操作后，关闭文件流。
+
+\begin{myNotic}
+确定已打开文件大小的替代方案是使用文件系统库中的\verb|std::filesystem::file_size()|函数。这只需要一个路径，不需要打开文件。还可以确定目录的大小，但这取决于具体实现。
+\end{myNotic}
+
+这些示例中显示的操作，是将数据写入和从文件流中读取所需的最小操作。然而，重要的是要对操作的成功性进行适当的检查，并捕获可能发生的异常。
+
+需要注意的是代表要写入或读取的字符数的参数值。在例子中，使用了unsigned char类型的缓冲区。unsigned char的大小为1，就像char一样，字符的数量等于缓冲区中的元素数量。但如果缓冲区包含int类型的元素，情况就会发生变化。int通常是32位的，重新解释为char时，相当于4个字符。所以，当写入任何大于1的大小的数据时，需要将元素数量乘以元素的大小：
+
+\begin{cpp}
+std::vector<int> numbers{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+std::ofstream ofile("sample.bin", std::ios::binary);
+if (ofile.is_open())
+{
+    ofile.write(reinterpret_cast<char*>(numbers.data()),
+                numbers.size() * sizeof(int));
+    ofile.close();
+}
+\end{cpp}
+
+读取数据时，也需要考虑到从文件中读取的元素的大小，这在接下来的例子中有所体现：
+
+\begin{cpp}
+std::vector<int> input;
+std::ifstream ifile("sample.bin", std::ios::binary);
+if (ifile.is_open())
+{
+    ifile.seekg(0, std::ios_base::end);
+    auto length = ifile.tellg();
+    ifile.seekg(0, std::ios_base::beg);
+    input.resize(static_cast<size_t>(length) / sizeof(int));
+    ifile.read(reinterpret_cast<char*>(input.data()), length);
+    assert(!ifile.fail() && length == ifile.gcount());
+    ifile.close();
+}
+\end{cpp}
+
+本示例中讨论的示例代码可以重组为两个通用函数的形式，用于将数据写入文件和从文件中读取数据：
+
+\begin{cpp}
+bool write_data(char const * const filename,
+    char const * const data,
+    size_t const size)
+{
+    auto success = false;
+    std::ofstream ofile(filename, std::ios::binary);
+    if(ofile.is_open())
+    {
+        try
+        {
+            ofile.write(data, size);
+            success = true;
+        }
+        catch(std::ios_base::failure &)
+        {
+            // handle the error
+        }
+        ofile.close();
+    }
+    return success;
+}
+size_t read_data(char const * const filename,
+std::function<char*(size_t const)> allocator)
+{
+    size_t readbytes = 0;
+    std::ifstream ifile(filename, std::ios::ate | std::ios::binary);
+    if(ifile.is_open())
+    {
+        auto length = static_cast<size_t>(ifile.tellg());
+        ifile.seekg(0, std::ios_base::beg);
+        auto buffer = allocator(length);
+        try
+        {
+            ifile.read(buffer, length);
+            readbytes = static_cast<size_t>(ifile.gcount());
+        }
+        catch (std::ios_base::failure &)
+        {
+            // handle the error
+        }
+        ifile.close();
+    }
+    return readbytes;
+}
+\end{cpp}
+
+\verb|write_data()| 是一个函数，接受文件名、指向字符数组的指针和该数组的长度作为参数，并将字符写入指定的文件。\verb|read_data()| 是一个函数，接受文件名和一个分配缓冲区的函数，并将文件的全部内容读取到由分配函数返回的缓冲区中。以下是这两个函数的使用示例：
+
+\begin{cpp}
+std::vector<int> output {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+std::vector<int> input;
+if(write_data("sample.bin",
+               reinterpret_cast<char*>(output.data()),
+               output.size() * sizeof(int)))
+{
+    auto lalloc = [&input](size_t const length)
+    {
+        input.resize(length) / sizeof(int);
+        return reinterpret_cast<char*>(input.data());
+    };
+    if(read_data("sample.bin", lalloc) > 0)
+    {
+        std::cout << (output == input ? "equal": "not equal")
+        << '\n';
+    }
+}
+\end{cpp}
+
+或者，可以使用动态分配的缓冲区，而不是std::vector：
+
+\begin{cpp}
+std::vector<int> output {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+std::unique_ptr<int[]> input = nullptr;
+size_t readb = 0;
+if(write_data("sample.bin",
+              reinterpret_cast<char*>(output.data()),
+              output.size() * sizeof(int)))
+{
+    if((readb = read_data(
+    "sample.bin",
+    [&input](size_t const length) {
+        input.reset(new int[length / sizeof(int)]);
+        return reinterpret_cast<char*>(input.get()); })) > 0)
+    {
+        auto cmp = memcmp(output.data(), input.get(), output.size());
+        std::cout << (cmp == 0 ? "equal": "not equal") << '\n';
+    }
+\end{cpp}
+
+然而，提供这种替代方法只是为了说明\verb|read_data()|可以与不同种类的输入缓冲区一起使用。建议尽可能避免显式的动态内存分配。
+
+\mySubsubsection{}{There's more...}
+
+本示例中从文件读取数据到内存的方式，只是多种方式的一种。以下是读取文件流数据的几种可能的替代方法：
+
+\begin{itemize}
+\item
+使用\verb|std::istreambuf_iterator|迭代器直接初始化一个std::vector（这也可以用于std::string）：
+
+\begin{cpp}
+std::vector<unsigned char> input;
+std::ifstream ifile("sample.bin", std::ios::binary);
+if(ifile.is_open())
+{
+    input = std::vector<unsigned char>(
+        std::istreambuf_iterator<char>(ifile),
+        std::istreambuf_iterator<char>());
+    ifile.close();
+}
+\end{cpp}
+
+\item
+使用\verb|std::istreambuf_iterator|迭代器给一个std::vector赋值：
+
+\begin{cpp}
+std::vector<unsigned char> input;
+std::ifstream ifile("sample.bin", std::ios::binary);
+if(ifile.is_open())
+{
+    ifile.seekg(0, std::ios_base::end);
+    auto length = ifile.tellg();
+    ifile.seekg(0, std::ios_base::beg);
+    input.reserve(static_cast<size_t>(length));
+        input.assign(
+        std::istreambuf_iterator<char>(ifile),
+        std::istreambuf_iterator<char>());
+    ifile.close();
+}
+\end{cpp}
+
+\item
+使用\verb|std::istreambuf_iterator|迭代器和\verb|std::back_inserter|适配器将文件流的内容复制到vector中：
+
+\begin{cpp}
+std::vector<unsigned char> input;
+std::ifstream ifile("sample.bin", std::ios::binary);
+if(ifile.is_open())
+{
+    ifile.seekg(0, std::ios_base::end);
+    auto length = ifile.tellg();
+    ifile.seekg(0, std::ios_base::beg);
+    input.reserve(static_cast<size_t>(length));
+    std::copy(std::istreambuf_iterator<char>(ifile),
+              std::istreambuf_iterator<char>(),
+              std::back_inserter(input));
+    ifile.close();
+}
+\end{cpp}
+\end{itemize}
+
+然而，与这些替代方法相比，“How to do it...”部分中描述的方法是最快的。即使从面向对象的角度来看，这些替代方法可能看起来更具吸引力。
+

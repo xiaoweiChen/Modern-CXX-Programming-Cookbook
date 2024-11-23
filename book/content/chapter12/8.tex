@@ -1,0 +1,88 @@
+
+将各种范围适配器应用于范围（例如容器）的结果是一个复杂且难以输入或记忆的类型。通常，会使用 auto 关键字来指示链式调用适配器的结果类型。范围是惰性求值的，只有在对其进行迭代时，才会计算并产生结果。然而，经常需要将一个或多个范围适配器的应用结果存储在一个容器中，比如vector或map。C++23 之前，这需要显式的编码。但是，C++23 提供了一个范围转换函数，称为 std::ranges::to，使得这项任务变得简单，还允许在不同的容器之间进行转换。这个示例中，将介绍如何使用。
+
+\mySubsubsection{}{How to do it...}
+
+可以使用 std::ranges::to 范围转换函数将范围转换为容器：
+
+\begin{itemize}
+\item
+将范围转换为 std::vector：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+std::vector<int> primes = numbers |
+                          std::views::filter(is_prime) |
+                          std::ranges::to<std::vector>();
+std::ranges::copy(primes,
+                  std::ostream_iterator<int>(std::cout, " "));
+std::println("");
+std::string text{ "server=demo123;db=optimus" };
+auto parts = text |
+             std::views::lazy_split(';') |
+             std::ranges::to<std::vector<std::string>>();
+std::ranges::copy(parts,
+                  std::ostream_iterator<std::string>(std::cout, " "));
+std::println("");
+\end{cpp}
+
+\item
+将范围转换为映射类型，如 \verb|std::unordered_multimap|：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+std::vector<std::string> words{"one", "two", "three", "four"};
+auto zipped = std::views::zip(numbers, words) |
+              std::ranges::to<
+                std::unordered_multimap<int, std::string>>();
+for (auto const [number, word] : zipped)
+{
+    std::println("{} = {}", number, word);
+}
+\end{cpp}
+
+\item
+将范围转换为 std::string：
+
+\begin{cpp}
+std::string text{ "server=demo123;db=optimus" };
+std::string text2 = text |
+                    std::views::stride(3) |
+                    std::ranges::to<std::string>();
+std::println("{}", text2);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::ranges::to 范围转换函数从 C++23 开始在 <ranges> 头文件中可用（使用特性测试宏 \verb|__cpp_lib_ranges_to_container| 来检查是否支持）。
+
+尽管前面的例子显示了如何从一个范围转换到另一个范围，但 std::ranges::to 还可用于不同类型容器之间的转换，例如从数组到列表，或者从映射到成对的数组：
+
+\begin{cpp}
+std::vector<int> numbers{ 1, 1, 2, 3, 5, 8, 13 };
+std::list<int> list = numbers | std::ranges::to<std::list>();
+\end{cpp}
+
+编译器可能能够推断出容器元素的类型，例如在上述代码中，只指定了 std::list，而非 std::list<int>。但存在一些情况，编译器无法推断出类型，除非显式地提供了完整类型，否则会出现编译错误：
+
+\begin{cpp}
+std::map<int, std::string> m{ {1, "one"}, {2, "two"}, {3, "three"} };
+std::vector<std::pair<int, std::string>> words =
+    m | rg::to<std::vector<std::pair<int, std::string>>>();
+\end{cpp}
+
+当使用管道 (|) 语法时，圆括号是必需的；否则，会遇到编译错误（这些错误往往难以理解）：
+
+\begin{cpp}
+std::vector<int> v {1, 1, 2, 3, 5, 8};
+auto r = v | std::ranges::to<std::vector>;   // error
+\end{cpp}
+
+正确的语法如下：
+
+\begin{cpp}
+auto r = v | std::ranges::to<std::vector>();  // OK
+\end{cpp}
+
+

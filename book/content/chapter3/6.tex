@@ -1,0 +1,177 @@
+编写具有可变数量参数的函数，或可变数量成员的类型很有用。典型的例子包括像printf这样的函数，接受一个格式字符串和可变数量的参数，或者像tuple这样的类型。C++11之前，前者只能通过使用可变参数宏（只能编写类型不安全的函数）来实现，而后者根本不可能实现。C++11引入了可变参数模板，这是一种具有可变数量参数的模板，使得编写类型安全的具有可变数量参数的函数模板和具有可变数量成员的类模板成为可能。本示例中，将介绍如何编写函数模板。
+
+\mySubsubsection{}{Getting ready}
+
+具有可变数量参数的函数，也称为可变参数函数。具有可变数量参数的函数模板，也称为可变参数函数模板。了解如何编写可变参数函数模板，并不需要掌握C++的可变参数宏（如\verb|va_start|、\verb|va_end|、\verb|va_arg|、\verb|va_copy|和\verb|va_list|）的知识，但这可以作为一个很好的起点。
+
+之前的示例中，已经使用过可变参数模板，但本节将提供详细的解释。
+
+\mySubsubsection{}{How to do it...}
+
+为了编写可变参数函数模板，需要执行以下步骤：
+
+\begin{enumerate}
+\item
+如果可变参数函数模板的语义要求，定义具有固定数量参数的重载以结束编译时递归（参见下面代码中的[1]）。
+
+\item
+定义一个模板参数包，可以持有任意数量的参数，包括零个；这些参数可以是类型、非类型或模板（[2]）。
+
+\item
+定义一个函数参数包，可以持有任意数量的函数参数，包括零个；模板参数包和相应的函数参数包的大小相同。这个大小可以通过sizeof...操作符来确定[3]。
+
+\item
+展开参数包用实际提供的参数替换[4]。
+\end{enumerate}
+
+以下示例说明了上述所有要点，这是一个使用操作符+添加可变数量参数的可变参数函数模板：
+
+\begin{cpp}
+template <typename T>                 // [1] 具有固定数量参数的重载
+T add(T value) //     参数的数量
+{
+    return value;
+}
+template <typename T, typename... Ts> // [2] typename... Ts
+T add(T head, Ts... rest) // [3] Ts... rest
+{
+    return head + add(rest...);         // [4] rest...
+}
+\end{cpp}
+
+\mySubsubsection{}{How it work...}
+
+乍一看，前面的实现看起来像是递归，函数add()调用了自身，但其实是一种编译时递归，不会产生运行时递归和开销。编译器基于可变参数函数模板的使用，生成了几个具有不同参数数量的函数，所以只涉及到函数重载，而非递归。实现方式如同参数，可按递归的方式处理，并且有一个终止条件。
+
+前面的代码中，可以看到出以下关键部分：
+
+\begin{itemize}
+\item
+\verb|Typename... Ts|是一个模板参数包，表示可变数量的模板类型参数。
+
+\item
+\verb|Ts... rest|是一个函数参数包，表示可变数量的函数参数。
+
+\item
+\verb|rest...|是函数参数包的展开。
+\end{itemize}
+
+\begin{myNotic}
+省略号的位置在语法上并不重要。\verb|typename... Ts|、\verb|typename ... Ts| 和 \verb|typename ...Ts| 都等价。
+\end{myNotic}
+
+add(T head, Ts... rest)的参数中，head是参数列表的第一个元素，而...rest是列表中剩余参数的包（可能是零个或多个）。函数体中，rest...是函数参数包的展开，所以编译器用其元素按顺序替换了参数包。add()函数中，实际上是把第一个参数加到剩余参数之和上，这给人以递归处理的印象。当只剩下一个参数时，递归结束。此时调用具有单个参数的第一个add()重载，并返回其参数的值。
+
+基于这个函数模板add()的实现，可编写如下的代码：
+
+\begin{cpp}
+auto s1 = add(1, 2, 3, 4, 5); // s1 = 15
+auto s2 = add("hello"s, " "s, "world"s, "!"s); // s2 = "hello world!"
+\end{cpp}
+
+当编译器遇到add(1, 2, 3, 4, 5)时，会生成以下函数（注意arg1、arg2等不是编译器生成的实际名称）：
+
+\begin{cpp}
+int add(int head, int arg1, int arg2, int arg3, int arg4)
+{return head + add(arg1, arg2, arg3, arg4);}
+int add(int head, int arg1, int arg2, int arg3)
+{return head + add(arg1, arg2, arg3);}
+int add(int head, int arg1, int arg2)
+{return head + add(arg1, arg2);}
+int add(int head, int arg1)
+{return head + add(arg1);}
+int add(int value)
+{return value;}
+\end{cpp}
+
+\begin{myTip}
+使用GCC和Clang时，可以使用\verb|__PRETTY_FUNCTION__|宏打印函数的名字和签名。
+\end{myTip}
+
+通过在两个函数开头添加\verb|std::cout << __PRETTY_FUNCTION__ << std::endl|，当使用GCC或Clang时，运行代码会得到如下输出：
+
+\begin{itemize}
+\item
+使用GCC：
+
+\begin{shell}
+T add(T, Ts ...) [with T = int; Ts = {int, int, int, int}]
+T add(T, Ts ...) [with T = int; Ts = {int, int, int}]
+T add(T, Ts ...) [with T = int; Ts = {int, int}]
+T add(T, Ts ...) [with T = int; Ts = {int}]
+T add(T) [with T = int]
+\end{shell}
+
+\item
+使用Clang：
+
+\begin{shell}
+T add(T, Ts...) [T = int, Ts = <int, int, int, int>]
+T add(T, Ts...) [T = int, Ts = <int, int, int>]
+T add(T, Ts...) [T = int, Ts = <int, int>]
+T add(T, Ts...) [T = int, Ts = <int>]
+T add(T) [T = int]
+\end{shell}
+\end{itemize}
+
+由于这是一个函数模板，可以与支持操作符+的任何类型一起使用。另一个例子，add("hello"s, " "s, "world"s, "!"s)，生成了字符串"hello world!"。但\verb|std::basic_string|类型对操作符+有不同的重载，包括一个可以将字符连接成字符串的重载，所以应该也能写出如下代码：
+
+\begin{cpp}
+auto s3 = add("hello"s, ' ', "world"s, '!'); // s3 = "hello world!"
+\end{cpp}
+
+但这将导致编译器错误，如下所示（实际上用字符串"hello world!"替换了\verb|std::basic_string<char, std::char_traits<char>, std::allocator<char> >|，以简化表述）：
+
+\begin{shell}
+In instantiation of 'T add(T, Ts ...) [with T = char; Ts = {string, char}]':
+16:29:   required from 'T add(T, Ts ...) [with T = string; Ts = {char, string, char}]'
+22:46:   required from here
+16:29: error: cannot convert 'string' to 'char' in return
+In function 'T add(T, Ts ...) [with T = char; Ts = {string, char}]':
+17:1: warning: control reaches end of non-void function [-Wreturn-type]
+\end{shell}
+
+情况是编译器生成了如下所示的代码，其中返回类型与第一个参数的类型相同。然而，第一个参数要么是\verb|std::string|，要么是\verb|char|。第一个参数类型为char的情况下，返回值head+add(...)的类型为\verb|std::string|，与函数返回类型不匹配，也没有进行隐式转换：
+
+\begin{cpp}
+string add(string head, char arg1, string arg2, char arg3)
+{return head + add(arg1, arg2, arg3);}
+char add(char head, string arg1, char arg2)
+{return head + add(arg1, arg2);}
+string add(string head, char arg1)
+{return head + add(arg1);}
+char add(char value)
+{return value;}
+\end{cpp}
+
+可以通过修改可变参数函数模板，使其返回类型为auto而不是T来解决这个问题。这种情况下，返回类型总是从返回表达式推断出来。在本节中，所有情况下都是\verb|std::string|：
+
+\begin{cpp}
+template <typename T, typename... Ts>
+auto add(T head, Ts... rest)
+{
+    return head + add(rest...);
+}
+\end{cpp}
+
+还应补充一点，参数包可以在大括号初始化中出现，并且可以使用\verb|sizeof...|操作符确定其大小。此外，可变参数函数模板并不一定是编译时递归：
+
+\begin{cpp}
+template<typename... T>
+auto make_even_tuple(T... a)
+{
+    static_assert(sizeof...(a) % 2 == 0,
+    "expected an even number of arguments");
+    std::tuple<T...> t { a... };
+    return t;
+}
+auto t1 = make_even_tuple(1, 2, 3, 4); // OK
+// error: expected an even number of arguments
+auto t2 = make_even_tuple(1, 2, 3);
+\end{cpp}
+
+上面的代码中，定义了一个创建具有偶数个成员的元组的函数。首先使用\verb|sizeof...(a)|确保我们有偶数个参数，并通过生成编译器错误来断言。操作符\verb|sizeof...|可以与模板参数包和函数参数包一起使用。\verb|sizeof...(a)|和\verb|sizeof...(T)|会产生相同的值。然后，创建并返回一个元组。
+
+模板参数包T展开（使用\verb|T...|）成\verb|std::tuple|类模板的类型参数，而函数参数包a则被展开（使用\verb|a...|）成元组成员的大括号初始化值。
+
+

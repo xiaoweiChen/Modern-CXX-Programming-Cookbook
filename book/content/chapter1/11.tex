@@ -1,0 +1,103 @@
+
+当程序需要链接到多个翻译单元时，遇到命名冲突的概率就越大。在源文件中声明的、本意只为该翻译单元局部使用的函数或变量，可能与其他翻译单元中声明的类似函数或变量发生冲突。
+
+因为所有未声明为static的符号都具有外部链接性，其名称在整个程序中必须唯一。这个问题的传统C语言解决方法是将这些符号声明为static，从而将其链接性从外部改为内部，使得它们成为翻译单元的局部变量。另一种方法是在名字前加上所属模块或库的名字作为前缀。本示例中，将介绍C++对此问题的解决方案。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将介绍全局函数和静态函数的概念，以及变量、命名空间和翻译单元。希望读者们对这些概念有一个基本的理解。除此之外，还需要了解内部链接和外部链接的区别；这是本示例的关键。
+
+\mySubsubsection{}{How to do it...}
+
+需要将全局符号声明为static以避免链接问题的情况时，应该优先使用匿名命名空间：
+
+\begin{enumerate}
+\item
+在源文件中声明一个没有名字的命名空间。
+
+\item
+将全局函数或变量的定义放在匿名命名空间中，而不需要将其声明为static。
+\end{enumerate}
+
+以下示例展示了两个不同的翻译单元中定义的名为print()的函数；每个函数都在匿名命名空间中定义：
+
+\begin{cpp}
+// file1.cpp
+namespace
+{
+    void print(std::string const & message)
+    {
+        std::cout << "[file1] " << message << '\n';
+    }
+}
+void file1_run()
+{
+    print("run");
+}
+// file2.cpp
+namespace
+{
+    void print(std::string const & message)
+    {
+        std::cout << "[file2] " << message << '\n';
+    }
+}
+void file2_run()
+{
+    print("run");
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+当一个函数在一个翻译单元中声明时，具有外部链接性，所以来自两个不同翻译单元的同名函数会导致链接错误(不能有两个同名符号)。这个问题在C和C++中，通过将函数或变量声明为static来解决，从而改变其链接性从外部变为内部。这种情况下，其名字不再导出到翻译单元之外，链接问题也就得以避免。
+
+C++中的正确解决方案是使用匿名命名空间，像前面那样定义命名空间时，编译器会将其转换为如下形式：
+
+\begin{cpp}
+// file1.cpp
+namespace _unique_name_ {}
+using namespace _unique_name_;
+namespace _unique_name_
+{
+    void print(std::string message)
+    {
+        std::cout << "[file1] " << message << '\n';
+    }
+}
+void file1_run()
+{
+    print("run");
+}
+\end{cpp}
+
+首先，声明一个具有唯一名称的命名空间（这个名字是什么以及如何生成，取决于编译器的具体实现）。此时，命名空间为空，这一行的基本目的是建立命名空间。其次，using指令将\_unique\_name\_命名空间中的所有内容引入当前命名空间。最后，使用编译器生成的名称定义命名空间。
+
+通过在匿名命名空间中定义翻译单元局部的print()函数，仅具有局部可见性，但由于具有外部唯一的名称，不会因外部链接性而导致链接错误。
+
+匿名命名空间还在涉及模板的一个或许更为隐蔽的情况下发挥作用。C++11之前，模板非类型参数不能是具有内部链接性的名称，因此不能使用静态变量。匿名命名空间中的符号具有外部链接性，可以作为模板参数使用。尽管C++11放宽了对模板非类型参数的链接限制，但在最新版本的VC++编译器中，这一限制仍然存在：
+
+\begin{cpp}
+template <int const& Size>
+class test {};
+static int Size1 = 10;
+namespace
+{
+    int Size2 = 10;
+}
+test<Size1> t1;
+test<Size2> t2;
+\end{cpp}
+
+t1变量的声明会导致编译错误，非类型参数表达式Size1具有内部链接性。t2变量的声明是正确的，Size2具有外部链接性。（注意，使用Clang和GCC编译此代码段不会出错）
+
+
+
+
+
+
+
+
+
+
+

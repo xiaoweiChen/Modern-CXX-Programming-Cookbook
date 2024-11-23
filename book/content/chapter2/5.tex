@@ -1,0 +1,228 @@
+
+上一节介绍了存储字符和字符字符串的各种数据类型。之所以存在如此多的类型，是因为随着时间的发展出现了多种字符集。
+
+最常用的字符集是 ASCII 和 Unicode。自语言创建以来，所有编译器和目标平台都支持ASCII，但Unicode的支持在 Windows 和 Unix/Linux 系统上的发展速度和形式却各不相同。本示例中，将介绍如何将不同编码的文本输出到标准输出控制台。
+
+\mySubsubsection{}{How to do it...}
+
+要将文本写入标准输出控制台，可以使用以下方法：
+
+\begin{itemize}
+\item
+输出 ASCII 字符，可使用 std::cout:
+
+\begin{cpp}
+std::cout << "C++\n";
+\end{cpp}
+
+\item
+Linux 上输出 UTF-8 编码的 Unicode 字符，同样可使用 std::cout:
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+std::cout <{}< "Erling Håland\verb|\n|"; \\
+std::cout <{}< "Thomas Müller\verb|\n|"; \\
+std::cout <{}< "Στέφανος Τσιτσιπάς\verb|\n|"; \\
+std::string monkeys  = U"\includegraphics[width=0.07\textwidth]{content/chapter2/images/code-2.png}";\\
+std::cout <{}< monkeys <{}< '\verb|\n|';
+}
+\end{tcolorbox}
+
+对于使用 char8\_t 数据类型存储的 UTF-8 字符串，可以使用 std::cout，但必须将底层类型重新表示为 char 数组：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+std::cout <{}< reinterpret\_cast<const char*>(u8"Στέφανος Τσιτσιπάς\verb|\n|");
+}
+\end{tcolorbox}
+
+\item
+Windows 系统上输出 UTF-8 编码的 Unicode 字符，可使用 C++20 中的 char8\_t 字符和 std::u8string 字符串。之前的版本中，可以使用 char 和 std::string。需要在标准输出前调用 Windows API SetConsoleOutputCP(CP\_UTF8)：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+SetConsoleOutputCP(CP\_UTF8);
+std::cout <{}< reinterpret\_cast<const char*>(u8"Erling Håland\verb|\n|"); \\
+std::cout <{}< reinterpret\_cast<const char*>(u8"Thomas Müller\verb|\n|"); \\
+std::cout <{}< reinterpret\_cast<const char*>(u8"Στέφανος Τσιτσιπάς\verb|\n|"); \\
+std::cout <{}< reinterpret\_cast<const char*>(u8"\includegraphics[width=0.07\textwidth]{content/chapter2/images/code-2.png}\verb|\n|");
+}
+\end{tcolorbox}
+
+\myGraphic{0.5}{content/chapter2/images/3.png}{图2.3: 上述代码的输出}
+
+\item
+Windows 系统上输出 UTF-16 编码的 Unicode 字符，可使用 wchar\_t 字符和 std::wstring 字符串。输出前需要调用 \verb|_setmode(_fileno(stdout), _O_U16TEXT)|：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+auto mode = \_setmode(\_fileno(stdout), \_O\_U16TEXT); \\
+std::wcout <{}< L"Erling Håland\verb|\n|"; \\
+std::wcout <{}< L"Thomas Müller\verb|\n|"; \\
+std::wcout <{}< L"Στέφανος Τσιτσιπάς\verb|\n|"; \\
+\_setmode(\_fileno(stdout), mode);
+}
+\end{tcolorbox}
+
+\myGraphic{0.5}{content/chapter2/images/4.png}{图2.4: 上述代码片段的输出}
+
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+ASCII 编码半个世纪以来一直是最常见的字符编码格式，包括 128 个字符，包括英语的小写和大写字母、10 个十进制数字以及符号。该集合中的前 32 个字符是非打印字符，称为控制字符。C++ 语言完全支持 ASCII 字符集。可以使用 std::cout 将 ASCII 字符打印到标准输出。
+
+ ASCII 编码仅包括英文字母，为了支持其他语言和字母表进行了各种尝试。其中一个方法是代码页的概念。ASCII 编码只需要 7 位来编码 128 个字符，可以使用 8 位数据类型额外编码 128 个字符，所以索引 128–255 的字符可以映射到其他语言或字母表，这样的映射称为代码页，如 IBM 代码页、DOS 代码页、Windows 代码页等。 可以在 \url{https://en.wikipedia.org/wiki/Code_page}了解更多信息。下表列出了几个 Windows 代码页：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{代码页} & \textbf{名称}      & \textbf{支持的语言}           \\ \hline
+\endfirsthead
+%
+\endhead
+%
+1250 & Windows 中欧  & \begin{tabular}[c]{@{}l@{}}捷克语、波兰语、斯洛伐克语、匈牙利语、斯洛文尼亚语、\\塞尔维亚-克罗地亚语、罗马尼亚语、阿尔巴尼亚语 \end{tabular}                     \\ \hline
+1251 & Windows 西里尔       & \begin{tabular}[c]{@{}l@{}}俄语、白俄罗斯语、乌克兰语、保加利亚语、马其顿语、\\塞尔维亚语  \end{tabular}                                   \\ \hline
+1252 & Windows 西欧        & \begin{tabular}[c]{@{}l@{}}西班牙语、葡萄牙语、法语、德语、丹麦语、挪威语、瑞典语、\\芬兰语、冰岛语、法罗语等。\end{tabular} \\ \hline
+1253               & Windows 希腊      & 希腊语                                  \\ \hline
+1254               & Windows 土耳其    & 土耳其语                                 \\ \hline
+1255               & Windows 希伯来     & 希伯来语                                 \\ \hline
+1256               & Windows 阿拉伯     & 阿拉伯语、波斯语、乌尔都语、英语、法语 \\ \hline
+1257               & Windows 波罗的海     & 爱沙尼亚语、拉脱维亚语、立陶宛语           \\ \hline
+1258               & Windows 越南  & 越南语                             \\ \hline
+\end{longtable}
+
+\begin{center}
+表2.10: Windows 代码页的一部分
+\end{center}
+
+为了介绍其工作原理，看用一个代码片段举例说明。索引 224 或 0xE0（以十六进制表示）在不同的代码页中映射到不同的字符：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|l|l|l|l|l|}
+\hline
+\textbf{250} & \textbf{1251} & \textbf{1252} & \textbf{1253} & \textbf{1254} & \textbf{1255} & \textbf{1256} & \textbf{1257} & \textbf{1258} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+ŕ            & а             & à             & ΰ             & à             & \includegraphics[width=0.018\textwidth]{content/chapter2/images/table-1.png}            & à             & ą             & à             \\ \hline
+\end{longtable}
+
+\begin{center}
+表2.11: 不同 Windows 代码页中索引 224 对应的字符
+\end{center}
+
+\begin{myNotic}
+编码术语中，字符映射的数值称为代码点（codepoint）。例子中，224 是一个代码点，而 a、à 或 ą 是在不同代码页中映射到此代码点的具体字符。
+\end{myNotic}
+
+ Windows可以通过调用 SetConsoleOutputCP() 激活与运行进程关联的控制台的一个代码页。下面的代码片段显示了一个示例，可打印出从 1250 到 1258（前面列出的那些）所有代码页中映射到 224 代码点的字符：
+
+\begin{cpp}
+char c = 224;
+for (int codepage = 1250; codepage <= 1258; codepage++)
+{
+    SetConsoleOutputCP(codepage);
+    std::cout << c << ' ';
+}
+\end{cpp}
+
+运行此程序的输出结果如下一图像所示，可以看到这里打印的字符正是根据表2.11预期的结果。
+
+\myGraphic{0.5}{content/chapter2/images/5.png}{图2.5: 使用不同代码页打印代码点 224}
+
+虽然代码页提供了简单的切换方法，但并不能支持包含数百或数千个字符或象形文字的语言或书写系统，比如中文或埃及象形文字。为此，需要另一种标准，即 Unicode。这种编码标准旨在代表世界上大多数现行和过去的书写系统，以及其他符号，如近年来因短信而变得极其流行的表情符号。目前，Unicode 标准定义了近 150,000 个字符。
+
+Unicode 字符可以存储在几种编码中，最受欢迎的是 UTF-8 和 UTF-16。还有 UTF-32 和 GB18030；后者不是 Unicode 规范的一部分，但仅在中国使用，并完全实现了 Unicode。
+
+UTF-8 是一种与 ASCII 兼容的可变长度字符编码标准，使用 1、2、3 或 4 个字节来编码所有可表示的代码点。代码点使用得越多，其编码使用的字节就越少。ASCII 编码的 128 个代码点由单个字节表示，UTF-8 完全“向后”兼容 ASCII。所有其他 Unicode 代码点都使用多个字节编码：范围 128–2047 的代码点使用 2 个字节，范围 2048–65535 的代码点使用 3 个字节，范围 65536–1114111 的代码点使用 4 个字节。编码中的第一个字节称为引导字节，提供了编码代码点所使用的字节数的信息。所以，UTF-8 是一个非常高效的编码系统，也是万维网的首选，几乎所有网页都使用这种编码。
+
+UTF-16 也是一种可以编码所有 Unicode 代码点的可变长度字符编码，使用一个或两个 16 位代码单元，与 ASCII 不兼容。UTF-16 是 Windows 操作系统以及 Java 和 JavaScript 编程语言使用的编码。
+
+UTF-32 是一种较少使用的编码系统，是一种固定长度的编码，每个代码点使用 32 位。由于所有的 Unicode 代码点最多只需要 21 位，前导的 11 位总是 0。这使得其空间利用率很低，是其主要缺点。其主要优点是可以在一个序列中找到第 N 个代码点的时间相同，而像 UTF-8 和 UTF-16 可变长度编码查找的时间是线性的。
+
+编译器通常假定源文件使用 UTF-8 编码，GCC、Clang 和 MSVC 都是这种情况。
+
+Linux 发行版原生支持 UTF-8。所以可将字符串字面量写入输出控制台，如 "Στέφανος Τσιτσιπάς"。因为终端支持 UTF-8，会得到预期的结果：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+std::cout <{}< "Στέφανος Τσιτσιπάς";
+}
+\end{tcolorbox}
+
+另外，直接的宽字符串如 L"Στέφανος Τσιτσιπάς" 并不能立即生效。为了得到预期的结果，需要设置一个区域对象。默认的 C 区域不知道如何将宽字符转换为 UTF-8。为了实现这一转换，需要另一个区域。这里有两个选项：
+
+\begin{itemize}
+\item
+初始化一个与环境配置相匹配的区域对象，通常支持 UTF-8：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+std::locale utf8(""); \\
+std::wcout.imbue(utf8); \\
+std::wcout <{}< L"Στέφανος Τσιτσιπάς\verb|\n|";
+}
+\end{tcolorbox}
+
+\item
+使用特定的区域初始化区域实例，比如美国英语：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+std::locale utf8("en\_US.UTF-8"); \\
+std::wcout.imbue(utf8); \\
+std::wcout <{}< L"Στέφανος Τσιτσιπάς\verb|\n|";
+}
+\end{tcolorbox}
+
+\end{itemize}
+
+\begin{myNotic}
+区域在第7章中有详细讨论。
+\end{myNotic}
+
+Windows 命令提示符 (cmd.exe) 不支持 UTF-8，Windows 10 添加了一个名为“使用 Unicode UTF-8 提供全球语言支持”的测试功能，深藏于区域设置中。而且目前报告表示，这可能会阻止某些应用程序正常工作。要向命令提示符写入 UTF-8 内容，首先调用 SetConsoleOutputCP() 设置正确的代码页，并传递 CP\_UTF8 作为参数（或者其数值 65001）：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+SetConsoleOutputCP(CP\_UTF8); \\
+std::cout <{}< reinterpret\_cast<const char*>(u8"Erling Håland\verb|\n|"); \\
+std::cout <{}< reinterpret\_cast<const char*>(u8"Thomas Müller\verb|\n|"); \\
+std::cout <{}< reinterpret\_cast<const char*>(u8"Στέφανος Τσιτσιπάς\verb|\n|"); \\
+td::u8string monkeys = u8"\includegraphics[width=0.07\textwidth]{content/chapter2/images/code-2.png}";\\
+std::cout <{}< reinterpret\_cast<const char*>(monkeys.c\_str());
+}
+\end{tcolorbox}
+
+输出 UTF-16需要调用 \verb|_setmode()|（<io.h>）设置（标准输出控制台）转换模式为 UTF-16，需要设置 \verb|_O_U16TEXT| 参数。函数返回先前的转换模式，以便在写入所需内容后恢复转换模式。
+
+使用\verb|_O_TEXT| 设置文本模式（输入时 CR-LF 组合会转换成单一的 LF，输出时 LF 字符会转换成 CR-LF）：
+
+\begin{tcolorbox}[ breakable,colback = blue!5!white, colframe=black!7!white]
+\scriptsize{
+auto mode = \_setmode(\_fileno(stdout), \_O\_U16TEXT); \\
+std::wcout <{}< L"Erling Håland\verb|\n|"; \\
+std::wcout <{}< L"Thomas Müller\verb|\n|"; \\
+std::wcout <{}< L"Στέφανος Τσιτσιπάς\verb|\n|"; \\
+\_setmode(\_fileno(stdout), mode);
+}
+\end{tcolorbox}
+
+\begin{myNotic}
+为了能正确输出，命令提示符应用程序需要使用一种真型字体，如 Lucida Console 或 Consolas，而不是只支持 ASCII 的光栅字体。
+\end{myNotic}
+
+从 Windows 10 开始，Windows 提供了一个新的终端应用程序——Windows Terminal，内置支持 UTF-8。以下代码无需先调用 SetConsoleOutputCP() 就能输出预期结果：
+
+\begin{cpp}
+std::cout << reinterpret_cast<const char*>(u8"Erling Håland\n");
+\end{cpp}
+
+与其他编程语言不同，对 Unicode 的支持并不是 C++ 的强项。本节提供了在控制台应用程序中使用 Unicode 的基础知识。实践中，事情可能会变得更加复杂，需要额外的支持。为了更深入地了解这一主题，建议查阅更多的(在线)资料。

@@ -1,0 +1,180 @@
+C++17 标准的一个重要补充是文件系统库，能够在层次化的文件系统（如 Windows 或 POSIX 文件系统）中处理路径、文件和目录。这个标准库是基于 boost.filesystem 库开发的。接下来的几个示例中，将探索该库的功能，这些功能能够对文件和目录进行操作，如创建、移动或删除，同时也包括查询属性和搜索。首先，了解这个库如何对路径进行处理。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将主要考虑使用 Windows 路径的例子。附带的代码中，所有示例都有 Windows 和 POSIX 的替代方案。
+
+文件系统库位于 std::filesystem 命名空间中，<filesystem> 头文件中。为了简化代码，将在所有示例中使用以下命名空间别名：
+
+\begin{cpp}
+namespace fs = std::filesystem;
+\end{cpp}
+
+文件系统组件（文件、目录、硬链接或软链接）的路径由 path 类型表示。
+
+\mySubsubsection{}{How to do it...}
+
+以下是路径上最常见的操作列表：
+
+\begin{itemize}
+\item
+使用构造函数、赋值操作符或 assign() 方法创建路径：
+
+\begin{cpp}
+// Windows
+auto path = fs::path{"C:\\Users\\Marius\\Documents"};
+// POSIX
+auto path = fs::path{ "/home/marius/docs" };
+\end{cpp}
+
+\item
+使用成员操作符 /=、非成员操作符 / 或 append() 添加包含目录分隔符的元素到路径：
+
+\begin{cpp}
+path /= "Book";
+path = path / "Modern" / "Cpp";
+path.append("Programming");
+// Windows: C:\Users\Marius\Documents\Book\Modern\Cpp\Programming
+// POSIX:   /home/marius/docs/Book/Modern/Cpp/Programming
+\end{cpp}
+
+\item
+使用成员操作符 +=、非成员操作符 + 或 concat() 方法连接元素到路径，而不包括目录分隔符：
+
+\begin{cpp}
+auto path = fs::path{ "C:\\Users\\Marius\\Documents" };
+path += "\\Book";
+path.concat("\\Modern");
+// path = C:\Users\Marius\Documents\Book\Modern
+\end{cpp}
+
+\item
+使用成员函数如 \verb|root_name()|, \verb|root_dir()|, filename(), stem(), extension() 等将路径的元素分解为其组成部分，如根目录名、根目录、父路径、文件名、扩展名等（所有这些都在以下示例中展示）：
+
+\begin{cpp}
+auto path =
+    fs::path{"C:\\Users\\Marius\\Documents\\sample.file.txt"};
+std::cout
+    << "root: "        << path.root_name() << '\n'
+    << "root dir: "    << path.root_directory() << '\n'
+    << "root path: "   << path.root_path() << '\n'
+    << "rel path: "    << path.relative_path() << '\n'
+    << "parent path: " << path.parent_path() << '\n'
+    << "filename: "    << path.filename() << '\n'
+    << "stem: "        << path.stem() << '\n'
+    << "extension: "   << path.extension() << '\n';
+\end{cpp}
+
+\item
+使用成员函数如 \verb|has_root_name()|, \verb|has_root_directory()|, \verb|has_filename()|, \verb|has_stem()| 和 \verb|has_extension()| 查询路径是否存在（所有这些都在以下示例中展示）：
+
+\begin{cpp}
+auto path =
+    fs::path{"C:\\Users\\Marius\\Documents\\sample.file.txt"};
+std::cout
+    << "has root: "        << path.has_root_name() << '\n'
+    << "has root dir: "    << path.has_root_directory() << '\n'
+    << "has root path: "   << path.has_root_path() << '\n'
+    << "has rel path: "    << path.has_relative_path() << '\n'
+    << "has parent path: " << path.has_parent_path() << '\n'
+    << "has filename: "    << path.has_filename() << '\n'
+    << "has stem: "        << path.has_stem() << '\n'
+    << "has extension: "   << path.has_extension() << '\n';
+\end{cpp}
+
+\item
+检查路径是相对的还是绝对的：
+
+\begin{cpp}
+auto path2 = fs::path{ "marius\\temp" };
+std::cout
+    << "absolute: " << path1.is_absolute() << '\n'
+    << "absolute: " << path2.is_absolute() << '\n';
+\end{cpp}
+
+\item
+使用 \verb|replace_filename()| 和 \verb|remove_filename()| 修改路径的文件名部分，使用 \verb|replace_extension()| 修改扩展名部分：
+
+\begin{cpp}
+auto path =
+    fs::path{"C:\\Users\\Marius\\Documents\\sample.file.txt"};
+path.replace_filename("output");
+path.replace_extension(".log");
+// path = C:\Users\Marius\Documents\output.log
+path.remove_filename();
+// path = C:\Users\Marius\Documents
+\end{cpp}
+
+\item
+将目录分隔符转换为系统的分隔符：
+
+\begin{cpp}
+// Windows
+auto path = fs::path{"Users/Marius/Documents"};
+path.make_preferred();
+// path = Users\Marius\Documents
+// POSIX
+auto path = fs::path{ "\\home\\marius\\docs" };
+path.make_preferred();
+// path = /home/marius/docs
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+std::filesystem::path 类型创建了文件系统组件的路径。但仅处理语法，并不验证路径所表示的组件（如文件或目录）的存在。
+
+该库定义了一种可移植的、通用的路径语法，可以适应各种文件系统，如 POSIX 或 Windows，包括 Microsoft Windows 的通用命名约定（UNC）格式。有几个关键方面会有所不同：
+
+\begin{itemize}
+\item
+POSIX 系统有一个单一的树状结构，没有根名称，有一个称为 / 的单一根目录，以及单一的当前目录。此外，使用 / 作为目录分隔符。路径表示为以空字符终止的 UTF-8 编码的 char 字符串。
+
+\item
+Windows 系统有多个树状结构，每个目录树都有一个根名称（如 C:）、一个根目录（如 \verb||）和一个当前目录（如 \verb|C:\Windows\System32|）。路径表示为以空字符终止的 UTF-16 编码的宽字符字符串。
+\end{itemize}
+
+\begin{myNotic}
+不应该跨不同系统混合路径格式。虽然 Windows 可以处理 POSIX 路径，但反之则不然。请使用特定于每个系统的路径格式。此外，可以使用文件系统::path 功能，如操作符 /= 和 append() 函数，以及 \verb|preferred_separator| 静态成员，以可移植的方式构建路径。
+\end{myNotic}
+
+根据文件系统库定义的路径名具有以下语法：
+
+\begin{itemize}
+\item
+可选的根名称（如 C: 或 //localhost）
+
+\item
+可选的根目录
+
+\item
+零个或多个文件名（可以指代文件、目录、硬链接或符号链接）或目录分隔符
+\end{itemize}
+
+有两个特殊的文件名可识别：单点（.），表示当前目录；双点（..），表示父目录。目录分隔符可以重复出现，在这种情况下被视为单个分隔符（换句话说，/home////docs 与 /home/marius/docs 相同）。一个没有冗余当前目录名（.）、没有冗余父目录名（..）且没有冗余目录分隔符的路径被认为是处于规范化形式。
+
+上一节介绍的路径操作是最常见的路径操作，实现还定义了查询和修改方法、迭代器、非成员比较操作符等。
+
+以下示例遍历路径的各个部分，并将其输出到控制台：
+
+\begin{cpp}
+auto path =
+    fs::path{ "C:\\Users\\Marius\\Documents\\sample.file.txt" };
+for (auto const & part : path)
+{
+    std::cout << part << '\n';
+}
+\end{cpp}
+
+以下是该示例的结果:
+
+\begin{shell}
+C:
+Users
+Marius
+Documents
+sample.file.txt
+\end{shell}
+
+sample.file.txt 是文件名，这是从最后一个目录分隔符到路径结尾的部分，是给定路径上调用成员函数 filename() 会返回的内容。该文件的扩展名为 .txt，这是由成员函数 extension() 返回的字符串。为了获取不带扩展名的文件名，还有一个叫做 stem() 的成员函数可用，该方法返回的字符串是 sample.file。对于所有这些方法，以及所有的其他分解方法，都有一个同名且以 \verb|has_| 为前缀的对应查询方法，如 \verb|has_filename()|, \verb|has_stem()| 和 \verb|has_extension()|。所有这些方法都返回一个 bool 值，以表明路径是否具有相应的部分。
+

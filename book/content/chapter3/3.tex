@@ -1,0 +1,177 @@
+
+前一节中，介绍了如何编写lambda表达式并将其与标准算法一起使用。C++中lambda是对未命名函数对象的语法糖，这些函数对象是实现了调用操作符的类。但就像其他函数一样，也可以用模板来实现。C++14引入了通用lambda，这种lambda不需要为其参数指定实际类型，而是使用auto说明符。虽然没有以这个名字来称呼，但通用lambda实际上是lambda模板。在希望使用相同的lambda，但带有不同类型的参数的情况下非常有用。此外，C++20标准更进一步，支持明确地定义模板lambda，有助于解决一些通用lambda难以处理的情况。
+
+\mySubsubsection{}{Getting ready}
+
+建议继续阅读本节之前先阅读前一节的内容，以熟悉C++中的lambda表达式。
+
+\mySubsubsection{}{How to do it...}
+
+C++14起，可以编写通用lambda：
+
+\begin{itemize}
+\item
+使用auto说明符代替lambda表达式参数的实际类型
+
+\item
+需要使用多个仅因参数类型不同的lambda时
+\end{itemize}
+
+下面的例子展示了一个通用lambda与std::accumulate()算法一起使用，首先是整数vector，然后是字符串vector：
+
+\begin{cpp}
+auto numbers =
+    std::vector<int>{0, 2, -3, 5, -1, 6, 8, -4, 9};
+using namespace std::string_literals;
+auto texts =
+    std::vector<std::string>{"hello"s, " "s, "world"s, "!"s};
+auto lsum = [](auto const s, auto const n) {return s + n;};
+auto sum = std::accumulate(
+    std::begin(numbers), std::end(numbers), 0, lsum);
+    // sum = 22
+auto text = std::accumulate(
+    std::begin(texts), std::end(texts), ""s, lsum);
+    // sum = "hello world!"s
+\end{cpp}
+
+C++20起可以编写模板lambda：
+
+\begin{itemize}
+\item
+通过在捕获子句后面使用尖括号中的模板参数列表（例如<template T>）
+
+\item
+当希望：
+
+\begin{itemize}
+\item
+仅限于某些类型使用通用lambda，比如容器，或是满足某个概念的类型。
+
+\item
+确保通用lambda的两个或更多参数确实具有相同的类型。
+
+\item
+获取通用参数的类型，例如：可以创建该类型的实例，调用静态方法，或使用其迭代器类型。
+
+\item
+通用lambda中执行完美转发。
+\end{itemize}
+\end{itemize}
+
+下面的例子展示了只能使用std::vector调用的模板lambda：
+
+\begin{cpp}
+std::vector<int> vi { 1, 1, 2, 3, 5, 8 };
+auto tl = []<typename T>(std::vector<T> const& vec)
+{
+    std::cout << std::size(vec) << '\n';
+};
+tl(vi); // OK, prints 6
+tl(42); // error
+\end{cpp}
+
+\mySubsubsection{}{How it work...}
+
+上一节的第一个例子中，定义了一个命名lambda表达式——赋值给变量的lambda表达式。然后，这个变量可作为参数传递给std::accumulate()函数。
+
+这个通用算法接受定义了范围的开始和结束迭代器，累加的初始值，以及一个旨在将范围内的每个值累加到总数上的函数。这个函数接收一个表示当前累加值的第一个参数，和一个表示要累加到总数上的当前值的第二个参数，并返回新累加值。请注意，这里没有使用加法这个词，因为其不仅限于加法，还可以用于计算乘积、连接或其他聚合值的操作。
+
+这个例子中的两次std::accumulate()调用几乎相同；只有参数类型不同：
+
+\begin{itemize}
+\item
+第一次调用中，传递的是指向整数范围的迭代器（来自vector<int>），0作为初始和，以及一个将两个整数相加并返回加和的lambda。这会产生范围中所有整数的总和；这个例子中，结果是22。
+
+\item
+第二次调用中，传递的是指向字符串范围的迭代器（来自vector<string>），空字符串作为初始值，以及一个将两个字符串连接起来并返回结果的lambda。这会产生一个包含范围内所有字符串依次连接的结果；这个例子中，结果是hello world!。
+\end{itemize}
+
+尽管通用lambda可以在调用的地方匿名定义，但这样做并不合理，因为通用lambda的主要用途（正如前面提到的，是一个lambda表达式模板）是为了重用。
+
+定义这个lambda表达式后，可多次调用std::accumulate()。并未指定lambda参数的具体类型（如int或std::string），而是使用了auto说明符，让编译器自行推断。
+
+遇到具有auto说明符参数类型的lambda表达式时，编译器会生成一个具有调用操作符模板的匿名函数对象。对于本例中的通用lambda表达式：
+
+\begin{cpp}
+struct __lambda_name__
+{
+    template<typename T1, typename T2>
+    auto operator()(T1 const s, T2 const n) const { return s + n; }
+    __lambda_name__(const __lambda_name__&) = default;
+    __lambda_name__(__lambda_name__&&) = default;
+    __lambda_name__& operator=(const __lambda_name__&) = delete;
+    ~__lambda_name__() = default;
+};
+\end{cpp}
+
+调用操作符是一个模板，每个使用了auto说明符的lambda参数都有一个类型参数。操作符的返回类型也是auto，所以编译器将根据返回值的类型进行推断。这个操作符模板将根据编译器在使用通用lambda的上下文，识别出的实际类型进行实例化。
+
+C++20的模板lambda是C++14通用lambda的改进，使某些场景更容易处理。上一节的第二个例子中，其中lambda的使用限制为std::vector类型的参数。另一个例子想确保lambda的两个参数有相同的类型。在C++20之前，这很难做到，但有了模板lambda，就变得非常容易：
+
+\begin{cpp}
+auto tl = []<typename T>(T x, T y)
+{
+    std::cout << x << ' ' << y << '\n';
+};
+tl(10, 20);   // OK
+tl(10, "20"); // error
+\end{cpp}
+
+另一个需要模板lambda的情况是，需要知道参数的类型，以便创建该类型的实例或调用其静态成员。对于通用lambda，解决方案如下：
+
+\begin{cpp}
+struct foo
+{
+    static void f() { std::cout << "foo\n"; }
+};
+auto tl = [](auto x)
+{
+    using T = std::decay_t<decltype(x)>;
+    T other;
+    T::f();
+};
+tl(foo{});
+\end{cpp}
+
+要求使用\verb|std::decay_t|和decltype。decltype是一个类型说明符，产生指定表达式的类型，主要用于编写模板。另一方面，std::decay是从\verb|<type_traits>|中提供的工具，执行与按值传递函数参数时相同类型的转换。
+
+C++20中，同样的lambda可以简化为如下形式：
+
+\begin{cpp}
+auto tl = []<typename T>(T x)
+{
+    T other;
+    T::f();
+};
+\end{cpp}
+
+类似的情况发生在通用lambda中执行完美转发时，这需要使用decltype来确定参数的类型：
+
+\begin{cpp}
+template <typename ...T>
+void foo(T&& ... args)
+{ /* ... */ }
+auto tl = [](auto&& ...args)
+{
+    return foo(std::forward<decltype(args)>(args)...);
+};
+tl(1, 42.99, "lambda");
+\end{cpp}
+
+使用模板lambda，可以将其重写为更加简单的方式：
+
+\begin{cpp}
+auto tl = []<typename ...T>(T && ...args)
+{
+    return foo(std::forward<T>(args)...);
+};
+\end{cpp}
+
+从这些例子中可以看出，模板lambda是对通用lambda的改进，使得处理本示例中提到的场景变得更加容易。
+
+
+
+
+
+
+

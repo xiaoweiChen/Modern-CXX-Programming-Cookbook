@@ -1,0 +1,143 @@
+
+编程中，经常发现自己编写重复的 if...else 语句（或等效的 switch 语句），这些语句执行相似的操作，通常只有细微的变化，而且往往是通过复制粘贴再做少量修改来完成的。随着替代条件的数量增加，代码变得既难以阅读又难以维护。重复的 if...else 语句可以通过多种技术来替换，比如多态性。本示例中，将介绍如何使用函数映射来避免工厂模式中的 if...else 语句（工厂是一个用于创建其他实例的函数或对象）。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，会考虑以下问题：构建一个能够处理各种格式图像文件的系统，如位图、PNG、JPG 等等。显然，细节超出了这个实例的范围；关注的部分是创建处理各种图像格式的对象。为此，将考虑以下类层次结构：
+
+\begin{cpp}
+class Image {};
+class BitmapImage : public Image {};
+class PngImage    : public Image {};
+class JpgImage    : public Image {};
+\end{cpp}
+
+另一方面，定义一个工厂类的接口，可以创建上述类的实例，以及一个使用 if...else 语句的典型实现：
+
+\begin{cpp}
+struct IImageFactory
+{
+    virtual std::unique_ptr<Image> Create(std::string_view type) = 0;
+};
+struct ImageFactory : public IImageFactory
+{
+    std::unique_ptr<Image>
+    Create(std::string_view type) override
+    {
+        if (type == "bmp")
+            return std::make_unique<BitmapImage>();
+        else if (type == "png")
+            return std::make_unique<PngImage>();
+        else if (type == "jpg")
+            return std::make_unique<JpgImage>();
+        return nullptr;
+    }
+};
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+按照以下步骤重构前面显示的工厂以避免使用 if...else 语句：
+
+\begin{enumerate}
+\item
+实现工厂接口：
+
+\begin{cpp}
+struct ImageFactory : public IImageFactory
+{
+    std::unique_ptr<Image> Create(std::string_view type) override
+    {
+        // continued with 2. and 3.
+    }
+};
+\end{cpp}
+
+\item
+定义一个map，其中键是创建对象的类型，值是一个创建这些实例的函数：
+
+\begin{cpp}
+static std::map<
+    std::string,
+    std::function<std::unique_ptr<Image>()>> mapping
+{
+    { "bmp", []() {return std::make_unique<BitmapImage>(); } },
+    { "png", []() {return std::make_unique<PngImage>(); } },
+    { "jpg", []() {return std::make_unique<JpgImage>(); } }
+};
+\end{cpp}
+
+\item
+要创建一个对象，可以在map中查找类型，如果找到了，就使用与之关联的函数来创建该类型的实例：
+
+\begin{cpp}
+auto it = mapping.find(type.data());
+if (it != mapping.end())
+    return it->second();
+return nullptr;
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+最初的实现中，重复的 if...else 语句非常相似——检查类型参数的值，并创建适当图像类的实例。如果要检查的参数是整数类型（例如，枚举类型），if...else 语句序列也可以用 switch 语句的形式编写：
+
+\begin{cpp}
+auto factory = ImageFactory{};
+auto image = factory.Create("png");
+\end{cpp}
+
+无论是使用 if...else 语句还是 switch，重构以避免重复检查都相对简单。重构后的代码中，使用了一个键类型为 std::string 的映射来表示类型，即图像格式的名称。值是一个 \verb|std::function<std::unique_ptr<Image>()>|。这是一个接受无参数并返回 \verb|std::unique_ptr<Image>|（派生类的 \verb|unique_ptr| 可以隐式转换为基类的 \verb|unique_ptr|）的函数的包装器。
+
+现在有了这个创建对象的函数映射，工厂的实际实现变得更加简单；在映射中检查要创建的对象类型，如果存在，则使用映射中的相应值作为实际创建对象的函数，或者如果对象类型不在映射中则返回 nullptr。
+
+这种重构对于用户代码来说是透明的，因为使用工厂的方式没有变化。另一方面，这种方法需要更多的内存来处理静态映射，这在某些应用类别中，如物联网(IoT)，可能很重要。这里展示的例子相对简单，目的是为了说明概念。实际中，可能需要以不同的方式创建对象，比如使用不同数量和类型的参数。然而，这不是重构实现所特有的，使用 if...else/switch 语句的解决方案也需要考虑到这一点。实践中，使用 if...else 语句解决问题的方案也应适用于映射。
+
+\mySubsubsection{}{There's more...}
+
+前面的实现中，映射是虚拟函数的局部静态变量，但也可以是类的成员甚至全局变量。下面的实现将映射定义为类的静态成员。对象不是根据格式名创建的，而是根据 typeid 操作符返回类型的信息创建：
+
+\begin{cpp}
+struct IImageFactoryByType
+{
+    virtual std::unique_ptr<Image> Create(
+    std::type_info const & type) = 0;
+};
+struct ImageFactoryByType : public IImageFactoryByType
+{
+    std::unique_ptr<Image> Create(std::type_info const & type)
+    override
+    {
+        auto it = mapping.find(&type);
+        if (it != mapping.end())
+        return it->second();
+        return nullptr;
+    }
+private:
+    static std::map<
+    std::type_info const *,
+    std::function<std::unique_ptr<Image>()>> mapping;
+};
+std::map<
+std::type_info const *,
+std::function<std::unique_ptr<Image>()>> ImageFactoryByType::mapping
+{
+    {&typeid(BitmapImage),[](){
+            return std::make_unique<BitmapImage>();}},
+    {&typeid(PngImage),   [](){
+            return std::make_unique<PngImage>();}},
+    {&typeid(JpgImage),   [](){
+            return std::make_unique<JpgImage>();}}
+};
+\end{cpp}
+
+用户代码略有不同，因为传递的是由 typeid 操作符返回的值，而不是表示要创建的类型的名称，例如 PNG，传递的是 typeid(PngImage)：
+
+\begin{cpp}
+auto factory = ImageFactoryByType{};
+auto movie = factory.Create(typeid(PngImage));
+\end{cpp}
+
+这种替代方法更加健壮，因为映射的键不是字符串，后者更容易出错。本示例提出了一种模式作为解决常见问题的方案，而不是具体的实现。就像大多数模式一样，可以有多种实现方式，可选择最适合特定上下文的方法。
+
+

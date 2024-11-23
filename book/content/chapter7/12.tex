@@ -1,0 +1,237 @@
+
+
+本章中，已经探讨了文件系统库提供的许多功能，例如：处理路径、对文件和目录进行操作（创建、移动、重命名、删除等），以及查询或修改属性。当处理文件系统时，另一个有用的功能是遍历目录的内容。文件系统库提供了两种目录迭代器，一个为 \verb|directory_iterator| 的迭代器，迭代目录的内容，另一个是 \verb|recursive_directory_iterator| 的迭代器，递归地迭代目录及其子目录的内容。本示例中，将介绍如何使用。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将使用以下目录结构：
+
+\begin{shell}
+test/
+|--data/
+|   |--input.dat
+|   \--output.dat
+|--file_1.txt
+|--file_2.txt
+\--file_3.log
+\end{shell}
+
+接下来的代码中，将引用以下函数：
+
+\begin{cpp}
+void print_line(std::string_view prefix,
+std::filesystem::path const& path)
+{
+    std::cout << prefix << path << '\n';
+}
+\end{cpp}
+
+本示例中，将处理文件系统路径并检查文件系统实例的属性。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下模式来枚举目录的内容：
+
+\begin{itemize}
+\item
+要仅迭代目录的内容而不递归访问其子目录，使用 \verb|directory_iterator|：
+
+\begin{cpp}
+void visit_directory(fs::path const & dir)
+{
+    if (fs::exists(dir) && fs::is_directory(dir))
+    {
+        for (auto const & entry : fs::directory_iterator(dir))
+        {
+            auto filename = entry.path().filename();
+            if (fs::is_directory(entry.status()))
+                print_line("[+]", filename);
+            else if (fs::is_symlink(entry.status()))
+                print_line("[>]", filename);
+            else if (fs::is_regular_file(entry.status()))
+                print_line(" ", filename);
+            else
+                print_line("[?]", filename);
+        }
+    }
+}
+\end{cpp}
+
+\item
+要迭代目录的所有内容，包括其子目录，当处理条目的顺序无关紧要时，使用 \verb|recursive_directory_iterator|：
+
+\begin{cpp}
+void visit_directory_rec(fs::path const & dir)
+{
+    if (fs::exists(dir) && fs::is_directory(dir))
+    {
+        for (auto const & entry :
+        fs::recursive_directory_iterator(dir))
+        {
+            auto filename = entry.path().filename();
+            if (fs::is_directory(entry.status()))
+                print_line("[+]", filename);
+            else if (fs::is_symlink(entry.status()))
+                print_line("[>]",filename);
+            else if (fs::is_regular_file(entry.status()))
+                print_line(" ",filename);
+            else
+                print_line("[?]",filename);
+        }
+    }
+}
+\end{cpp}
+
+\item
+以结构化的方式迭代目录的所有内容，包括其子目录，例如：遍历树结构。可以使用与第一个示例类似的函数，该函数使用 \verb|directory_iterator| 迭代目录的内容。但对于每个子目录，可递归地调用：
+
+\begin{cpp}
+void visit_directory_rec_ordered(
+fs::path const & dir,
+bool const recursive = false,
+unsigned int const level = 0)
+{
+    if (fs::exists(dir) && fs::is_directory(dir))
+    {
+        auto lead = std::string(level*3, ' ');
+        for (auto const & entry : fs::directory_iterator(dir))
+        {
+            auto filename = entry.path().filename();
+            if (fs::is_directory(entry.status()))
+            {
+                print_line(lead + "[+]", filename);
+                if(recursive)
+                    visit_directory_rec_ordered(entry, recursive,
+                level+1);
+            }
+            else if (fs::is_symlink(entry.status()))
+                print_line(lead + "[>]", filename);
+            else if (fs::is_regular_file(entry.status()))
+                print_line(lead + " ", filename);
+            else
+                print_line(lead + "[?]", filename);
+        }
+    }
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+\verb|directory_iterator| 和 \verb|recursive_directory_iterator| 都是输入迭代器，用于迭代目录。不同之处在于前者不会递归访问子目录，而后者正如其名称所暗示的那样，会递归访问。其行为有相似之处：
+
+\begin{itemize}
+\item
+迭代顺序未指定。
+
+\item
+每个目录条目只访问一次。
+
+\item
+特殊的路径点（.）和双点（..）会跳过。默认构造的迭代器是结束迭代器，两个结束迭代器总相等。
+
+\item
+当迭代超过最后一个目录条目后，会等于结束迭代器。
+
+\item
+标准没有规定在迭代器创建后，向迭代目录中添加或删除目录会发生什么。
+
+\item
+标准为 \verb|directory_iterator| 和 \verb|recursive_directory_iterator| 定义了非成员函数 begin() 和 end()，就可以在基于范围的 for 循环中使用这些迭代器。
+\end{itemize}
+
+两个迭代器都有重载的构造函数。其中，\verb|recursive_directory_iterator| 的某些构造函数重载接受 \verb|std::filesystem::directory_options| 类型的参数，该参数指定了迭代的选项：
+
+\begin{itemize}
+\item
+\verb|none|: 这是默认值，不指定内容。
+
+\item
+\verb|follow_directory_symlink|: 指定迭代应跟随符号链接，而非提供链接本身。
+
+\item
+\verb|skip_permission_denied|: 指定应忽略并跳过可能导致访问拒绝错误的目录。
+\end{itemize}
+
+两个目录迭代器指向的元素都是 \verb|directory_entry| 类型的。成员函数 \verb|path()| 返回此对象表示的文件系统对象的路径。可以通过成员函数 \verb|status()| 和 \verb|symlink_status()| （针对符号链接）获取文件系统实例的状态。
+
+前面的例子遵循了一个共同的模式：
+
+\begin{enumerate}
+\item
+验证要迭代的路径确实存在。
+
+\item
+使用基于范围的 for 循环迭代目录中的所有目录条目。
+
+\item
+根据迭代方式选择文件系统库中可用的两种目录迭代器之一。
+
+\item
+根据需求处理每个目录条目。
+\end{enumerate}
+
+例子中，只是将目录条目的名称打印到控制台。需要注意的是，目录内容以未指定的顺序迭代。如果想以结构化的方式处理内容，比如：显示缩进的子目录及其条目（这种特定情况下）或树形结构（其他类型的应用程序中），那么不合适使用 \verb|recursive_directory_iterator|。应该像上一节最后一个例子那样，使用 \verb|directory_iterator| 在迭代时对每个子目录递归调用一个函数。
+
+使用本示例开头呈现的目录结构（相对于当前路径），当使用递归迭代器时，会得到如下输出：
+
+\begin{cpp}
+visit_directory_rec(fs::current_path() / "test");
+\end{cpp}
+
+\begin{shell}
+[+]data
+    input.dat
+    output.dat
+    file_1.txt
+    file_2.txt
+    file_3.log
+\end{shell}
+
+另一方面，当使用第三个例子中的递归函数时，输出会按照子层级的顺序显示：
+
+\begin{cpp}
+visit_directory_rec_ordered(fs::current_path() / "test", true);
+\end{cpp}
+
+\begin{shell}
+[+]data
+        input.dat
+        output.dat
+    file_1.txt
+    file_2.txt
+    file_3.log
+\end{shell}
+
+\verb|visit_directory_rec()| 函数是非递归函数，使用 \verb|recursive_directory_iterator|，而 \verb|visit_directory_rec_ordered()| 函数是递归函数，使用 \verb|directory_iterator|。这个例子应该能区别这两种迭代器。
+
+\mySubsubsection{}{There's more...}
+
+在上一个示例中，还讨论了 \verb|file_size()| 函数，该函数返回文件的字节数。然而，如果指定的路径是一个目录，该函数将失败。为了确定目录的大小，需要递归地遍历目录的内容，检索常规文件或符号链接的大小，并将它们加在一起。
+
+\begin{cpp}
+std::uintmax_t dir_size(fs::path const & path)
+{
+    if (fs::exists(path) && fs::is_directory(path))
+    {
+        auto size = static_cast<uintmax_t>(0);
+        for (auto const & entry :
+        fs::recursive_directory_iterator(path))
+        {
+            if (fs::is_regular_file(entry.status()) ||
+            fs::is_symlink(entry.status()))
+            {
+                auto err = std::error_code{};
+                auto filesize = fs::file_size(entry, err);
+                if (!err)
+                    size += filesize;
+            }
+        }
+        return size;
+    }
+    return static_cast<uintmax_t>(-1);
+}
+\end{cpp}
+
+\verb|dir_size()| 函数返回目录中所有文件（递归地）的大小总和，或者在错误的情况下（路径不存在或不表示目录）返回 -1(作为 \verb|uintmax_t| 类型的值)。
+

@@ -1,0 +1,198 @@
+
+C++的类(class)具有特殊的成员（构造函数、析构函数和赋值操作符），这些成员可以由编译器默认实现，也可以由开发者提供。但默认实现的规则较为复杂，并可能导致一些问题。另一方面，开发者有时希望阻止对象以特定方式复制、移动或构造。
+
+C++11标准通过允许函数被删除或默认化简化了许多操作，具体方法将在下一节中介绍。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例，需要熟悉以下概念：
+
+\begin{itemize}
+\item
+特殊成员函数（默认构造函数、析构函数、拷贝构造函数、移动构造函数、复制赋值操作符和移动赋值操作符）
+
+\item
+复制概念（一个类型具备拷贝构造函数和复制赋值操作符，使得创建副本成为可能）
+
+\item
+移动概念（一个类型具备移动构造函数和移动赋值操作符，使得移动对象成为可能）
+\end{itemize}
+
+了解这些后，再来介绍默认和删除的特殊函数。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下语法来指定函数应该如何处理：
+
+\begin{itemize}
+\item
+要默认化一个函数，可使用=default代替函数体。只有编译器能够提供默认实现的特殊类成员函数，才能默认化：
+
+\begin{cpp}
+struct foo
+{
+    foo() = default;
+};
+\end{cpp}
+
+\item
+要删除一个函数，使用=delete代替函数体。可删除任何函数，包括非成员函数：
+
+\begin{cpp}
+struct foo
+{
+    foo(foo const &) = delete;
+};
+void func(int) = delete;
+\end{cpp}
+\end{itemize}
+
+使用默认化和删除函数可以实现各种设计目标，例如：
+
+\begin{itemize}
+\item
+实现一个不可复制且隐式不可移动的类型，声明拷贝构造函数和拷贝赋值操作符为删除：
+
+\begin{cpp}
+class foo_not_copyable
+{
+    public:
+    foo_not_copyable() = default;
+    foo_not_copyable(foo_not_copyable const &) = delete;
+    foo_not_copyable& operator=(foo_not_copyable const&) = delete;
+};
+\end{cpp}
+
+\item
+实现一个不可复制但可移动的类型，声明拷贝操作为删除并显式实现移动操作（并提供构造函数）：
+
+\begin{cpp}
+class data_wrapper
+{
+    Data* data;
+public:
+    data_wrapper(Data* d = nullptr) : data(d) {}
+    ~data_wrapper() { delete data; }
+    data_wrapper(data_wrapper const&) = delete;
+    data_wrapper& operator=(data_wrapper const &) = delete;
+    data_wrapper(data_wrapper&& other)
+    :data(std::move(other.data))
+    {
+        other.data = nullptr;
+    }
+    data_wrapper& operator=(data_wrapper&& other)
+    {
+        if (data != other.data))
+        {
+            delete data;
+            data = std::move(other.data);
+            other.data = nullptr;
+        }
+        return *this;
+    }
+};
+\end{cpp}
+
+\item
+为了确保函数仅与特定类型的对象一起调用，并且可能防止类型提升，提供函数的删除重载（下面的例子适用于独立函数，也适用于任何类成员函数）：
+
+\begin{cpp}
+template <typename T>
+void run(T val) = delete;
+void run(long val) {} // can only be called with long integers
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+类中可以有多个由编译器默认实现的特殊成员，包括默认构造函数、复制构造函数、移动构造函数、复制赋值、移动赋值和析构函数（关于移动语义的讨论，请参阅第9章）。如果没有实现它们，编译器会帮忙实现，以便在需要时，可以创建、移动、复制和销毁类的实例。但若显式地提供了这些特殊方法之一或多个，编译器将根据以下规则不再生成相应的函数：
+
+\begin{itemize}
+\item
+如果存在用户定义的构造函数，则不会默认生成默认构造函数。
+
+\item
+如果存在用户定义的虚析构函数，则不会生成默认析构函数。
+
+\item
+如果存在用户定义的移动构造函数或移动赋值操作符，则不会默认生成复制构造函数和复制赋值操作符。
+
+\item
+如果存在用户定义的复制构造函数、移动构造函数、复制赋值操作符、移动赋值操作符或析构函数，则不会默认生成移动构造函数和移动赋值操作符。
+
+\item
+如果存在用户定义的复制构造函数或析构函数，则会默认生成复制赋值操作符。
+
+\item
+如果存在用户定义的拷贝赋值操作符或析构函数，则会默认生成复制构造函数。
+\end{itemize}
+
+\begin{myNotic}
+上述列表中的最后两条规则是已弃用的规则，可能不再受主流编译器支持。
+\end{myNotic}
+
+有时候，开发者需要提供这些特殊成员的空实现或隐藏，避免类型实例以特定方式构造，比如：一个不可复制类型。传统模式是提供一个默认构造函数，并隐藏拷贝构造函数和拷贝赋值操作符，但显式定义的默认构造函数确保了该类不再视为简单类型，因此不再是普通的旧数据（POD）类型。这种情况下的一种替代方案是使用删除函数。
+
+当编译器在函数定义中遇到=default时，将提供默认实现。前面提到的特殊成员函数的规则仍然适用。如果函数是在类体外声明=default的，则必须内联：
+
+\begin{cpp}
+class foo
+{
+public:
+    foo() = default;
+    inline foo& operator=(foo const &);
+};
+inline foo& foo::operator=(foo const &) = default;
+\end{cpp}
+
+默认实现有几个好处，但不限于：
+
+\begin{itemize}
+\item
+可能比显式实现更高效。
+
+\item
+即使是空的非默认实现也认为是简单类型，这会影响类型的语义，使其变得不简单（因此，非POD）。
+
+\item
+帮助用户不必编写显式的默认实现，例如：存在用户定义的移动构造函数，则编译器将不再默认提供复制构造函数和复制赋值操作符。但可以显式地默认化它们，并请求编译器提供这些函数，这样就不必手动实现了。
+\end{itemize}
+
+当编译器在函数定义中遇到=delete时，将阻止调用该函数。即使函数被删除，在重载解析过程中仍会考虑该函数，只有当删除的函数是最佳匹配时，编译器才会生成错误。例如，通过为run()函数提供的先前定义的重载，只能用长整型调用。用其他类型（包括可以自动类型提升到长整型的int）作为参数的调用，将导致删除的重载称为最佳匹配的函数，所以编译器将报错：
+
+\begin{cpp}
+run(42);  // error, matches a deleted overload
+run(42L); // OK, long integer arguments are allowed
+\end{cpp}
+
+注意，先前声明的函数不能删除，=delete定义必须是转换单元中的第一个声明：
+
+\begin{cpp}
+void forward_declared_function();
+// ...
+void forward_declared_function() = delete; // error
+\end{cpp}
+
+类型中特殊成员函数的经验法则（也称为五法则），如果显式定义了复制构造函数、移动构造函数、复制赋值操作符、移动赋值操作符或析构函数，必须显式定义或默认化所有这些函数。
+
+用户定义的析构函数、复制构造函数和复制赋值操作符是必要的，各种情况下（如向函数传递参数）类型实例从副本构造。如果并非用户定义，编译器帮忙实现，但其默认实现可能有误。如果类型中会对资源进行管理，默认实现会进行浅拷贝，即只复制资源句柄（如指向对象的指针）的值，而非资源本身。这种情况下，用户定义的实现必须执行深拷贝，即复制资源。此时，移动构造函数和移动赋值操作符理想状态下应该存在，因为其代表了性能上的改进。缺少这两个函数并不会有什么错误，但会错过优化的机会。
+
+与五法则相对的是所谓的零法则：除非类型涉及资源所有权的管理，否则不应有自定义的析构函数、复制和移动构造函数，以及相应的复制和移动赋值操作符。
+
+设计类型时，应该遵循以下指导原则：
+
+\begin{itemize}
+\item
+管理资源的类型应该具有处理该资源所有权的单一职责，这样的类型必须遵循五法则并实现自定义的析构函数、复制/移动构造函数和复制/移动赋值操作符。
+
+\item
+不管理资源的类型不应该定义析构函数、复制/移动构造函数和复制/移动赋值操作符（因此遵循零法则）。
+\end{itemize}
+
+
+
+
+
+
+
+

@@ -1,0 +1,354 @@
+第一章中，了解了如何通过实现迭代器，以及独立的 begin() 和 end() 函数，来为自定义类型启用基于范围的 for 循环，这些函数返回指向自定义范围的第一个元素和最后一个元素之后的位置的迭代器。在那个示例中，提供的最小化迭代器实现并不符合标准迭代器的要求。这是因为它不能进行复制构造、赋值或递增。本示例中，将在此基础上进行扩展，并展示如何创建一个满足所有要求的随机访问迭代器。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例，应该熟悉标准定义的迭代器类型及其差异。其要求概述可以在 \url{http://www.cplusplus.com/reference/iterator/} 找到。
+
+为了举例说明如何编写随机访问迭代器，将使用第1章中 dummy\_array 类的一个变体。这是一个非常简单的数组概念：
+
+\begin{cpp}
+template <typename Type, size_t const SIZE>
+class dummy_array
+{
+    Type data[SIZE] = {};
+    public:
+    Type& operator[](size_t const index)
+    {
+        if (index < SIZE) return data[index];
+        throw std::out_of_range("index out of range");
+    }
+    Type const & operator[](size_t const index) const
+    {
+        if (index < SIZE) return data[index];
+        throw std::out_of_range("index out of range");
+    }
+    size_t size() const { return SIZE; }
+};
+\end{cpp}
+
+接下来部分中显示的所有代码，包括迭代器类、typedefs 以及 begin() 和 end() 函数，都将成为此类的一部分。
+
+本示例中，将查看一个使用以下 Tag 类型的例子：
+
+\begin{cpp}
+struct Tag
+{
+    int id;
+    std::string name;
+    Tag(int const id = 0, std::string const& name = ""s) :
+        id(id), name(name)
+    {}
+};
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+为了给 dummy\_array 类型提供可变和常量的随机访问迭代器，请将以下成员添加到该类中：
+
+\begin{itemize}
+\item
+迭代器类模板，以元素类型和数组大小为参数。该类必须有以下公共 typedefs，定义标准同义词：
+
+\begin{cpp}
+template <typename T, size_t const Size>
+class dummy_array_iterator
+{
+public:
+    using self_type         = dummy_array_iterator;
+    using value_type        = T;
+    using reference         = T&;
+    using pointer           = T* ;
+    using iterator_category = std::random_access_iterator_tag;
+    using difference_type   = ptrdiff_t;
+};
+\end{cpp}
+
+\item
+私有成员用于迭代器类——指向数组数据的指针和数组中的当前索引：
+
+\begin{cpp}
+private:
+    pointer ptr = nullptr;
+    size_t index = 0;
+\end{cpp}
+
+\item
+私有方法用于迭代器类，检查两个迭代器实例是否指向相同的数据数组：
+
+\begin{cpp}
+private:
+    bool compatible(self_type const & other) const
+    {
+        return ptr == other.ptr;
+    }
+\end{cpp}
+
+\item
+迭代器类的显式构造函数：
+
+\begin{cpp}
+public:
+    explicit dummy_array_iterator(pointer ptr,
+        size_t const index)
+    : ptr(ptr), index(index) { }
+\end{cpp}
+
+\item
+迭代器类成员以满足所有迭代器的通用要求——可复制构造、可赋值、可销毁、前缀和后缀可递增。这个实现中，后递增操作符是以前递增操作符为基础实现的，以避免代码重复：
+
+\begin{cpp}
+dummy_array_iterator(dummy_array_iterator const & o)
+    = default;
+dummy_array_iterator& operator=(dummy_array_iterator const & o)
+    = default;
+~dummy_array_iterator() = default;
+self_type & operator++ ()
+{
+    if (index >= Size)
+        throw std::out_of_range("Iterator cannot be incremented
+                                 past the end of range.");
+    ++index;
+    return *this;
+}
+self_type operator++ (int)
+{
+    self_type tmp = *this;
+    ++*this;
+    return tmp;
+}
+\end{cpp}
+
+\item
+迭代器类成员以满足输入迭代器的要求——可以测试相等性/不等性，可以作为右值解引用：
+
+\begin{cpp}
+bool operator== (self_type const & other) const
+{
+    assert(compatible(other));
+    return index == other.index;
+}
+bool operator!= (self_type const & other) const
+{
+    return !(*this == other);
+}
+reference operator* () const
+{
+    if (ptr == nullptr)
+    throw std::bad_function_call();
+    return *(ptr + index);
+}
+reference operator-> () const
+{
+    if (ptr == nullptr)
+    throw std::bad_function_call();
+    return *(ptr + index);
+}
+\end{cpp}
+
+\item
+迭代器类成员以满足前向迭代器的要求——默认可构造：
+
+\begin{cpp}
+dummy_array_iterator() = default;
+\end{cpp}
+
+\item
+迭代器类成员以满足双向迭代器的要求——可递减：
+
+\begin{cpp}
+self_type & operator--()
+{
+    if (index <= 0)
+        throw std::out_of_range("Iterator cannot be decremented
+                                 past the end of range.");
+    --index;
+    return *this;
+}
+self_type operator--(int)
+{
+    self_type tmp = *this;
+    --*this;
+    return tmp;
+}
+\end{cpp}
+
+\item
+迭代器类成员以满足随机访问迭代器的要求——支持算术加法和减法，与其他迭代器比较不等性，复合赋值，偏移解引用：
+
+\begin{cpp}
+self_type operator+(difference_type offset) const
+{
+    self_type tmp = *this;
+    return tmp += offset;
+}
+self_type operator-(difference_type offset) const
+{
+    self_type tmp = *this;
+    return tmp -= offset;
+}
+difference_type operator-(self_type const & other) const
+{
+    assert(compatible(other));
+    return (index - other.index);
+}
+bool operator<(self_type const & other) const
+{
+    assert(compatible(other));
+    return index < other.index;
+}
+bool operator>(self_type const & other) const
+{
+    return other < *this;
+}
+bool operator<=(self_type const & other) const
+{
+    return !(other < *this);
+}
+bool operator>=(self_type const & other) const
+{
+    return !(*this < other);
+}
+self_type & operator+=(difference_type const offset)
+{
+    if (index + offset < 0 || index + offset > Size)
+        throw std::out_of_range("Iterator cannot be incremented
+                                 past the end of range.");
+    index += offset;
+    return *this;
+}
+self_type & operator-=(difference_type const offset)
+{
+    return *this += -offset;
+}
+value_type & operator[](difference_type const offset)
+{
+    return (*(*this + offset));
+}
+value_type const & operator[](difference_type const offset)
+const
+{
+    return (*(*this + offset));
+}
+\end{cpp}
+
+\item
+向 \verb|dummy_array| 类添加 typedefs，为可变和常量迭代器定义同义词：
+
+\begin{cpp}
+public:
+    using iterator = dummy_array_iterator<Type, SIZE>;
+    using constant_iterator = dummy_array_iterator<Type const,
+                                                   SIZE>;
+\end{cpp}
+
+\item
+向 \verb|dummy_array| 类添加公共的 begin() 和 end() 函数，返回指向数组第一个元素和最后一个元素之后位置的迭代器：
+
+\begin{cpp}
+iterator begin()
+{
+    return iterator(data, 0);
+}
+iterator end()
+{
+    return iterator(data, SIZE);
+}
+constant_iterator begin() const
+{
+    return constant_iterator(data, 0);
+}
+constant_iterator end() const
+{
+    return constant_iterator(data, SIZE);
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+标准库定义了五种类别的迭代器：
+
+\begin{itemize}
+\item
+输入迭代器：是最简单的一类，只保证对单次遍历的顺序算法有效。递增后，之前的副本可能会失效。
+
+\item
+输出迭代器：基本上是输入迭代器，可以用来写入指向的元素。
+
+\item
+前向迭代器：这些可以读取（和写入）指向的元素。满足输入迭代器的要求，并且还必须支持默认构造，并在不使之前的副本失效的情况下支持多次遍历。
+
+\item
+双向迭代器：这些是前向迭代器，除此之外还支持递减，可以双向移动。
+
+\item
+随机访问迭代器：这些支持以常数时间访问容器中的任何元素，实现了双向迭代器的所有要求，并且还支持算术操作符 + 和 -，复合赋值操作符 += 和 -=，与其他迭代器的比较操作符 <, <=, >, >=，以及偏移解引用操作符。
+\end{itemize}
+
+前向、双向和随机访问迭代器如果也满足了输出迭代器的要求，则称为可变迭代器。
+
+前一节中，介绍了如何实现随机访问迭代器，包括每个类别迭代器的要求（每个迭代器类别都包含了前一个类别的要求，并添加了新的要求）。迭代器类模板同时适用于常量和可变迭代器，可为它定义了两个同义词，称为 iterator 和 constant\_iterator。
+
+实现了内部迭代器类模板之后，还定义了 begin() 和 end() 成员函数，分别返回指向数组第一个元素和最后一个元素之后位置的迭代器。这些方法有重载版本，根据 dummy\_array 类实例是否可变或常量来返回可变或常量迭代器。
+
+有了 dummy\_array 类及其迭代器的这个实现，可以编写如下代码：
+
+\begin{cpp}
+// defining and initializing an array of integers
+dummy_array<int, 3> a;
+a[0] = 10;
+a[1] = 20;
+a[2] = 30;
+// modifying the elements of the array
+std::transform(a.begin(), a.end(), a.begin(),
+               [](int const e) {return e * 2; });
+// iterating through and printing the values of the array
+for (auto&& e : a) std::cout << e << '\n';
+\end{cpp}
+
+\begin{shell}
+20
+40
+60
+\end{shell}
+
+\begin{cpp}
+auto lp = [](dummy_array<int, 3> const & ca)
+{
+    for (auto const & e : ca)
+    std::cout << e << '\n';
+};
+lp(a);
+\end{cpp}
+
+\begin{shell}
+20
+40
+60
+\end{shell}
+
+\begin{cpp}
+// defining and initializing an array of smart pointers
+dummy_array<std::unique_ptr<Tag>, 3> ta;
+ta[0] = std::make_unique<Tag>(1, "Tag 1");
+ta[1] = std::make_unique<Tag>(2, "Tag 2");
+ta[2] = std::make_unique<Tag>(3, "Tag 3");
+// iterating through and printing the pointed values
+for (auto it = ta.begin(); it != ta.end(); ++it)
+    std::cout << it->id << " " << it->name << '\n';
+\end{cpp}
+
+\begin{shell}
+1 Tag 1
+2 Tag 2
+3 Tag 3
+\end{shell}
+
+想要查看更多示例，请查阅随本书提供的源代码。
+
+\mySubsubsection{}{There's more...}
+
+除了 begin() 和 end() 之外，一个容器可能还会有其他方法，如 cbegin() 和 cend()（用于常量迭代器）、rbegin() 和 rend()（用于可变反向迭代器），以及 crbegin() 和 crend()（用于常量反向迭代器）。实现这些功能留给各位读者作为练习。
+
+另一方面，在现代 C++ 中，这些返回第一个和最后一个迭代器的函数不必是成员函数，而可以作为非成员函数提供。这将是下一示例的主题：使用非成员函数访问容器。
+

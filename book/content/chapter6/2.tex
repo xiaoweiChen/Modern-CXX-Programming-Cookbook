@@ -1,0 +1,284 @@
+
+C++11 中提供的 chrono 库支持了时钟、时间点和持续时间的功能，但并不好用来表示时间和日期，特别是与日历和时区有关的时候。新的 C++20 标准通过扩展现有的 chrono 库来解决这些问题，加入了一些新特性：
+
+\begin{itemize}
+\item
+更多的时钟类型，例如 UTC 时钟、国际原子时钟、GPS 时钟、文件时间时钟，以及一个本地时间的伪时钟。
+
+\item
+表示一天中时间的概念，将从午夜开始经过的时间分为小时、分钟和秒。
+
+\item
+日历，能够用年、月和日部分来表示日期。
+
+\item
+时区，能够相对于某个时区来表示时间点，并且能够在不同的时区之间转换时间。
+
+\item
+用于从流中解析 chrono 对象的输入输出支持。
+\end{itemize}
+
+\mySubsubsection{}{Getting ready}
+
+新 chrono 功能都在 <chrono> 头文件中的 std::chrono 和 std::chrono\_literals 命名空间中可用。
+
+\mySubsubsection{}{How to do it...}
+
+可以使用 C++20 的 chrono 日历功能：
+
+\begin{itemize}
+\item
+使用 \verb|year_month_day| 类型的实例表示公历日期，包括年、月和日。使用标准用户定义的字面值、常量和重载的 / 操作符来构造这样的对象：
+
+\begin{cpp}
+// format: year / month /day
+year_month_day d1 = 2024y / 1 / 15;
+year_month_day d2 = 2024y / January / 15;
+// format: day / month / year
+year_month_day d3 = 15d / 1 / 2024;
+year_month_day d4 = 15d / January / 2024
+// format: month / day / year
+year_month_day d5 = 1 / 15d / 2024;
+year_month_day d6 = January / 15 / 2024;
+\end{cpp}
+
+\item
+使用 \verb|year_month_weekday| 类型的实例表示特定年份和月份的第 n 个星期几：
+
+\begin{cpp}
+// format: year / month / weekday
+year_month_weekday d1 = 2024y / January / Monday[1];
+// format: weekday / month / year
+year_month_weekday d2 = Monday[1] / January / 2024;
+// format: month / weekday / year
+year_month_weekday d3 = January / Monday[1] / 2024;
+\end{cpp}
+
+\item
+确定当前日期，以及计算其他日期，如明天和昨天的日期：
+
+\begin{cpp}
+auto today = floor<days>(std::chrono::system_clock::now());
+auto tomorrow = today + days{ 1 };
+auto yesterday = today - days{ 1 };
+\end{cpp}
+
+\item
+确定特定年份和月份的第一天和最后一天：
+
+\begin{cpp}
+year_month_day today = floor<days>(std::chrono::system_clock::now());
+year_month_day first_day_this_month = today.year() / today.month() / 1;
+year_month_day last_day_this_month = today.year() / today.month() / last; // std::chrono::last
+year_month_day last_day_feb_2024 = 2024y / February / last;
+year_month_day_last ymdl {today.year(), month_day_last{ month{ 2 } }};
+year_month_day last_day_feb { ymdl };
+\end{cpp}
+
+\item
+计算两个日期之间的天数：
+
+\begin{cpp}
+inline int number_of_days(std::chrono::sys_days const& first,
+                          std::chrono::sys_days const& last)
+{
+    return (last - first).count();
+}
+auto days = number_of_days(2024y / April / 1,
+2024y / December / 25);
+\end{cpp}
+
+\item
+检查一个日期是否有效：
+
+\begin{cpp}
+auto day = 2024y / January / 33;
+auto is_valid = day.ok();
+\end{cpp}
+
+\item
+使用 \verb|hh_mm_ss<Duration>| 类模板表示一天中的时间，以小时、分钟和秒为单位，其中 Duration 决定了用于分割时间间隔的精度。下面的例子中，std::chrono::seconds 定义了以秒为单位的分割精度：
+
+\begin{cpp}
+chrono::hh_mm_ss<chrono::seconds> td(13h+12min+11s);
+std::cout << td << '\n';  // 13:12:11
+\end{cpp}
+
+\item
+创建带有日期和时间部分的时间点：
+
+\begin{cpp}
+auto tp = chrono::sys_days{ 2024y / April / 1 } + 12h + 30min + 45s;
+std::cout << tp << '\n';  // 2024-04-01 12:30:45
+\end{cpp}
+
+\item
+确定具体时间并以不同精度表示：
+
+\begin{cpp}
+auto tp = std::chrono::system_clock::now();
+auto dp = floor<days>(tp);
+chrono::hh_mm_ss<chrono::milliseconds> time1 {
+    chrono::duration_cast<chrono::milliseconds>(tp - dp) };
+std::cout << time1 << '\n';  // 13:12:11.625
+chrono::hh_mm_ss<chrono::minutes> time2 {
+    chrono::duration_cast<chrono::minutes>(tp - dp) };
+std::cout << time2 << '\n';  // 13:12
+\end{cpp}
+
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+例子中看到的 \verb|year_month_day| 和 \verb|year_month_weekday| 类型只是为了支持日历而添加到 chrono 库中的许多新类型中的一部分。以下表格列出了 std::chrono 命名空间中的所有这些类型及其代表的意义：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{类型}              & \textbf{表示}                           \\ \hline
+\endfirsthead
+%
+\endhead
+%
+day                        & 一个月的一天                              \\ \hline
+month                      & 一年的一个月                             \\ \hline
+year                       & 公历年份              \\ \hline
+weekday                    & 公历中的一周中的某一天   \\ \hline
+weekday\_indexed & \begin{tabular}[c]{@{}l@{}}一个月中的第 n 个星期几，\\其中 n 在范围 {[}1, 5{]} 内\\（1 是该月的第一个星期几，\\5 是该月的第五个星期几\\——如果存在的话）\end{tabular} \\ \hline
+weekday\_last              & 一个月的最后一个星期几                   \\ \hline
+month\_day                 & 某个月的某一天             \\ \hline
+month\_day\_last           & 某个月的最后一天              \\ \hline
+month\_weekday             & 某个月的第 n 个星期几           \\ \hline
+month\_weekday\_last       & 某个月的最后一个星期几          \\ \hline
+year\_month                & 某年的某个月           \\ \hline
+year\_month\_day           & 某年的某月的某一天               \\ \hline
+year\_month\_day\_last     & 某年的某月的最后一天     \\ \hline
+year\_month\_weekday       & 某年的某月的第 n 个星期几  \\ \hline
+year\_month\_weekday\_last & 某年的某月的最后一个星期几  \\ \hline
+\end{longtable}
+
+\begin{center}
+表 6.1: C++20 chrono 类型用于处理日期
+\end{center}
+
+本表中列出的所有类型都具有：
+
+\begin{itemize}
+\item
+默认构造函数，它使成员字段未初始化
+
+\item
+成员函数，用于访问实体的部分
+
+\item
+成员函数 ok()，用于检查当前值是否有效
+
+\item
+非成员比较操作符，用于比较该类型值
+
+\item
+重载的 <{}< 操作符，用于将该类型的值输出到流中
+
+\item
+重载的函数模板 \verb|from_stream()|，根据提供的格式从流中解析值
+
+\item
+文本格式化库的 std::formatter<T, CharT> 类型模板的特化
+\end{itemize}
+
+此外，对于许多这些类型，/ 操作符都进行了重载，以便可以轻松地创建公历日期。创建一个日期（包含年、月和日）时，可以选择三种不同的格式：
+
+\begin{itemize}
+\item
+年/月/日（在中国、日本、韩国、加拿大等国家使用，有时也与其他日/月/年格式一起使用）
+
+\item
+月/日/年（在美国使用）
+
+\item
+日/月/年（世界上大多数地方使用）
+\end{itemize}
+
+"日" 可以是：
+
+\begin{itemize}
+\item
+实际的月份中的某一天（值从 1 到 31）
+
+\item
+std::chrono::last 表示该月的最后一天
+
+\item
+weekday[n]，表示该月的第 n 个星期几（其中 n 的取值范围为 1 到 5）
+
+\item
+weekday[std::chrono::last]，表示该月的最后一个星期几
+\end{itemize}
+
+为了区分表示日、月和年的整数，库提供了两个用户定义的字面值：""y 构造 std::chrono::year 类型的字面值，而 ""d 构造 std::chrono::day 类型的字面值。
+
+此外，还有一些常量代表：
+
+\begin{itemize}
+\item
+std::chrono::month，名称为 January、February 至 December。
+
+\item
+std::chrono::weekday，名称为 Sunday、Monday、Tuesday、Wednesday、Thursday、Friday 或 Saturday。
+\end{itemize}
+
+可以使用这些来构建 2025y/April/1、25d/December/2025 或 Sunday[last]/May/2025 这样的日期。
+
+\verb|year_month_day| 类型提供了与 \verb|std::chrono::sys_days| 类型之间的隐式转换。\verb|sys_days| 类型是一个精度为一天（24 小时）的 \verb|std::chrono::time_point|。还有一个 \verb|std::chrono::sys_seconds| 的类型，精度为一秒的 \verb|time_point|。可以用 \verb|std::chrono::time_point_cast()| 或 \verb|std::chrono::floor()| 进行 \verb|time_point| 和 \verb|sys_days/sys_seconds| 之间的显式转换。
+
+为了表示一天中的某一时刻，可以使用 \verb|std::chrono::hh_mm_ss| 类型。这个类表示从午夜开始经过的时间，分为小时、分钟、秒和亚秒。这种类型主要用于格式化工具。
+
+还有几个用于在 12 小时制和 24 小时制之间转换的实用函数：
+
+\begin{itemize}
+\item
+\verb|is_am()| 和 \verb|is_pm()|，检查以 std::chrono::hours 值提供的 24 小时格式的时间是否为上午（中午之前）或下午（午夜之前）：
+
+\begin{cpp}
+std::cout << is_am(0h)  << '\n'; // true
+std::cout << is_am(1h)  << '\n'; // true
+std::cout << is_am(12h) << '\n'; // false
+std::cout << is_pm(0h)  << '\n'; // false
+std::cout << is_pm(12h) << '\n'; // true
+std::cout << is_pm(23h) << '\n'; // true
+std::cout << is_pm(24h) << '\n'; // false
+\end{cpp}
+
+\item
+make12() 和 make24() 函数分别返回 24 小时制时间对应的 12 小时制时间，反之亦然。这两个函数都接受一个 std::chrono::hours 值作为输入时间，但 make24() 还有一个参数，即一个布尔值，表明时间是否为下午（P.M.）：
+
+\begin{cpp}
+for (auto h : { 0h, 1h, 12h, 23h, 24h })
+{
+    std::cout << make12(h).count() << '\n';
+    // prints 12, 1, 12, 11, 12
+}
+for (auto [h, pm] : {
+    std::pair<hours, bool>{ 0h, false},
+    std::pair<hours, bool>{ 1h, false},
+    std::pair<hours, bool>{ 1h, true},
+    std::pair<hours, bool>{12h, false},
+    std::pair<hours, bool>{12h, true}, })
+{
+    std::cout << make24(h, pm).count() << '\n';
+    // prints 0, 1, 13, 0, 12
+}
+\end{cpp}
+\end{itemize}
+
+从这些例子中可以看出，这四个函数只处理小时值，因为一天中某一时刻的小时部分决定了它是 12 小时制，还是 24 小时制；或者是上午（A.M.），还是下午（P.M.）时间。
+
+\begin{myNotic}
+本书第二版出版时，chrono 库的变化尚未完成。\verb|hh_mm_ss| 类型原本称为 \verb|time_of_day|，而 \verb|make12()/make24()| 函数是其成员函数。这一版本反映了这些变化，并采用了标准化的 API。
+\end{myNotic}
+
+\mySubsubsection{}{there's more}
+
+这里描述的日期和时间设施都是基于 \verb|std::chrono::system_clock|。C++20 起，此时钟定义为测量 Unix 时间，即从 1970 年 1 月 1 日 UTC 时间 00:00:00 开始的时间，所以时区是 UTC。大多数情况下，可能更关心特定时区的本地时间。为此，chrono 库增加了对时区的支持，这将在下一个示例中进行介绍。

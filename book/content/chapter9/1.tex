@@ -1,0 +1,310 @@
+
+异常是对程序运行时可能出现的特殊情况的响应，使得控制流可以转移到程序的另一部分。相比于返回错误码（这会大大增加代码的复杂性和混乱度），异常是一种更简单且强大的错误处理机制。本示例中，将介绍一些与抛出和处理异常相关的要点。
+
+\mySubsubsection{}{Getting ready}
+
+本示例要求具备抛出异常（使用 throw 语句）和捕获异常（使用 try...catch 块）的基本机制的知识。本示例专注于围绕异常的良好实践，而不是 C++ 语言中异常机制的具体细节。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下方式来处理异常：
+
+\begin{itemize}
+\item
+按值抛出异常：
+
+\begin{cpp}
+void throwing_func()
+{
+    throw std::runtime_error("timed out");
+}
+void another_throwing_func()
+{
+    throw std::system_error(
+    std::make_error_code(std::errc::timed_out));
+}
+\end{cpp}
+
+\item
+按引用或常量引用捕获异常：
+
+\begin{cpp}
+try
+{
+    throwing_func(); // throws std::runtime_error
+}
+catch (std::exception const & e)
+{
+    std::cout << e.what() << '\n';
+}
+\end{cpp}
+
+\item
+当从类层次结构中捕获多个异常时，按照从派生类到基类的顺序排列捕获语句：
+
+\begin{cpp}
+auto exprint = [](std::exception const & e)
+{
+    std::cout << e.what() << '\n';
+};
+try
+{
+    another_throwing_func(); // throws std::system_error
+    // 1st catch statements catches it
+}
+catch (std::system_error const & e)
+{
+    exprint(e);
+}
+catch (std::runtime_error const & e)
+{
+    exprint(e);
+}
+catch (std::exception const & e)
+{
+    exprint(e);
+}
+\end{cpp}
+
+\item
+使用 catch(...) 捕获所有类型的异常：
+
+\begin{cpp}
+try
+{
+    throwing_func();
+}
+catch (std::exception const & e)
+{
+    std::cout << e.what() << '\n';
+}
+catch (...)
+{
+    std::cout << "unknown exception" << '\n';
+}
+\end{cpp}
+
+\item
+使用 throw; 重新抛出现有异常。这可以用来为多种异常创建单一的异常处理函数。
+
+\item
+想要隐藏异常原始位置时，可以抛出异常对象（例如 throw e;）：
+
+\begin{cpp}
+void handle_exception()
+{
+    try
+    {
+        throw; // throw current exception
+    }
+    catch (const std::logic_error & e)
+    { /* ... */ }
+    catch (const std::runtime_error & e)
+    { /* ... */ }
+    catch (const std::exception & e)
+    { /* ... */ }
+}
+try
+{
+    throwing_func();
+}
+catch (...)
+{
+    handle_exception();
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+大多数函数需要指示其执行的成功或失败，可以通过不同的方式实现：
+
+\begin{itemize}
+\item
+返回错误码（成功时返回特殊值）来指示失败的具体原因：
+
+\begin{cpp}
+int f1(int& result)
+{
+    if (...) return 1;
+    // do something
+    if (...) return 2;
+    // do something more
+    result = 42;
+    return 0;
+}
+enum class error_codes {success, error_1, error_2};
+error_codes f2(int& result)
+{
+    if (...) return error_codes::error_1;
+    // do something
+    if (...) return error_codes::error_2;
+    // do something more
+    result = 42;
+    return error_codes::success;
+}
+\end{cpp}
+
+\item
+返回布尔值的版本，仅指示成功或失败：
+
+\begin{cpp}
+bool g(int& result)
+{
+    if (...) return false;
+    // do something
+    if (...) return false;
+    // do something more
+    result = 42;
+    return true;
+}
+\end{cpp}
+
+\item
+另一种凡是是返回无效的实例、空指针或空的 std::optional<T> 实例：
+
+\begin{cpp}
+std::optional<int> h()
+{
+    if (...) return {};
+    // do something
+    if (...) return {};
+    // do something more
+    return 42;
+}
+\end{cpp}
+\end{itemize}
+
+无论哪种情况，都应检查函数的返回值。这可能导致代码复杂、难以阅读和维护。此外，检查函数返回值的过程总会执行，无论该函数是否成功或失败。相比之下，只有在函数失败时才会抛出和处理异常，这种情况比成功执行要少得多，这可能比返回并测试错误码的代码更快。
+
+\begin{myTip}
+异常和错误码不互斥。异常应该只用于在特殊情况中转移控制流，而不是用于控制程序中的数据流。
+\end{myTip}
+
+构造函数是不返回值的函数。任务是构建实例，但在失败的情况下，无法通过返回值来表示。异常应该是构造函数用来表示失败的机制。与 RAII（Resource Acquisition Is Initialization，资源获取即初始化）惯用法一起使用时，确保了在所有情况下都能安全地获取和释放资源。另一方面，析构函数中不允许抛出异常。当这种情况发生时，程序会通过调用 std::terminate() 异常终止。这是在栈展开过程中由于另一个异常的发生而调用析构函数的情况。当异常发生时，栈从异常被抛出的地方展开到异常处理块。此过程涉及销毁所有相关栈帧中的局部对象。
+
+如果在此过程中销毁实例的析构函数抛出了异常，则应开始另一个栈展开过程，这与正在进行的栈展开冲突。因此，程序异常终止。
+
+\begin{myTip}
+处理构造函数和析构函数中异常的经验法则：
+
+\begin{itemize}
+\item
+使用异常来表示构造函数中发生的错误。
+
+\item
+不要在析构函数中抛出异常。
+\end{itemize}
+\end{myTip}
+
+代码可以抛出任何类型的异常，大多数情况下，应该抛出临时对象并按常量引用捕获异常。按引用（常量）捕获，原因是为了避免异常类型的切片：
+
+\begin{cpp}
+class simple_error : public std::exception
+{
+public:
+    virtual const char* what() const noexcept override
+    {
+        return "simple exception";
+    }
+};
+try
+{
+    throw simple_error{};
+}
+catch (std::exception e)
+{
+    std::cout << e.what() << '\n'; // prints "Unknown exception"
+}
+\end{cpp}
+
+抛出了一个 simple\_error 实例，按值捕获了一个 std::exception 实例。simple\_error 是 std::exception 的派生类型。发生了切片过程，派生类型信息丢失，只有实例的 std::exception 部分保留。因此，输出的消息是“未知异常”，而不是预期的“simple exception”。使用引用可以避免对象切片。
+
+以下是关于异常抛出的一些指导原则：
+
+\begin{itemize}
+\item
+尽量抛出标准异常，或从 std::exception 等其他标准异常派生的自定义异常。因为标准库提供的异常，旨在成为表示异常的首选。应该使用已经可用的标准异常，当这些不够好时，可以基于标准异常构建自己的异常。这样做的好处是一致性和帮助用户通过基类 std::exception 捕获异常。
+
+\item
+避免抛出如整数这样的内置类型的异常。这是因为数字对用户的指示很少，用户必须知道其代表什么，而实例可以提供上下文信息。例如，\verb|throw 13;| 对用户没有任何意义，但 \verb|throw access_denied_exception{};| 仅凭类名就携带了更多的隐含信息，加上数据成员的帮助，可以携带有关异常情况的所有有用或必要的信息。
+
+\item
+当使用提供了自己异常层次结构的库或框架时，至少在与之紧密相关的代码部分中，优先抛出来自该层次结构的异常或从它派生的自定义异常。这样做的原因是保持库 API 的代码一致性。
+\end{itemize}
+
+\mySubsubsection{}{There's more...}
+
+如上一节所述，需要创建自己的异常类型时，除非正在使用具有自己异常层次结构的库或框架，否则应从可用的标准异常之一派生。C++ 标准定义了几种类别的异常，这些类别需要在为此目的选择异常时予以考虑：
+
+\begin{itemize}
+\item
+\verb|std::logic_error| 表示一个异常，该异常指示程序逻辑中的错误，如无效参数和索引超出范围。有许多标准派生类，例如 \verb|std::invalid_argument|、\verb|std::out_of_range| 和 \verb|std::length_error|。
+
+\item
+\verb|std::runtime_error| 表示一个异常，该异常指示超出程序范围或由于各种因素（包括外部因素）而无法预测的错误，如溢出和下溢或操作系统错误。C++ 标准还提供了从 \verb|std::runtime_error| 派生的几个类，包括 \verb|std::overflow_error|、\verb|std::underflow_error|、\verb|std::system_error| 以及 C++20 中的 \verb|std::format_error|。
+
+\item
+以 \verb|bad_| 开头的异常，如 \verb|std::bad_alloc|、\verb|std::bad_cast| 和 \verb|std::bad_function_call|，表示程序中的各种错误，如内存分配失败、动态转换失败或函数调用失败。
+\end{itemize}
+
+所有这些异常的基类是 std::exception，有一个不抛出异常的虚方法 what()，返回一个指向字符数组的指针，该数组表示错误的描述。
+
+需要从标准异常派生自定义异常时，请使用适当的类别，如逻辑错误或运行时错误。如果这些类别都不合适，可以从 std::exception 直接派生。以下是从标准异常派生的一些解决方案：
+
+\begin{itemize}
+\item
+需要从 std::exception 派生，则覆盖虚拟方法 what() 以提供错误描述：
+
+\begin{cpp}
+class simple_error : public std::exception
+{
+    public:
+    virtual const char* what() const noexcept override
+    {
+        return "simple exception";
+    }
+};
+\end{cpp}
+
+\item
+如果从 \verb|std::logic_error| 或 \verb|std::runtime_error| 派生，并且只需要提供与运行时数据无关的静态描述，则将描述文本传递给基类构造函数：
+
+\begin{cpp}
+class another_logic_error : public std::logic_error
+{
+public:
+    another_logic_error():
+    std::logic_error("simple logic exception")
+    {}
+};
+\end{cpp}
+
+\item
+如果从 \verb|std::logic_error| 或 \verb|std::runtime_error| 派生，但描述消息取决于运行时数据，请提供带参数的构造函数，并使用它们来构建描述消息。可以将描述消息传递给基类构造函数，也可以从覆盖的 what() 方法中返回：
+
+\begin{cpp}
+class advanced_error : public std::runtime_error
+{
+    int error_code;
+    std::string make_message(int const e)
+    {
+        std::stringstream ss;
+        ss << "error with code " << e;
+        return ss.str();
+    }
+public:
+    advanced_error(int const e) :
+    std::runtime_error(make_message(e).c_str()),error_code(e)
+    {
+    }
+    int error() const noexcept
+    {
+        return error_code;
+    }
+};
+\end{cpp}
+\end{itemize}
+
+要获取标准异常类的完整列表，可参见 \url{https://en.cppreference.com/w/cpp/error/exception}。
+

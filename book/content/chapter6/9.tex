@@ -1,0 +1,148 @@
+C++ 中联合类型是一种特殊的类类型，任何时候只保存其数据成员之一的值。与普通类不同，联合不能有基类，也不能派生，而且不能包含虚函数（无论如何这都没有意义）。联合主要用于定义相同数据的不同表示形式。然而，联合只能用于简单(Plain Old Data, POD) 类型。如果联合包含非 POD 类型的值，则这些成员需要使用 placement new 进行显式构造和显式销毁，这既繁琐又容易出错。C++17标准库中提供了一个类型安全的联合，以类模板的形式出现，名为 \verb|std::variant|。本示例中，将介绍如何使用它。
+
+\mySubsubsection{}{Getting ready}
+
+\verb|std::variant| 类型实现了类型安全的区分联合。尽管详细讨论这些内容超出了本示例的范围，但需要在此简要的进行介绍。熟悉区分联合将有助于更好地理解 variant 的设计，及其工作方式。
+
+区分联合也称为带标签的联合或不交联合，区分联合是一种能够存储一组类型中的一个值，并为此值提供类型安全访问的数据类型：
+
+\begin{cpp}
+enum VARTAG {VT_int, VT_double, VT_pint, TP_pdouble /* more */ };
+struct variant_t
+{
+    VARTAG tag;
+    union Value
+    {
+        int     i;
+        int*    pi;
+        double  d;
+        double* pd;
+        /* more */
+    } value;
+};
+\end{cpp}
+
+对于 Windows 编程者而言，Component Object Model (COM) 编程中使用的 VARIANT 结构是一个知名的区分联合。
+
+类型模板 \verb|std::variant| 基于 \verb|boost::variant| 设计，并在 \verb|<variant>| 头文件中可用。如果熟悉 \verb|boost::variant| 并在代码中使用过，则可以轻松地将代码迁移到标准 variant 类模板。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下操作来处理 \verb|std::variant|：
+
+\begin{itemize}
+\item
+若要修改存储的值，请使用成员函数 \verb|emplace()| 或 \verb|swap()|：
+
+\begin{cpp}
+struct foo
+{
+    int value;
+    explicit foo(int const i) : value(i) {}
+};
+std::variant<int, std::string, foo> v = 42; // holds int
+v.emplace<foo>(42);                         // holds foo
+\end{cpp}
+
+\item
+若要读取存储的值，请使用非成员函数 \verb|std::get| 或 \verb|std::get_if|：
+
+\begin{cpp}
+std::variant<int, double, std::string> v = 42;
+auto i1 = std::get<int>(v);
+auto i2 = std::get<0>(v);
+try
+{
+    auto f = std::get<double>(v);
+}
+catch (std::bad_variant_access const & e)
+{
+    std::cout << e.what() << '\n'; // Unexpected index
+}
+\end{cpp}
+
+\item
+若要存储一个值，请使用构造函数或将值直接赋给 variant 对象：
+
+\begin{cpp}
+std::variant<int, double, std::string> v;
+v = 42;   // v contains int 42
+v = 42.0; // v contains double 42.0
+v = "42"; // v contains string "42"
+\end{cpp}
+
+\item
+若要检查存储的是哪个替代值，请使用成员函数 \verb|index()|：
+
+\begin{cpp}
+std::variant<int, double, std::string> v = 42;
+static_assert(std::variant_size_v<decltype(v)> == 3);
+std::cout << "index = " << v.index() << '\n';
+v = 42.0;
+std::cout << "index = " << v.index() << '\n';
+v = "42";
+std::cout << "index = " << v.index() << '\n';
+\end{cpp}
+
+\item
+若要检查 variant 是否持有某个替代值，请使用非成员函数 \verb|std::holds_alternative()|：
+
+\begin{cpp}
+std::variant<int, double, std::string> v = 42;
+std::cout << "int? " << std::boolalpha
+          << std::holds_alternative<int>(v)
+          << '\n'; // int? true
+v = "42";
+std::cout << "int? " << std::boolalpha
+          << std::holds_alternative<int>(v)
+          << '\n'; // int? false
+\end{cpp}
+
+\item
+若要定义第一个替代值不是默认可构造的 variant，使用 \verb|std::monostate| 作为第一个替代值（foo 是我们前面使用的同一个类）：
+
+\begin{cpp}
+std::variant<std::monostate, foo, int> v;
+v = 42;        // v contains int 42
+std::cout << std::get<int>(v) << '\n';
+v = foo{ 42 }; // v contains foo{42}
+std::cout << std::get<foo>(v).value << '\n';
+\end{cpp}
+
+\item
+若要处理 variant 存储的值并根据替代值的类型执行某些操作，请使用 \verb|std::visit()|：
+
+\begin{cpp}
+std::variant<int, double, std::string> v = 42;
+std::visit(
+    [](auto&& arg) {std::cout << arg << '\n'; },
+    v);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|std::variant| 是一个类型模板，模拟了一个类型安全的联合，任何时候只持有其可能的替代值。一些罕见的情况下，variant 实例可能不存储任何值。\verb|std::variant| 有一个成员函数叫做 \verb|valueless_by_exception()|，如果 variant 不持有任何值，则返回 true，这是只有在初始化过程中发生异常时才可能出现的情况。
+
+\verb|std::variant| 实例的大小与其最大的替代值一样大。variant 不存储额外的数据，variant 存储的是对象自身。
+
+variant 可以同时持有多个相同类型的替代值，也可以同时持有不同常量和易变限定版本的值。这时，不能将多次使用的类型值赋给 variant，而应该使用成员函数 \verb|emplace()|，如以下代码段所示：
+
+\begin{cpp}
+std::variant<int, int, double> v = 33.0;
+v = 42;                               // error
+v.emplace<1>(42);                     // OK
+std::cout << std::get<1>(v) << '\n';  // prints 42
+std::holds_alternative<int>(v);       // error
+\end{cpp}
+
+前面提到的用于检查 variant 是否持有替代类型 T 的 \verb|std::holds_alternative()| 函数，在这种情况下不能使用。应避免定义持有多个相同类型替代值的 variant。
+
+另一方面，variant 不能持有类型为 void 的替代值，或数组和引用类型的替代值。此外，第一个替代值必须总是默认可构造的。就像区分联合一样，variant 使用其第一个替代值的默认值进行默认初始化。如果第一个替代值类型不是默认可构造的，则variant 必须使用 \verb|std::monostate| 作为第一个替代值，这是一种用于使 variant 默认可构造的空类型。
+
+可以在编译时查询 variant 的大小（即定义替代值的数量），以及由零开始索引指定的替代值的类型。另一方面，可以使用成员函数 \verb|index()| 在运行时查询当前持有的替代值的索引。
+
+\mySubsubsection{}{there's more}
+
+操纵 variant 内容的一个典型方法是通过遍历。这基本上是基于 variant 所持有的替代值执行的操作。由于这是一个较大的主题，将在下一个示例中单独讨论。
+

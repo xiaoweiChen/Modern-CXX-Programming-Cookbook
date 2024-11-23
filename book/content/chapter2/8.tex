@@ -1,0 +1,259 @@
+
+
+字面量是不能更改的内置常量类型（数值型、布尔型、字符型、字符串型和指针型），C++定义了一系列前缀和后缀来指定字面量（前缀/后缀是字面量的一部分）。C++11 允许通过定义称为字面量操作符的函数来创建自定义字面量，这些操作符引入了用于指定字面量的后缀，功能仅适用于数值、字符和字符串类型。
+
+C++允许开发者创建自定义字面量。本示例中，将介绍如何创建自定义“熟”字面量。
+
+\mySubsubsection{}{Getting ready}
+
+用户自定义字面量可以有两种形式：生（raw）和熟（cooked）。生字面量不会编译器处理，而熟字面量则是由编译器处理过的值（例如，处理字符串中的转义序列或识别出整数 2898 来自字面量 0xBAD）。生字面量仅对整数和浮点数类型可用，而熟字面量也适用于字符和字符串字面量。
+
+\mySubsubsection{}{How to do it...}
+
+要创建熟自定义字面量，应遵循以下步骤：
+
+\begin{enumerate}
+\item
+在单独的命名空间中定义字面量以避免名称冲突。
+
+\item
+始终以前缀下划线（\verb|_|）开始用户自定义后缀。
+
+\item
+为熟字面量定义一种以下形式的字面量操作符（ \verb|char8_t| 自 C++20 起可用）。注意，在下面的列表中，T 不是指代类型的模板参数，而只是操作符返回类型的占位符：
+
+\begin{cpp}
+T operator "" _suffix(unsigned long long int);
+T operator "" _suffix(long double);
+T operator "" _suffix(char);
+T operator "" _suffix(wchar_t);
+T operator "" _suffix(char8_t); // since C++20
+T operator "" _suffix(char16_t);
+T operator "" _suffix(char32_t);
+T operator "" _suffix(char const *, std::size_t);
+T operator "" _suffix(wchar_t const *, std::size_t);
+T operator "" _suffix(char8_t const *, std::size_t); // C++20
+T operator "" _suffix(char16_t const *, std::size_t);
+T operator "" _suffix(char32_t const *, std::size_t);
+\end{cpp}
+
+以下示例创建了一个用于指定千字节的用户自定义字面量：
+
+\begin{cpp}
+namespace compunits
+{
+    constexpr size_t operator "" _KB(unsigned long long const size)
+    {
+        return static_cast<size_t>(size * 1024);
+    }
+}
+auto size{ 4_KB };         // size_t size = 4096;
+using byte = unsigned char;
+auto buffer = std::array<byte, 1_KB>{};
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it work...}
+
+编译器遇到带有用户自定义后缀 \verb|_X| 的自定义字面量时（对于第三方后缀，总是以前导下划线开头，没有前导下划线的后缀保留给标准库），会进行未限定名称查找以识别名为 \verb|operator "" _X| 的函数。如果找到，则根据字面量的类型和字面量操作符的类型调用它；否则，编译器将报错。
+
+“How to do it...”的示例中，字面量操作符称为 \verb|operator "" _KB|，并且有一个 \verb|unsigned long long int| 类型的参数。这是字面量操作符处理整数类型时唯一可能的整数类型，对于浮点数自定义字面量，参数类型必须是 \verb|long double|，因为对于数值类型，字面量操作符必须能够处理尽可能大的值。此字面量操作符返回一个 \verb|constexpr| 值，可以在需要编译时常量的地方使用，比如：指定数组的大小。
+
+当编译器识别到自定义字面量，并需要调用相应的用户自定义字面量操作符时，将根据以下规则选择重载集中的重载：
+
+\begin{itemize}
+\item
+对于整数字面量：按以下顺序调用操作符：\verb|unsigned long long| 的操作符、\verb|const char*| 的原始字面量操作符或字面量操作符模板。
+
+\item
+对于浮点数字面量：按以下顺序调用操作符：\verb|long double| 的操作符、\verb|const char*| 的原始字面量操作符或字面量操作符模板。
+
+\item
+对于字符字面量：调用适当的操作符，具体取决于字符类型（\verb|char|, \verb|wchar_t|, \verb|char16_t| 和 \verb|char32_t|）。
+
+\item
+对于字符串字面量：调用适当的操作符，具体取决于字符串类型，该操作符接受指向字符串的指针及字符串的大小。
+\end{itemize}
+
+以下示例中，定义了一套单位和数量系统。希望操作千克、件、升等单位。这在订单处理系统非常有用，可为每一件商品指定数量和单位。
+
+以下是在 \verb|units| 命名空间中定义的类型：
+
+\begin{itemize}
+\item
+枚举类，用于可能的单位类型（千克、米、升和件）：
+
+\begin{cpp}
+enum class unit { kilogram, liter, meter, piece, };
+\end{cpp}
+
+\item
+类型模板，用于指定特定单位的数量（如 3.5 千克或 42 件）：
+
+\begin{cpp}
+template <unit U>
+class quantity
+{
+    const double amount;
+    public:
+    constexpr explicit quantity(double const a) : amount(a)
+    {}
+    explicit operator double() const { return amount; }
+};
+\end{cpp}
+
+\item
+\verb|quantity| 类型模板定义了 \verb|operator+| 和 \verb|operator-|，以对数量进行增减：
+
+\begin{cpp}
+template <unit U>
+constexpr quantity<U> operator+(quantity<U> const &q1,
+                                quantity<U> const &q2)
+{
+    return quantity<U>(static_cast<double>(q1) +
+    static_cast<double>(q2));
+}
+template <unit U>
+constexpr quantity<U> operator-(quantity<U> const &q1,
+                                quantity<U> const &q2)
+{
+    return quantity<U>(static_cast<double>(q1) –
+    static_cast<double>(q2));
+}
+\end{cpp}
+
+\item
+
+\end{itemize}
+定义了用于创建 \verb|quantity| 字面量的字面量操作符，这些操作符定义在一个名为 \verb|unit_literals| 的内部命名空间中。这是为了避免与其他命名空间中的字面量发生符号冲突。
+
+如果确实发生了冲突，开发者可以使用适当的命名空间在需要定义字面量的作用域中，选择他们应该使用的字面量：
+
+\begin{cpp}
+namespace unit_literals
+{
+    constexpr quantity<unit::kilogram> operator "" _kg(
+    long double const amount)
+    {
+        return quantity<unit::kilogram> { static_cast<double>(amount) };
+    }
+    constexpr quantity<unit::kilogram> operator "" _kg(
+    unsigned long long const amount)
+    {
+        return quantity<unit::kilogram> { static_cast<double>(amount) };
+    }
+    constexpr quantity<unit::liter> operator "" _l(
+    long double const amount)
+    {
+        return quantity<unit::liter> { static_cast<double>(amount) };
+    }
+    constexpr quantity<unit::meter> operator "" _m(
+    long double const amount)
+    {
+        return quantity<unit::meter> { static_cast<double>(amount) };
+    }
+    constexpr quantity<unit::piece> operator "" _pcs(
+    unsigned long long const amount)
+    {
+        return quantity<unit::piece> { static_cast<double>(amount) };
+    }
+}
+\end{cpp}
+
+仔细观察可以发现，上面定义的字面量操作符并不相同：
+
+\begin{itemize}
+\item
+\verb|_kg| 同时为整数和浮点数字面量定义；可以创建像 \verb|1_kg| 和 \verb|1.0_kg| 这样的整数和浮点数值。
+
+\item
+\verb|_l| 和 \verb|_m| 仅定义为浮点数字面量；只能为这些单位定义带有浮点数的数量字面量，如 \verb|4.5_l| 和 \verb|10.0_m|。
+
+\item
+\verb|_pcs| 仅定义为整数字面量；只能定义整数数量的件数，如 \verb|42_pcs|。
+\end{itemize}
+
+有了这些字面量操作符，就可以操作各种数量。以下示例展示了有效和无效的操作：
+
+\begin{cpp}
+using namespace units;
+using namespace unit_literals;
+auto q1{ 1_kg };    // OK
+auto q2{ 4.5_kg };  // OK
+auto q3{ q1 + q2 }; // OK
+auto q4{ q2 - q1 }; // OK
+// error, cannot add meters and pieces
+auto q5{ 1.0_m + 1_pcs };
+// error, cannot have an integer number of liters
+auto q6{ 1_l };
+// error, can only have an integer number of pieces
+auto q7{ 2.0_pcs}
+\end{cpp}
+
+q1 是 1 千克的数量，是一个整数值。由于\verb|operator "" _kg(unsigned long long const)|，所以可以从整数 1 正确创建字面量。同样，q2 是 4.5 千克的数量；这是一个实数值。由于 \verb|operator "" _kg(long double)|，所以可以从双精度浮点值 4.5 创建字面量。
+
+另一方面，\verb|q6| 是 1 升的数量。由于没有\verb|operator "" _l(unsigned long long)|，所以无法创建字面量。需要一个接受 \verb|unsigned long long| 的重载，但不存在这样的重载。同样，q7 是 2.0 件的数量，但件数字面量只能从整数值创建，这会产生另一个编译错误。
+
+\mySubsubsection{}{There's more...}
+
+虽然自定义字面量自 C++11 起就可用，但标准字面量操作符仅从 C++14 起可用。后续标准版本中还添加了更多的标准用户自定义字面量。以下是这些标准字面量操作符的列表：
+
+\begin{itemize}
+\item
+\verb|operator""s| 用于定义 \verb|std::basic_string| 字面量和 \verb|operator""sv|（自 C++17 起）用于定义 \verb|std::basic_string_view| 字面量：
+
+\begin{cpp}
+using namespace std::string_literals;
+auto s1{  "text"s }; // std::string
+auto s2{ L"text"s }; // std::wstring
+auto s3{ u"text"s }; // std::u16string
+auto s4{ U"text"s }; // std::u32string
+using namespace std::string_view_literals;
+auto s5{ "text"sv }; // std::string_view
+\end{cpp}
+
+\item
+\verb|operator""h|, \verb|operator""min|, \verb|operator""s|, \verb|operator""ms|, \verb|operator""us| 和 \verb|operator""ns| 用于创建 \verb|std::chrono::duration| 值：
+
+\begin{cpp}
+using namespace std::chrono_literals;
+// std::chrono::duration<long long>
+auto timer {2h + 42min + 15s};
+\end{cpp}
+
+\item
+\verb|operator""y| 用于创建 \verb|std::chrono::year| 字面量，\verb|operator""d| 用于创建表示月份中某一天的 \verb|std::chrono::day| 字面量，这两个都是在 C++20 中新增的：
+
+\begin{cpp}
+using namespace std::chrono_literals;
+auto year { 2020y }; // std::chrono::year
+auto day { 15d };    // std::chrono::day
+\end{cpp}
+
+\item
+\verb|operator""if|, \verb|operator""i| 和 \verb|operator""il| 用于创建 \verb|std::complex<float>|, \verb|std::complex<double>| 和 \verb|std::complex<long double>| 值：
+
+\begin{cpp}
+using namespace std::complex_literals;
+auto c{ 12.0 + 4.5i }; // std::complex<double>
+\end{cpp}
+\end{itemize}
+
+标准字面量可在多个命名空间中使用。例如，用于字符串的 ""s 和 ""sv 字面量定义在命名空间 \verb|std::literals::string_literals| 中。
+
+literals 和 string\_literals 都是内联命名空间，可以使用 \verb|using namespace| \verb|std::literals|、\verb|using namespace| \verb|std::string_literals| 或 \verb|using namespace| \verb|std::literals::string_literals| 访问字面量。前面的例子中，选择了第二种形式。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

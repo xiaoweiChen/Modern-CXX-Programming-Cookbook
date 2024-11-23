@@ -1,0 +1,461 @@
+
+C++20 标准的一个重要组成部分是协程，协程是可以暂停和恢复的函数。协程是编写异步代码的一种替代方案。有助于简化异步 I/O 代码、惰性计算或事件驱动应用程序。当协程暂停时，执行会返回到调用者，协程恢复所需的数据会单独存储，而不是存储在栈上，所以C++20 协程可称为无栈协程。不幸的是，C++20 标准并没有定义具体的协程类型，而只定义了一个构建它们的框架。这使得没有依赖第三方组件的情况下使用协程编写异步代码变得困难。
+
+本示例中，将介绍如何编写一个代表异步计算的任务类型，这种任务在等待时开始执行。
+
+\mySubsubsection{}{Getting ready}
+
+定义协程框架的几种标准库类型和函数位于 <coroutine> 头文件中，位于 std 命名空间下。但需要使用支持协程的最小编译器版本：MSVC 19.28（Visual Studio 2019 16.8）、Clang 17 或 GCC 10。
+
+本示例的目标是创建一个任务类型，能够编写异步函数：
+
+\begin{cpp}
+task<int> get_answer()
+{
+    co_return 42;
+}
+task<> print_answer()
+{
+    auto t = co_await get_answer();
+    std::cout << "the answer is " << t << '\n';
+}
+template <typename T>
+void execute(T&& t)
+{
+    while (!t.is_ready()) t.resume();
+};
+int main()
+{
+    auto t = get_answer();
+    execute(t);
+    std::cout << "the answer is " << t.value() << '\n';
+    execute(print_answer());
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+为了创建支持不返回值（task<>）、返回值（task<T>）或返回引用（task<T\&>）的协程的任务类型，应该按照以下步骤操作：
+
+\begin{itemize}
+\item
+创建一个名为 \verb|promise_base| 的类，包含以下内容：
+
+\begin{cpp}
+namespace details
+{
+    struct promise_base
+    {
+        auto initial_suspend() noexcept
+        { return std::suspend_always{}; }
+        auto final_suspend() noexcept
+        { return std::suspend_always{}; }
+        void unhandled_exception()
+        { std::terminate(); }
+    };
+}
+\end{cpp}
+
+\item
+创建一个从 \verb|promise_base| 派生的类型模板 \verb|promise|，添加方法 \verb|get_return_object()| 和 \verb|return_value()| 以保存从协程返回的值：
+
+\begin{cpp}
+template <typename T>
+struct task;
+namespace details
+{
+    template <typename T>
+    struct promise final : public promise_base
+    {
+        task<T> get_return_object() noexcept;
+        template<typename V,
+                 typename = std::enable_if_t<
+                    std::is_convertible_v<V&&, T>>>
+        void return_value(V&& value)
+        noexcept(std::is_nothrow_constructible_v<T, V&&>)
+        {
+            value_ = value;
+        }
+        T get_value() const noexcept { return value_; }
+    private:
+        T value_;
+    };
+}
+\end{cpp}
+
+\item
+为 void 类型特化 \verb|promise| 类型模板，并提供 \verb|get_return_object()| 和 \verb|return_void()| 的实现：
+
+\begin{cpp}
+namespace details
+{
+    template <>
+    struct promise<void> final : public promise_base
+    {
+        task<void> get_return_object() noexcept;
+        void return_void() noexcept {}
+    };
+}
+\end{cpp}
+
+\item
+为 \verb|T&| 特化 \verb|promise| 类型模板。提供 \verb|get_return_object()| 和 \verb|return_value()| 方法的实现，并存储由协程返回的引用的指针：
+
+\begin{cpp}
+namespace details
+{
+    template <typename T>
+    struct promise<T&> final : public promise_base
+    {
+        task<T&> get_return_object() noexcept;
+        void return_value(T& value) noexcept
+        {
+            value_ = std::addressof(value);
+        }
+        T& get_value() const noexcept { return *value_; }
+        private:
+        T* value_ = nullptr;
+    };
+}
+\end{cpp}
+
+\item
+创建一个名为 \verb|task| 的类模板，其内容如下所示。此类型必须具有一个名为 \verb|promise_type| 的内部类型，并持有正在执行的协程的句柄。下面是 \verb|task_awaiter| 和类成员的列表：
+
+\begin{cpp}
+template <typename T = void>
+struct task
+{
+    using promise_type = details::promise<T>;
+    // task_awaiter
+    // members
+private:
+    std::coroutine_handle<promise_type> handle_ = nullptr;
+};
+\end{cpp}
+
+\item
+创建一个名为 \verb|task_awaiter| 的可等待类，实现 \verb|await_ready()|、\verb|await_suspend()| 和 \verb|await_resume()|：
+
+\begin{cpp}
+struct task_awaiter
+{
+    task_awaiter(std::coroutine_handle<promise_type> coroutine)
+    noexcept
+    : handle_(coroutine)
+    {}
+    bool await_ready() const noexcept
+    {
+        return !handle_ || handle_.done();
+    }
+    void await_suspend(
+    std::coroutine_handle<> continuation) noexcept
+    {
+        handle_.resume();
+    }
+    decltype(auto) await_resume()
+    {
+        if (!handle_)
+        throw std::runtime_error{ "broken promise" };
+        return handle_.promise().get_value();
+    }
+    friend struct task<T>;
+private:
+    std::coroutine_handle<promise_type> handle_;
+};
+\end{cpp}
+
+\item
+提供类成员，包括转换构造函数、移动构造函数和移动赋值操作符、析构函数、\verb|co_await| 操作符、检查协程是否已完成的方法、恢复已挂起协程的方法，以及获取从协程返回值的方法：
+
+\begin{cpp}
+explicit task(std::coroutine_handle<promise_type> handle)
+: handle_(handle)
+{
+}
+~task()
+{
+    if (handle_) handle_.destroy();
+}
+task(task&& t) noexcept : handle_(t.handle_)
+{
+    t.handle_ = nullptr;
+}
+task& operator=(task&& other) noexcept
+{
+    if (std::addressof(other) != this)
+    {
+        if (handle_) handle_.destroy();
+        handle_ = other.handle_;
+        other.handle_ = nullptr;
+    }
+    return *this;
+}
+task(task const &) = delete;
+task& operator=(task const &) = delete;
+T value() const noexcept
+{ return handle_.promise().get_value(); }
+void resume() noexcept
+{ handle_.resume(); }
+bool is_ready() const noexcept
+{ return !handle_ || handle_.done(); }
+auto operator co_await() const& noexcept
+{
+    return task_awaiter{ handle_ };
+}
+\end{cpp}
+
+\item
+实现主模板及其特化的 \verb|get_return_object()| 成员，必须在任务类定义之后完成：
+
+\begin{cpp}
+namespace details
+{
+    template <typename T>
+    task<T> promise<T>::get_return_object() noexcept
+    {
+        return task<T>{
+            std::coroutine_handle<promise<T>>::from_promise(*this)};
+    }
+    task<void> promise<void>::get_return_object() noexcept
+    {
+        return task<void>{
+            std::coroutine_handle<promise<void>>::from_promise(*this)};
+    }
+    template <typename T>
+    task<T&> promise<T&>::get_return_object() noexcept
+    {
+        return task<T&>{
+            std::coroutine_handle<promise<T&>>::from_promise(
+            *this)};
+    }
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+函数是一段执行一条或多条语句的代码块。可以将其赋值给变量、作为参数传递、获取它们的地址，当然也可以调用它们。这些特性使它们成为 C++ 语言中的一等公民。函数有时也称为子程序。相比之下，协程是支持两个操作的函数：暂停和恢复执行。
+
+C++20 中，如果一个函数使用了以下任何一个特性，那么就是一个协程：
+
+\begin{itemize}
+\item
+\verb|co_await| 操作符，暂停执行直到恢复。
+
+\item
+\verb|co_return| 关键字，完成执行并可选地返回一个值。
+
+\item
+\verb|co_yield| 关键字，暂停执行并返回一个值。
+\end{itemize}
+
+然而，并非每个函数都可以成为协程。以下函数不能是协程：
+
+\begin{itemize}
+\item
+构造函数和析构函数。
+
+\item
+constexpr 函数。
+
+\item
+参数数量可变的函数。
+
+\item
+返回 auto 或概念类型的函数。
+
+\item
+main() 函数。
+\end{itemize}
+
+协程由以下三个部分组成：
+
+\begin{itemize}
+\item
+promise实例：在协程内部操作，用于从协程传递返回值或异常。
+
+\item
+协程句柄：在协程外部操作，用于恢复执行或销毁协程帧。
+
+\item
+协程帧：通常在堆上分配，包含promise实例、按值复制的协程参数、局部变量、生命周期超出当前挂起点的临时变量，以及挂起点的表示形式，以便能够恢复和销毁。
+\end{itemize}
+
+promise实例可以是实现了以下接口的类型，这是编译器期望的：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{默认构造函数} & \textbf{promise必须默认可构造}              \\ \hline
+\endfirsthead
+%
+\endhead
+%
+initial\_suspend()     & 指示是否在初始挂起点处发生挂起。 \\ \hline
+final\_suspend()             & 指示是否在最后一个挂起点处发生挂起。 \\ \hline
+unhandled\_exception() & 当异常从协程块中传播出来时被调用。      \\ \hline
+get\_return\_object()        & 函数的返回值。                               \\ \hline
+return\_value(v)       & 启用 co\_return v 语句，返回类型必须为 void。  \\ \hline
+return\_void()               & 启用 co\_return 语句，返回类型必须为 void。 \\ \hline
+yield\_value(v)              & 启用 co\_yield v 语句。                              \\ \hline
+\end{longtable}
+
+\begin{center}
+表 12.3: promise实现的接口成员
+\end{center}
+
+在此实现的promise类型中的 \verb|initial_suspend()| 和 \verb|final_suspend()| 的实现返回了一个 \verb|std::suspend_always| 的实例。这是标准定义的两种简单的可等待实例之一，另一种是 \verb|std::suspend_never|。实现如下：
+
+\begin{cpp}
+struct suspend_always
+{
+    constexpr bool await_ready() noexcept { return false; }
+    constexpr void await_suspend(coroutine_handle<>) noexcept {}
+    constexpr void await_resume() noexcept {}
+};
+struct suspend_never
+{
+    constexpr bool await_ready() noexcept { return true; }
+    constexpr void await_suspend(coroutine_handle<>) noexcept {}
+    constexpr void await_resume() noexcept {}
+};
+\end{cpp}
+
+这些类型实现了可等待概念，该概念允许使用 \verb|co_await| 操作符。这个概念要求三个函数。这些函数可以是自由函数也可以是类成员函数。它们列在下表中：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+await\_ready()   & \begin{tabular}[c]{@{}l@{}}
+表示结果是否准备好。如果返回值为 false（或可转换为 false 的值），\\则调用await\_suspend()。
+\end{tabular} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+await\_suspend() & 调度协程恢复或销毁。                                                                                   \\ \hline
+await\_resume()  & 为整个 co\_await e 表达式提供结果。                                                                             \\ \hline
+\end{longtable}
+
+\begin{center}
+表 12.4: 可等待概念要求的函数
+\end{center}
+
+在示例谱中构建的 task<T> 类型有多个成员：
+
+\begin{itemize}
+\item
+显式构造函数，接收一个 \verb|std::coroutine_handle<T>| 类型的参数，表示对协程的非拥有句柄。
+
+\item
+析构函数，销毁协程帧。
+
+\item
+移动构造函数和移动赋值操作符。
+
+\item
+删除的复制构造函数和复制赋值操作符，使类型只能移动。
+
+\item
+\verb|co_await| 操作符，返回一个实现了可等待概念的 \verb|task_awaiter| 值。
+
+\item
+\verb|is_ready()| 方法，返回一个布尔值，指示协程值是否准备好。
+
+\item
+\verb|resume()| 方法，恢复协程的执行。
+
+\item
+\verb|value()| 方法，返回promise实例持有的值。
+
+\item
+内部promise类型 \verb|promise_type|（此名称强制的）。
+\end{itemize}
+
+如果在协程执行期间发生异常，且该异常未被处理就离开协程，则会调用promise的 \verb|unhandled_exception()| 方法。这个简单的实现中，这种情况没有进行处理，程序会通过调用 std::terminate() 异常终止。接下来的示例中，将介绍一个处理异常的可等待实现。
+
+以以下协程为例，看看编译器是如何进行处理：
+
+\begin{cpp}
+task<> print_answer()
+{
+    auto t = co_await get_answer();
+    std::cout << "the answer is " << t << '\n';
+}
+\end{cpp}
+
+由于在本示例中构建的所有机制，编译器将这段代码转换成如下形式（伪代码）：
+
+\begin{cpp}
+task<> print_answer()
+{
+    __frame* context;
+    task<>::task_awaiter t = operator co_await(get_answer());
+    if(!t.await_ready())
+    {
+        coroutine_handle<> resume_co =
+            coroutine_handle<>::from_address(context);
+        y.await_suspend(resume_co);
+        __suspend_resume_point_1:
+    }
+    auto value = t.await_resume();
+    std::cout << "the answer is " << value << '\n';
+}
+\end{cpp}
+
+如前所述，main() 函数是无法成为协程的函数之一。main() 中无法使用 \verb|co_await| 操作符，所以必须以不同的方式等待协程完成。
+
+这可以通过一个名为 execute() 的函数模板的帮助来处理，该模板运行以下循环：
+
+\begin{cpp}
+while (!t.is_ready()) t.resume();
+\end{cpp}
+
+这个循环确保协程在每个挂起点后恢复，直到最终完成。
+
+\mySubsubsection{}{There's more...}
+
+C++20 标准不提供任何协程类型，自己编写是一个繁琐的任务。幸运的是，第三方库可以提供这些——libcoro，这是一个开源实验库，提供了一组通用原语，以便利用 C++20 标准中描述的协程。该库可在\url{https://github.com/jbaldwin/libcoro}上获得。提供的组件之一是类似于在本示例中构建的 task<T> 协程类型。使用 coro::task<T> 类型，可以重写示例：
+
+\begin{cpp}
+#include <iostream>
+#include <coro/task.hpp>
+#include <coro/sync_wait.hpp>
+coro::task<int> get_answer()
+{
+    co_return 42;
+}
+coro::task<> print_answer()
+{
+    auto t = co_await get_answer();
+    std::cout << "the answer is " << t << '\n';
+}
+coro::task<> demo()
+{
+    auto t = co_await get_answer();
+    std::cout << "the answer is " << t << '\n';
+    co_await print_answer();
+}
+int main()
+{
+    coro::sync_wait(demo());
+}
+\end{cpp}
+
+代码与在本实例第一部分中编写的非常相似。变化很小。通过使用这个 libcoro 库或其他类似的库，不必担心实现协程类型的细节，而是专注于其使用方式。
+
+\begin{myNotic}
+本书第二版中使用的另一个库是 cppcoro，可以在 \url{https://github.com/lewissbaker/cppcoro}上找到。然而，cppcoro 库已有数年未维护。虽然可以在 GitHub 上找到，但它依赖于协程技术规范的实验性实现。例如，使用 MSVC 时，需要使用现已过时的 /await 编译器标志。应仅将此库作为编写协程原语的灵感来源。
+\end{myNotic}
+
+
+
+
+
+
+

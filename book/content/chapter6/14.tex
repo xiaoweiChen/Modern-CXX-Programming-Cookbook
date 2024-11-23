@@ -1,0 +1,134 @@
+程序退出时，通常需要执行清理代码来释放资源、写入日志或进行其他收尾操作。标准库提供了两个工具函数，允许在程序正常终止时（无论是从 main() 返回还是通过调用 std::exit() 或 \verb|std::quick_exit()|）注册要调用的函数。这对于那些需要在程序终止前执行某个动作的库来说特别有用，而无需依赖用户显式地调用结束函数。本示例中，将介绍如何使用退出时处理器。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中讨论的所有函数，包括 \verb|exit()|、\verb|quick_exit()|、\verb|atexit()| 和 \verb|at_quick_exit()|，都在头文件 <cstdlib> 中的命名空间 std 内可用。
+
+\mySubsubsection{}{How to do it...}
+
+为了注册在程序终止时要调用的函数，应该使用以下方法：
+
+\begin{itemize}
+\item
+使用 std::atexit() 注册当 main() 返回或调用 std::exit() 时要调用的函数：
+
+\begin{cpp}
+void exit_handler_1()
+{
+    std::cout << "exit handler 1" << '\n';
+}
+void exit_handler_2()
+{
+    std::cout << "exit handler 2" << '\n';
+}
+std::atexit(exit_handler_1);
+std::atexit(exit_handler_2);
+std::atexit([]() {std::cout << "exit handler 3" << '\n'; });
+\end{cpp}
+
+\item
+使用 \verb|std::at_quick_exit()| 注册当调用 \verb|std::quick_exit()| 时要调用的函数：
+
+\begin{cpp}
+void quick_exit_handler_1()
+{
+    std::cout << "quick exit handler 1" << '\n';
+}
+void quick_exit_handler_2()
+{
+    std::cout << "quick exit handler 2" << '\n';
+}
+std::at_quick_exit(quick_exit_handler_1);
+std::at_quick_exit(quick_exit_handler_2);
+std::at_quick_exit([]() {
+    std::cout << "quick exit handler 3" << '\n'; });
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+无论退出处理程序是通过哪种方法注册的，只在程序正常或快速终止时调用。如果程序是以异常方式终止，比如调用 std::terminate() 或 std::abort()，则不会调用处理程序。如果这些处理程序中的任何一个由于异常而退出，则 std::terminate() 将调用。退出处理程序不能有参数，并且必须返回 void 类型。注册后，不能取消注册。
+
+一个程序可以安装多个处理程序。标准保证每个方法至少可以注册 32 个处理程序，尽管实际的实现可能支持更多。\verb|std::atexit()| 和 \verb|std::at_quick_exit()| 都是线程安全的，可以从不同的线程同时调用。
+
+如果注册了多个处理程序，其将以与注册顺序相反的顺序调用。下表展示了当程序通过 \verb|std::exit()| 调用或 \verb|std::quick_exit()| 调用终止时，如前一节所示注册的退出处理程序的输出：
+
+\begin{itemize}
+\item
+std::exit(0);
+
+\begin{shell}
+exit handler 3
+exit handler 2
+exit handler 1
+\end{shell}
+
+\item
+\verb|std::quick_exit(0);|
+
+\begin{shell}
+quick exit handler 3
+quick exit handler 2
+quick exit handler 1
+\end{shell}
+\end{itemize}
+
+\begin{center}
+表6.7：调用\verb|exit()|和\verb|quick_exit()|而退出前的输出
+\end{center}
+
+另一方面，程序正常终止时，具有局部存储期的对象销毁、具有静态存储期的对象销毁，以及对已注册退出处理程序并发调用。
+
+但是，保证在静态对象构造之前注册的退出处理程序，将在该静态对象销毁之后调用。而在静态对象构造之后注册的退出处理程序，将在该静态对象销毁之前调用。
+
+为了更好地说明这一点，来看下面这个例子：
+
+\begin{cpp}
+struct static_foo
+{
+    ~static_foo() { std::cout << "static foo destroyed!" << '\n'; }
+    static static_foo* instance()
+    {
+        static static_foo obj;
+        return &obj;
+    }
+};
+\end{cpp}
+
+上下文中，引用以下代码：
+
+\begin{cpp}
+std::atexit(exit_handler_1);
+static_foo::instance();
+std::atexit(exit_handler_2);
+std::atexit([]() {std::cout << "exit handler 3" << '\n'; });
+std::exit(42);
+\end{cpp}
+
+当上述代码执行时，\verb|exit_handler_1| 在创建静态对象 \verb|static_foo| 之前注册。另一方面，\verb|exit_handler_2| 和 Lambda 表达式都按此顺序在静态对象构建后注册，所以正常终止时的调用顺序如下：
+
+\begin{enumerate}
+\item
+Lambda 表达式
+
+\item
+\verb|exit_handler_2|
+
+\item
+\verb|static_foo| 的析构函数
+
+\item
+\verb|exit_handler_1|
+\end{enumerate}
+
+上述程序的输出如下：
+
+\begin{shell}
+exit handler 3
+exit handler 2
+static foo destroyed!
+exit handler 1
+\end{shell}
+
+使用 \verb|std::at_quick_exit()| 时，如果程序正常终止，注册的函数不会被调用。如果在这种情况下需要调用某个函数，则必须使用 \verb|std::atexit()| 进行注册。
+

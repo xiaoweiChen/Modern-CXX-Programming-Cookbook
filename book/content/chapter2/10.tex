@@ -1,0 +1,85 @@
+
+字符串中可能包含特殊字符，例如：不可打印字符（换行符、水平和垂直制表符等）、字符串和字符定界符（双引号和单引号）或任意的八进制、十六进制或Unicode值。这些特殊字符通过一个以反斜杠开头的转义序列引入，后面跟着字符本身（例如 \verb|'| 和 \verb|"|）、指定的字母（例如 \verb|n| 表示换行符，\verb|t| 表示水平制表符）或其值（例如八进制的 050、十六进制的 XF7 或 Unicode 的 U16F0）。因此，反斜杠字符本身也需要用另一个反斜杠字符转义。这导致了更复杂的字面字符串，可能难以阅读。
+
+为了避免转义字符，C++11 引入了原字符串字面量，不会进行转义处理。本示例中，将介绍如何使用各种形式的原字符串字面量。
+
+\mySubsubsection{}{Getting ready}
+
+本示例以及本书其余部分，将使用 s 后缀来定义 \verb|basic_string| 字面量。
+
+\mySubsubsection{}{How to do it...}
+
+为了避免转义字符，可以用以下形式之一定义字符串字面量：
+
+\begin{itemize}
+\item
+\verb|R"( literal )"| 作为默认形式：
+
+\begin{cpp}
+auto filename {R"(C:\Users\Marius\Documents\)"s};
+auto pattern {R"((\w+)=(\d+)$)"s};
+auto sqlselect {
+    R"(SELECT *
+    FROM Books
+    WHERE Publisher='Packtpub'
+    ORDER BY PubDate DESC)"s};
+\end{cpp}
+
+\item
+\verb|R"delimiter( literal )delimiter"|，其中 delimiter 是除了括号、反斜杠和空格之外的字符序列，而 \verb|literal| 是字符序列，但不能包含结束序列 \verb|)delimiter"|。这里有一个使用 \verb|!!| 作为定界符的例子：
+
+\begin{cpp}
+auto text{ R"!!(This text contains both "( and )".)!!"s };
+std::cout << text << '\n';
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+当使用字符串字面量时，不会处理转义序列，实际的字符串内容写在定界符之间（所见即所得）。下面的例子显示了看似相同的原字面字符串；然而，第二个仍然包含转义字符。由于在字符串字面量的情况下这些字符不会处理，因此将以原样出现在输出中：
+
+\begin{cpp}
+auto filename1 {R"(C:\Users\Marius\Documents\)"s};
+auto filename2 {R"(C:\\Users\\Marius\\Documents\\)"s};
+// prints C:\Users\Marius\Documents\
+std::cout << filename1 << '\n';
+// prints C:\\Users\\Marius\\Documents\\
+std::cout << filename2 << '\n';
+\end{cpp}
+
+如果文本必须包含 \verb|)"| 序列，则必须使用不同的定界符，采用
+
+\verb|R"delimiter( literal )delimiter"|
+
+形式。根据标准，定界符中可能的字符如下：
+
+\begin{myTip}
+基本源字符集中的成员，除了：空格、左圆括号（右圆括号）、反斜杠 \verb|\| 和表示水平制表符、垂直制表符、换页符和换行符的控制字符。
+\end{myTip}
+
+原字符串字面量可以加上前缀 \verb|L|、\verb|u8|、\verb|u| 和 \verb|U| 分别表示宽字符、UTF-8、UTF-16 或 UTF-32 字符串字面量。以下是此类字符串字面量的例子：
+
+\begin{cpp}
+auto t1{ LR"(text)"  };  // const wchar_t*
+auto t2{ u8R"(text)" };  // const char* until C++20
+// const char8_t* in C++20
+auto t3{ uR"(text)"  };  // const char16_t*
+auto t4{ UR"(text)"  };  // const char32_t*
+auto t5{ LR"(text)"s  }; // std::wstring
+auto t6{ u8R"(text)"s }; // std::string until C++20
+// std::u8string in C++20
+auto t7{ uR"(text)"s  }; // std::u16string
+auto t8{ UR"(text)"s  }; // std::u32string
+\end{cpp}
+
+字符串末尾存在后缀 ""s 可使编译器推导出类型为各种字符串类，而非字符数组。
+
+
+
+
+
+
+
+
+
+

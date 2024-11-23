@@ -1,0 +1,253 @@
+
+C++ 编程语言定义了多种算术类型，可以执行算术操作（加法、减法、乘法、除法、取模），包括字符、整数和浮点数类型。有些类型从 C 编程语言继承而来，有些是 C++ 标准添加的。算术类型的常见问题是，大多数大小随目标平台的不同而变化，标准仅保证一个最小值。本章中，将介绍各种整数和浮点数类型。
+
+\mySubsubsection{}{How to do it...}
+
+根据需要使用数字类型：
+
+\begin{itemize}
+\item
+表示整数值（当范围不是很重要时），可以使用 int 类型。这是基本（有符号）整数类型，通常大小为 32 位，但并不保证。可用于表示人的年龄、日期(日、月、年)、电影或书籍的评分、集合中的项目数量等：
+
+\begin{cpp}
+int age = 42;
+int attendance = 96321;
+\end{cpp}
+
+\item
+需要对可能值的范围或内存表示形式施加限制时，使用符号性（有符号/无符号）和大小（short/long/long long）修饰符，例如:不能使用无符号整数表示为负值，避免混合使用有符号和无符号整数。另外，如果优化存储某些值所使用的内存(比如：表示日期)，可以使用 short int(至少是 16 位)。如果需要表示大数值(比如：文件大小)，可以使用 unsigned long long int(至少是 64 位)：
+
+\begin{cpp}
+unsigned int length = 32;
+short year = 2023; // same as short int
+unsigned long long filesize = 3'758'096'384;
+\end{cpp}
+
+\item
+为了表示不能为负值的标准数组索引、集合中的元素数量（如标准容器）、或 sizeof 操作符的结果，可以使用 std::size\_t(至少 16 位的无符号整数类型)。标准容器定义了一个名为 size\_type 的成员类型别名用于容器的大小和索引，这个类型通常是 std::size\_t 的同义词：
+
+\begin{cpp}
+std::size_t items = arr.size();
+\end{cpp}
+
+\item
+为了存储指针算术运算的结果，或者呈现可以为负值的 C 风格数组索引，可用 std::ptrdiff\_t。C++ 标准容器定义了一个 difference\_type 的成员类型别名，来存储迭代器之间的差异，该类型通常为 std::ptrdiff\_t 的同义词。
+
+\item
+需要存储需要保证范围的值时，可用 std::int8\_t、std::int16\_t、std::int32\_t 或 std::int64\_t 类型。虽然些可选，但在主流架构上都有定义。
+
+\item
+需要存储非负值或对具有保证范围的值进行位操作时，可使用 std::uint8\_t、std::uint16\_t、std::uint32\_t 或 std::uint64\_t 类型。
+
+\item
+需要存储需要保证范围的值，同时希望优化最快的访问速度时，使用 std::int\_fast8\_t、std::int\_fast16\_t、std::int\_fast32\_t 或 std::int\_fast64\_t 类型（或其无符号对应类型）。需要确定这些在目标架构上的可用性。
+
+\item
+需要存储需要保证范围的值，同时希望优化内存使用时，使用 std::int\_least8\_t、std::int\_least16\_t、std::int\_least32\_t 或 std::int\_least64\_t（或其无符号对应类型）。这些也需要确定在目标架构上的可用性。
+
+\item
+为了表示实数，可以使用 double 类型；默认的浮点类型，大小为 64 位。名称表示双精度类型，相对于单精度类型（使用 32 位），后者由 float 类型实现。还有一种扩展精度类型，称为 long double。标准未指定其实际精度，至少与 double 类型相同。某些编译器上，可以是四倍精度（使用 128 位），不过 VC++ 将其视为 double：
+
+\begin{cpp}
+double price = 4.99;
+float temperature = 36.5;
+long double pi = 3.14159265358979323846264338327950288419716939937510L;
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+C++ 语言整数类型 int 有几个修饰符，用于符号性和大小。int 类型是有符号的，因此 int 和 signed int 是相同的类型。使用修饰符时，实际上可以省略 int 的使用，以下类型等价：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{类型}      & \textbf{等价于} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+signed             & int                    \\ \hline
+unsigned           & unsigned int           \\ \hline
+short              & short int              \\ \hline
+signed short       & short int              \\ \hline
+signed short int   & short int              \\ \hline
+long               & long int               \\ \hline
+long long          & long long int          \\ \hline
+unsigned short     & unsigned short int     \\ \hline
+unsigned long      & unsigned long int      \\ \hline
+unsigned long long & unsigned long long int \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.1: 整数类型等价表
+\end{center}
+
+此表并未列出所有可能的组合，类型的修饰符顺序未指定，任何顺序都可以。下表列出了几种相同的类型：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{multirow}
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{类型}          & \textbf{等效类型}                \\ \hline
+\endfirsthead
+%
+\endhead
+%
+long long unsigned int & \multirow{5}{*}{unsigned long long int} \\ \cline{1-1}
+long unsigned long int &                                         \\ \cline{1-1}
+int long long unsigned &                                         \\ \cline{1-1}
+unsigned long long int &                                         \\ \cline{1-1}
+int long unsigned long &                                         \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.2: 带修饰符的整数类型等价表
+\end{center}
+
+虽然顺序未定义，但常见的是以符号性修饰符开始，然后是大小修饰符，最后是 int 类型。因此，前一表格左侧类型的规范形式是 unsigned long long int。
+
+无论整数类型的符号性或大小如何，都可能发生溢出或下溢的过程。当尝试存储大于数据类型最大值时会发生溢出。反之，即当尝试存储小于数据类型最小值时会发生下溢。
+
+以 short 类型为例。这是一个有符号整数类型，可以存储 -32,768 到 32,767 范围内的值。如果想存储 32,768 会发生什么？由于这个值大于最大值，所以会发生溢出。十进制的 32,767 在二进制中是 01111111 11111111，下一个值是 10000000 00000000，在 16 位表示中是 -32,768 十进制。下表展示了溢出和下溢的情况：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{要存储的值} & \textbf{实际存储的值} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+-32771                  & 32765                 \\ \hline
+-32770                  & 32766                 \\ \hline
+-32769                  & 32767                 \\ \hline
+-32768                  & -32768                \\ \hline
+…                       & …                     \\ \hline
+32767                   & 32767                 \\ \hline
+32768                   & -32768                \\ \hline
+32769                   & -32767                \\ \hline
+32770                   & -32765                \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.3: short int 类型值的溢出和下溢示例
+\end{center}
+
+同样的例子，以不同的形式展示在图表中：
+
+\myGraphic{1.0}{content/chapter2/images/1.png}{图 2.1: short int 类型值的溢出和下溢示例}
+
+如果使用 unsigned short 类型，而不是 short 类型，同样的问题也会出现。unsigned short 的范围是 0 到 65,535。尝试存储 65,536 将导致存储值为 0。同样，尝试存储 65,537 将导致存储值为 1。存储的值与数据类型可以存储的值的数量之间，进行了模运算。对于 unsigned short 类型来说，这个值是 $2^{16}$ 或 65,536。对于下溢，结果的发生方式相似。值 -1 变为 65,535，-2 变为 65,534，以此类推。这相当于将负值加到 65,536 上，然后执行模 65,536 的运算。溢出和下溢的情况如下表所示：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{要存储的值} & \textbf{实际存储的值} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+-2                      & 65534                 \\ \hline
+-1                      & 65535                 \\ \hline
+0                       & 0                     \\ \hline
+…                       & …                     \\ \hline
+65535                   & 65535                 \\ \hline
+65536                   & 0                     \\ \hline
+65537                   & 1                     \\ \hline
+\end{longtable}
+
+\begin{center}
+表 2.4: unsigned short int 类型值的溢出和下溢示例
+\end{center}
+
+同样地，下图中也举例演示了这些值的情况：
+
+\myGraphic{1.0}{content/chapter2/images/2.png}{图 2.2: unsigned short int 类型值的溢出和下溢示例}
+
+C++ 中整数类型的一个问题是大小没有明确定义。唯一明确规定的大小是 char 类型（及其有符号和无符号修饰符），必须是 1 字节。对于其余类型，适用以下关系：
+
+\begin{cpp}
+1 == sizeof(char) <= sizeof(short) <= sizeof(int) <= sizeof(long) <= sizeof(long long)
+\end{cpp}
+
+主流平台上，short 为 16 位，int 和 long 都为 32 位，而 long long 为 64 位。然而，有些平台上的 long 和 long long 都为 64 位，或者 int 为 16 位。为了弥合这种异构性，C++11 标准引入了一系列固定宽度的整数类型。这些类型定义在 <cstdint> 头文件中，并分为两类：
+
+\begin{itemize}
+\item
+一类是可选的，某些平台上不可用。这些类型的名字指定了确切的位数：
+
+\begin{itemize}
+\item
+int8\_t 和 uint8\_t 是 8 位
+
+\item
+int16\_t 和 uint16\_t 是 16 位
+
+\item
+int32\_t 和 uint32\_t 是 32 位
+
+\item
+int64\_t 和 uint64\_t 是 64 位
+
+\item
+intptr\_t 和 uintptr\_t，大小足以存储指向 void 的指针
+\end{itemize}
+
+\item
+另一类是强制性的，所有平台上都可用。这些类型又分为两组：
+
+\begin{itemize}
+\item
+一组为了快速访问而优化；称为 int\_fastX\_t 和 uint\_fastX\_t，其中 X 是 8、16、32 或 64，表示位数。这些类型提供了访问速度最快的整数类型，至少有 X 位宽。
+
+\item
+一组为了节省内存而优化；称为 int\_leastX\_t 和 uint\_leastX\_t，其中 X 是 8、16、32 或 64，表示位数。这些类型提供了表示最小的整数类型，至少有 X 位宽。
+\end{itemize}
+\end{itemize}
+
+实际上，大多数编译器将 8 位类型（int8\_t、uint8\_t、int\_least8\_t、uint\_least8\_t、int\_fast8\_t 和 uint\_fast8\_t）视为与有符号 char 和无符号 char 。所以在不同的系统上，使用这些类型的程序的行为，与使用其他固定宽度整数类型的程序不同：
+
+\begin{cpp}
+std::int8_t x = 42;
+std::cout << x << '\n'; // [1] prints *
+std::int16_t y = 42;
+std::cout << y << '\n'; // [2] prints 42
+\end{cpp}
+
+x 和 y 都是固定宽度的整数类型，都赋值为 42。当打印到控制台时，x 将输出为 * 而不是 42，这种行为取决于系统。
+
+开发者可能希望避免使用 8 位的固定宽度整数类型，而倾向于使用 int16\_t/uint16\_t 或者其中一个快速/内存最小版本。
+
+\begin{myNotic}
+编写数字字面量时，可以使用单引号（'）作为数字分隔符。这使得读取大数字更加容易，还可以视觉上进行比较。可以用于十进制、十六进制、八进制和二进制数字:
+
+\begin{cpp}
+auto a = 4'234'871'523ll;        // 4234871523
+auto b = 0xBAAD'F00D;            // 3131961357
+auto c = 00'12'34;               // 668
+auto d = 0b1011'01011'0001'1001; // 46361
+\end{cpp}
+
+数字分隔符会在确定数字值时忽略，其位置无关紧要:
+
+\begin{cpp}
+auto e = 1'2'3'4'5;
+\end{cpp}
+\end{myNotic}
+
+
+
+
+
+
+
+

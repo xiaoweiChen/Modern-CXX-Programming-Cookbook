@@ -1,0 +1,203 @@
+上一个示例中，介绍了如何将原始数据（即非结构化数据）写入和从文件中读取。但在很多时候，必须保存和加载对象而非原始数据。按照前一个示例中展示的方式进行写入和读取仅适用于POD类型（Plain Old Data，简单旧数据类型）。对于其他任何类型，必须明确决定实际上写入或读取什么，因为写入或读取指针（包括指向虚表的指针），以及任何形式的元数据不仅无关紧要，而且在语义上也是错误的。这些操作通常称为序列化和反序列化。这个示例中，将介绍如何将POD和非POD类型序列化和反序列化到二进制文件中。
+
+\mySubsubsection{}{Getting ready}
+
+为了这个示例中的例子，将使用foo和foopod类型：
+
+\begin{cpp}
+class foo
+{
+    int         i;
+    char        c;
+    std::string s;
+public:
+    foo(int const i = 0, char const c = 0, std::string const & s = {}):
+        i(i), c(c), s(s)
+    {}
+    foo(foo const &) = default;
+    foo& operator=(foo const &) = default;
+    bool operator==(foo const & rhv) const
+    {
+        return i == rhv.i &&
+               c == rhv.c &&
+               s == rhv.s;
+    }
+    bool operator!=(foo const & rhv) const
+    {
+        return !(*this == rhv);
+    }
+};
+struct foopod
+{
+    bool a;
+    char b;
+    int  c[2];
+};
+bool operator==(foopod const & f1, foopod const & f2)
+{
+    return f1.a == f2.a && f1.b == f2.b &&
+           f1.c[0] == f2.c[0] && f1.c[1] == f2.c[1];
+}
+\end{cpp}
+
+
+\mySubsubsection{}{How to do it...}
+
+对于不包含指针的POD类型，可以使用ofstream::write()和ifstream::read()来序列化/反序列化：
+
+\begin{itemize}
+\item
+使用ofstream和write()方法将实例序列化到二进制文件：
+
+\begin{cpp}
+std::vector<foopod> output {
+    {true, '1', {1, 2}},
+    {true, '2', {3, 4}},
+    {false, '3', {4, 5}}
+};
+std::ofstream ofile("sample.bin", std::ios::binary);
+if(ofile.is_open())
+{
+    for(auto const & value : output)
+    {
+        ofile.write(reinterpret_cast<const char*>(&value),
+        sizeof(value));
+    }
+    ofile.close();
+}
+\end{cpp}
+
+\item
+使用ifstream和read()方法从二进制文件反序列化实例：
+
+\begin{cpp}
+std::vector<foopod> input;
+std::ifstream ifile("sample.bin", std::ios::binary);
+if(ifile.is_open())
+{
+    while(true)
+    {
+        foopod value;
+        ifile.read(reinterpret_cast<char*>(&value), sizeof(value));
+        if(ifile.fail() || ifile.eof()) break;
+        input.push_back(value);
+    }
+    ifile.close();
+}
+\end{cpp}
+
+\end{itemize}
+
+对于非POD类型（或包含指针的POD类型），必须显式地将数据成员的值写入文件。为了反序列化，必须按相同的顺序从文件读取到数据成员：
+
+\begin{itemize}
+\item
+添加一个名为write()的成员函数来序列化此类型实例。该方法接受一个ofstream的引用并返回一个布尔值，指示操作是否成功：
+
+\begin{cpp}
+bool write(std::ofstream& ofile) const
+{
+    ofile.write(reinterpret_cast<const char*>(&i), sizeof(i));
+    ofile.write(&c, sizeof(c));
+    auto size = static_cast<int>(s.size());
+    ofile.write(reinterpret_cast<char*>(&size), sizeof(size));
+    ofile.write(s.data(), s.size());
+    return !ofile.fail();
+}
+\end{cpp}
+
+\item
+添加一个名为read()的成员函数来反序列化此类型实例。该方法接受一个ifstream的引用并返回一个布尔值，指示操作是否成功：
+
+\begin{cpp}
+bool read(std::ifstream& ifile)
+{
+    ifile.read(reinterpret_cast<char*>(&i), sizeof(i));
+    ifile.read(&c, sizeof(c));
+    auto size {0};
+    ifile.read(reinterpret_cast<char*>(&size), sizeof(size));
+    s.resize(size);
+    ifile.read(reinterpret_cast<char*>(&s.front()), size);
+    return !ifile.fail();
+}
+\end{cpp}
+\end{itemize}
+
+除了前面展示的write()和read()成员函数之外，还可以重载\verb|operator<<|和\verb|operator>>|，应执行以下步骤：
+
+\begin{enumerate}
+\item
+向要序列化/反序列化的类（为foo类）添加非成员\verb|operator<<|和\verb|operator>>|的友元声明：
+
+\begin{cpp}
+friend std::ofstream& operator<<(std::ofstream& ofile, foo const& f);
+friend std::ifstream& operator>>(std::ifstream& ifile, foo& f);
+\end{cpp}
+
+\item
+重载\verb|operator<<|：
+
+\begin{cpp}
+std::ofstream& operator<<(std::ofstream& ofile, foo const& f)
+{
+    ofile.write(reinterpret_cast<const char*>(&f.i),
+                sizeof(f.i));
+    ofile.write(&f.c, sizeof(f.c));
+    auto size = static_cast<int>(f.s.size());
+    ofile.write(reinterpret_cast<char*>(&size), sizeof(size));
+    ofile.write(f.s.data(), f.s.size());
+    return ofile;
+}
+\end{cpp}
+
+\item
+重载\verb|operator>>|：
+
+\begin{cpp}
+std::ifstream& operator>>(std::ifstream& ifile, foo& f)
+{
+    ifile.read(reinterpret_cast<char*>(&f.i), sizeof(f.i));
+    ifile.read(&f.c, sizeof(f.c));
+    auto size {0};
+    ifile.read(reinterpret_cast<char*>(&size), sizeof(size));
+    f.s.resize(size);
+    ifile.read(reinterpret_cast<char*>(&f.s.front()), size);
+    return ifile;
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{Hot it works...}
+
+无论是序列化整个对象（对于POD类型）还是只序列化其部分，都使用了在前一个示例中讨论的相同流类型：ofstream用于输出文件流，ifstream用于输入文件流。
+
+将对象序列化和反序列化到文件中时，应避免将指针的值写入文件。此外，不应该从文件中读取指针值，这些值代表的是内存地址，在不同的进程中，甚至在同一进程的不同时刻都没有意义。相反，应该写入指针所指向的数据，并将数据读入指针所指向的对象中。
+
+这是一般原则，实践中可能会遇到源中有多个指针指向同一个对象的情况；这时，可以只写入一份副本，并以相应的方式处理读取过程。
+
+如果想要序列化的对象是POD类型，可以像讨论原始数据时所做的那样进行。这个食谱的例子中，序列化了一系列foo类型的实例。当反序列化时，从文件流中循环读取，直到读取到文件末尾或发生失败。这时，读取方式可能看起来有些违反直觉，但如果以其他方式操作可能会导致最后一次读取重复的值：
+
+\begin{enumerate}
+\item
+读取在一个无限循环中完成。
+
+\item
+在循环中执行一次读取操作。
+
+\item
+检查是否发生失败或到达文件末尾，如果其中任意一种情况发生，则退出无限循环。
+
+\item
+将值添加到输入序列中，继续循环。
+\end{enumerate}
+
+使用\verb|while(!ifile.eof())|这样的循环退出条件来读取文件末尾标记，最后一个值将添加到输入序列两次。读取最后一个值时，文件末尾尚未遇到（文件末尾是一个位于文件最后一个字节之后的标记）。只有在下一次读取尝试时才会达到文件末尾，这将设置流的EOF位。但输入变量仍然持有最后一个值，因为其没有包含，因此这个值会第二次添加到输入vector中。
+
+如果想要序列化和反序列化的对象是非POD类型，不可能将这些对象作为原始数据写入/读取，例如：这样的对象可能有一个虚表。虽然将虚表写入文件不会造成问题，即使没有任何价值，但从文件中读取，从而覆盖实例的虚表，将对实例和程序产生灾难性的影响。
+
+当序列化/反序列化非POD类型时，有各种各样的选择，其中一些已经在前一节中讨论过，都提供了显式的方法进行写入和读取或重载标准的\verb|<<|和\verb|>>|操作符。第二种方法的优点在于，允许在通用代码中使用类型，通过这些操作符将对象写入和从流文件中读出。
+
+\begin{myNotic}
+当计划序列化和反序列化对象时，从一开始就考虑数据版本化，以避免随着时间推移数据结构变化而引起的问题。如何进行版本化超出了本示例的范畴。
+\end{myNotic}
+

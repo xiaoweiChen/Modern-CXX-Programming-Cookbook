@@ -1,0 +1,105 @@
+
+
+处理字符串时，临时对象会不断地创建。很多时候，这些临时对象无关紧要，仅用于从一处复制数据到另一处（例如，从函数复制到调用者）。这会成为一个性能问题，因为需要内存分配和数据复制，这些都应该避免。为此，C++17 标准提供了一个新的字符串类模板 \verb|std::basic_string_view|，表示一个非拥有常量引用到字符串（即，一系列字符）。本示例中，将介绍何时以及如何使用此类。
+
+\mySubsubsection{}{Getting ready}
+
+\verb|string_view| 类位于 \verb|std| 命名空间中，可以通过包含 \verb|string_view| 头文件来使用。
+
+\mySubsubsection{}{How to do it...}
+
+应该使用 \verb|std::string_view| 来传递函数参数（或从函数返回值），而不是 \verb|std::string const &|，除非代码需要调用接受 \verb|std::string| 参数的其他函数（这种情况下，需要进行转换）：
+
+\begin{cpp}
+std::string_view get_filename(std::string_view str)
+{
+    auto const pos1 {str.find_last_of('')};
+    auto const pos2 {str.find_last_of('.')};
+    return str.substr(pos1 + 1, pos2 - pos1 - 1);
+}
+char const file1[] {R"(c:\test\example1.doc)"};
+auto name1 = get_filename(file1);
+std::string file2 {R"(c:\test\example2)"};
+auto name2 = get_filename(file2);
+auto name3 = get_filename(std::string_view{file1, 16});
+\end{cpp}
+
+\mySubsubsection{}{How it work...}
+
+了解新字符串类型是如何工作之前，来看一个函数的例子，该函数旨在提取文件名而不带扩展名。C++17 之前会这样写这个函数：
+
+\begin{cpp}
+std::string get_filename(std::string const & str)
+{
+    auto const pos1 {str.find_last_of('\\')};
+    auto const pos2 {str.find_last_of('.')};
+    return str.substr(pos1 + 1, pos2 - pos1 - 1);
+}
+auto name1 = get_filename(R"(c:\test\example1.doc)"); // example1
+auto name2 = get_filename(R"(c:\test\example2)");     // example2
+if(get_filename(R"(c:\test\_sample_.tmp)").front() == '_') {}
+\end{cpp}
+
+\begin{myNotic}
+文件分隔符是 \verb|\|（反斜杠），就像在 Windows 中一样。对于基于 Linux 的系统，必须改为 /（斜杠）。
+\end{myNotic}
+
+\verb|get_filename()| 函数相对简单，接受一个 \verb|std::string| 的常量引用，并识别由最后一个文件分隔符和最后一个点界定的子串，这代表一个不带扩展名（也不带文件夹名称）的文件名。
+
+这段代码的问题在于，可能会创建一个、两个或更多临时对象，具体取决于编译器优化。函数参数是一个常量 \verb|std::string| 引用，但函数是用字符串字面量调用的，这需要从字面量构造一个 \verb|std::string|。这些临时对象需要分配和复制数据，这既耗时又耗费资源。最后一个例子中，只是想检查文件名的第一个字符是否是下划线，但为了达到这个目的，至少创建了两个临时字符串对象。
+
+\verb|std::basic_string_view| 类型模板旨在解决这个问题。这个类模板与 \verb|std::basic_string| 非常相似，两者几乎有相同的接口。原因在于 \verb|std::basic_string_view| 设计为可以直接替代对 \verb|std::basic_string| 的常量引用，而无需进一步更改代码。就像 \verb|std::basic_string| 一样，也有针对所有标准字符类型的特化：
+
+\begin{cpp}
+typedef basic_string_view<char>     string_view;
+typedef basic_string_view<wchar_t>  wstring_view;
+typedef basic_string_view<char16_t> u16string_view;
+typedef basic_string_view<char32_t> u32string_view;
+\end{cpp}
+
+\verb|std::basic_string_view| 类模板定义了指向常量连续字符序列的引用，用于表示一个视图，不能用来修改引用的字符序列。一个 \verb|std::basic_string_view| 实例相对较小，只需要一个指向序列中第一个字符的指针和长度。可以从一个 \verb|std::basic_string| 类型实例构造，还可以从一个指针和长度，或者从一个以 null 结尾的字符序列（需要初始化遍历字符串以找到长度）构造，所以\verb|std::basic_string_view| 类型模板也可以作为多种类型字符串的通用接口（只读取数据即可）。另一方面，不可能从 \verb|std::basic_string_view| 转换到 \verb|std::basic_string| 。
+
+必须显式地从 \verb|std::basic_string_view| 构造一个 \verb|std::basic_string| 实例：
+
+\begin{cpp}
+std::string_view sv{ "demo" };
+std::string s{ sv };
+\end{cpp}
+
+\begin{myNotic}
+主流编译器都提供了 \verb|std::basic_string|，包括小字符串优化。尽管实现细节不同，但通常依赖于静态分配一定数量的字符缓冲区（VC++ 和 GCC 5 或更新版本为 16 个字符），这些缓冲区不需要堆操作，只有当字符串的大小超过这个数量时才需要堆操作。
+\end{myNotic}
+
+除了与 \verb|std::basic_string| 提供的方法相同的方法外，\verb|std::basic_string_view| 还有另外两个方法：
+
+\begin{itemize}
+\item
+\verb|remove_prefix()|: 通过增加起始位置 n 个字符并减少长度 n 个字符来缩小视图。
+
+\item
+\verb|remove_prefix()|: 通过减少长度 n 个字符来缩小视图。
+\end{itemize}
+
+以下示例中使用这两个成员函数来修剪 \verb|std::string_view| 开头和结尾的空格。该函数的实现首先查找第一个不是空格的元素，然后查找最后一个不是空格的元素。然后，从末尾移除最后一个非空格字符之后的所有内容，从开头移除直到第一个非空格字符之前的所有内容。函数返回两端都修剪过的新视图：
+
+\begin{cpp}
+std::string_view trim_view(std::string_view str)
+{
+    auto const pos1{ str.find_first_not_of(" ") };
+    auto const pos2{ str.find_last_not_of(" ") };
+    str.remove_suffix(str.length() - pos2 - 1);
+    str.remove_prefix(pos1);
+    return str;
+}
+auto sv1{ trim_view("sample") };
+auto sv2{ trim_view("  sample") };
+auto sv3{ trim_view("sample  ") };
+auto sv4{ trim_view("  sample  ") };
+std::string s1{ sv1 };
+std::string s2{ sv2 };
+std::string s3{ sv3 };
+std::string s4{ sv4 };
+\end{cpp}
+
+当使用 \verb|std::basic_string_view| 时，需要注意两点：不能更改视图引用的数据，并且必须管理数据的生命周期，因为视图是非拥有的引用。
+

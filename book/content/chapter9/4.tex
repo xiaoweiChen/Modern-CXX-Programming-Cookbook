@@ -1,0 +1,282 @@
+因为需要执行的代码更少，编译时计算表达式的可能性提高了运行时的执行效率，而且编译器可以更多的进行优化。编译时常量不仅可以是字面量（如数字或字符串），也可以是函数执行的结果。如果函数的所有输入值（无论是参数、局部变量，还是全局变量）编译时已知，编译器可以执行该函数，并在编译时准备好结果。这就是C++11中引入的泛化常量表达式，这些限制在C++14中有所放宽，并在C++20中进一步放宽的原因。关键字constexpr（常量表达式的缩写）可以用来声明编译时常量对象和函数。
+
+泛化的常量表达式的工作方式在C++14和C++20中有所放宽，会导致对C++11的破坏性变化。例如，在C++11中，constexpr函数是隐式常量，但在C++14中不再是。本示例中，将介绍根据C++20定义的泛化常量表达式。
+
+\mySubsubsection{}{How to do it...}
+
+如果需要，可以使用constexpr关键字：
+
+\begin{itemize}
+\item
+定义可以在编译时求值的非成员函数：
+
+\begin{cpp}
+constexpr unsigned int factorial(unsigned int const n)
+{
+    return n > 1 ? n * factorial(n-1) : 1;
+}
+\end{cpp}
+
+\item
+定义可以在编译时执行的构造函数，以初始化constexpr表达式，并在此期间调用成员函数：
+
+\begin{cpp}
+class point3d
+{
+    double const x_;
+    double const y_;
+    double const z_;
+public:
+    constexpr point3d(double const x = 0,
+    double const y = 0,
+    double const z = 0)
+    :x_{x}, y_{y}, z_{z}
+    {}
+    constexpr double get_x() const {return x_;}
+    constexpr double get_y() const {return y_;}
+    constexpr double get_z() const {return z_;}
+};
+\end{cpp}
+
+\item
+在编译时求值：
+
+\begin{cpp}
+constexpr unsigned int size = factorial(6);
+char buffer[size] {0};
+constexpr point3d p {0, 1, 2};
+constexpr auto x = p.get_x();
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+const关键字用于在运行时声明变量为常量；所以初始化后，就不能更改。然而，计算常量表达式可能涉及运行时计算。constexpr关键字用于声明在编译时，为常量的变量或可以在编译时执行的函数。constexpr函数和表达式可以替代宏和硬编码的字面量，无性能损失。
+
+\begin{myNotic}
+声明函数为constexpr并说明其总是在编译时计算，只是启用了该函数在编译时期间计算的表达式中使用。当函数的所有输入值都可以在编译时计算时，这种情况才会发生。然而，该函数也可以在运行时调用。下面的代码显示了同一函数的两次调用，第一次是在编译时，第二次是在运行时：
+
+\begin{cpp}
+constexpr unsigned int size = factorial(6);
+// compile time evaluation
+int n;
+std::cin >> n;
+auto result = factorial(n);
+// runtime evaluation
+\end{cpp}
+\end{myNotic}
+
+关于constexpr可以使用的地方有一些限制。这些限制随着时间的推移而演变，C++14和C++20中都有变化。为了保持列表的合理性，这里只列出C++20中需要满足的要求：
+
+\begin{itemize}
+\item
+constexpr变量必须满足以下要求：
+
+\begin{itemize}
+\item
+其类型是字面量类型。
+
+\item
+在声明时初始化。
+
+\item
+用于初始化变量的表达式是常量表达式。
+
+\item
+必须有常量销毁过程，不能是类类型或类类型的数组；否则，类型必须有constexpr析构函数。
+\end{itemize}
+
+\item
+constexpr函数必须满足以下要求：
+
+\begin{itemize}
+\item
+不是一个协程。
+
+\item
+返回类型和所有参数的类型都是字面量类型。
+
+\item
+至少有一组参数，使得调用该函数会产生常量表达式。
+
+\item
+函数体不得包含goto语句、标签（除了switch中的case和default），以及非字面量类型的局部变量或静态或线程存储持续时间的局部变量。此项目中提到的限制已在C++23中移除。
+\end{itemize}
+
+\item
+constexpr构造函数必须满足以下要求，除此之外还需满足上述对函数的要求：
+
+\begin{itemize}
+\item
+没有虚基类。
+
+\item
+初始化非静态数据成员（包括基类）的所有构造函数也必须是constexpr。
+\end{itemize}
+
+\item
+constexpr析构函数自C++20起可用，必须满足以下要求，除此之外还需满足上述对函数的要求：
+
+\begin{itemize}
+\item
+没有虚基类。
+
+\item
+销毁非静态数据成员（包括基类）的所有析构函数也必须是constexpr。
+\end{itemize}
+\end{itemize}
+
+\begin{myNotic}
+此处提到的所有关于constexpr构造函数和析构函数的限制都在C++23中移除。
+\end{myNotic}
+
+\begin{myTip}
+有关不同标准版本中要求的完整列表，请参阅在线文档，网址为：\url{https://en.cppreference.com/w/cpp/language/constexpr}。
+\end{myTip}
+
+constexpr函数不是隐式常量（自C++14起），如果函数不改变对象的逻辑状态，需要显式使用const修饰符。然而，constexpr函数是隐式内联的。另一方面，声明为constexpr的表达式是隐式常量。以下两个声明等价：
+
+\begin{cpp}
+constexpr const unsigned int size = factorial(6);
+constexpr unsigned int size = factorial(6);
+\end{cpp}
+
+有些情况下，可能需要在声明中同时使用constexpr和const，指的是声明的不同部分。下面的例子中，p是一个指向常量整数的constexpr指针：
+
+\begin{cpp}
+static constexpr int c = 42;
+constexpr int const * p = &c;
+\end{cpp}
+
+如果引用变量别名了一个具有静态存储持续时间的实例或函数，则该引用变量也可以是constexpr。以下代码提供了一个例子：
+
+\begin{cpp}
+static constexpr int const & r = c;
+\end{cpp}
+
+这个例子中，r是一个constexpr引用，定义了对前一个代码中定义的编译时常量变量c的别名。
+
+虽然可以定义静态constexpr变量，但在constexpr函数中定义静态constexpr变量直到C++23才成为可能。以下代码展示了这样的例子：
+
+\begin{cpp}
+constexpr char symbol_table(int const n)
+{
+    static constexpr char symbols[] = "!@#$%^&*"; // error until C++23
+    return symbols[n % 8];
+}
+int main()
+{
+    constexpr char s = symbol_table(42);
+    std::cout << s << '\n';
+}
+\end{cpp}
+
+C++23之前，symbols变量的声明会生成编译器错误。解决这个问题的方法是在constexpr函数之外定义变量：
+
+\begin{cpp}
+static constexpr char symbols[] = "!@#$%^&*"; // OK
+constexpr char symbol_table(int const n)
+{
+    return symbols[n % 8];
+}
+\end{cpp}
+
+问题在C++23中得到了解决，该版本放宽了多个constexpr限制，使得这种解决方法不再必要。
+
+关于constexpr函数还有一个方面需要注意，就是异常处理。自C++20起，constexpr函数中允许使用try-catch块（在此之前不允许使用）。然而，不允许从常量表达式中抛出异常。虽然可以在constexpr函数中有一个throw语句，但其行为如下：
+
+\begin{itemize}
+\item
+运行时执行，表现得就不像constexpr声明。
+
+\item
+编译时执行，如果执行路径遇到throw语句，编译器将报错。
+\end{itemize}
+
+以下代码说明了这一点：
+
+\begin{cpp}
+constexpr int factorial2(int const n)
+{
+    if(n <= 0) throw std::invalid_argument("n must be positive");
+    return n > 1 ? n * factorial2(n - 1) : 1;
+}
+int main()
+{
+    try
+    {
+        int a = factorial2(5);
+        int b = factorial2(-5);
+    }
+    catch (std::exception const& ex)
+    {
+        std::cout << ex.what() << std::endl;
+    }
+    constexpr int c = factorial2(5);
+    constexpr int d = factorial2(-5); // error
+}
+\end{cpp}
+
+这个代码中：
+
+\begin{itemize}
+\item
+对factorial2()的前两次调用是在运行时执行的。第一次成功执行并返回60。第二次由于参数为负而抛出一个\verb|std::invalid_argument|异常。
+
+\item
+第三次调用在编译时声明了变量c，并且函数的所有输入值在编译时已知，所以在编译时计算。调用成功，函数计算为60。
+
+\item
+第四次调用也在编译时计算，但由于参数为负，应该执行抛出异常的路径。然而，这在常量表达式中不允许，因此编译器报错。
+\end{itemize}
+
+\mySubsubsection{}{There's more...}
+
+在C++20中，语言中添加了一个新的修饰符。这个修饰符称为constinit，用于确保具有静态或线程存储持续时间的变量具有静态初始化。C++变量的初始化可以是静态的也可以是动态的，静态初始化可以分为零初始化（当对象的初始值设置为零）或常量初始化（当初始值设置为编译时表达式）。以下代码展示了零初始化和常量初始化：
+
+\begin{cpp}
+struct foo
+{
+    int a;
+    int b;
+};
+struct bar
+{
+    int   value;
+    int*  ptr;
+    constexpr bar() :value{ 0 }, ptr{ nullptr } {}
+};
+std::string text {};  // zero-initialized to unspecified value
+double arr[10];       // zero-initialized to ten 0.0
+int* ptr;             // zero-initialized to nullptr
+foo f = foo();        // zero-initialized to a=0, b=0
+foo const fc{ 1, 2 }; // const-initialized at runtime
+constexpr bar b;      // const-initialized at compile-time
+\end{cpp}
+
+具有静态存储的变量可能具有静态或动态初始化。后一种情况下，可能出现难以发现的bug。想象一下，有两个在不同翻译单元中初始化的静态实例。
+
+当其中一个对象的初始化依赖于另一个实例时，初始化的顺序就得很重要。因为依赖的实例必须先初始化，但翻译单元初始化的顺序不确定，所以无法保证这两个实例的初始化顺序。但是，具有静态初始化的静态存储持续时间变量，是在编译时初始化的，所以这些对象在执行翻译单元的动态初始化时可以安全地使用。
+
+这就是新修饰符constinit的目的所在，确保具有静态或线程局部存储的变量具有静态初始化。因此，其初始化在编译时完成：
+
+\begin{cpp}
+int f() { return 42; }
+constexpr int g(bool const c) { return c ? 0 : f(); }
+constinit int c = g(true);  // OK
+constinit int d = g(false); /* error: variable does not have
+                                      a constant initializer */
+\end{cpp}
+
+也可以用于非初始化声明中，表明具有线程存储持续时间的变量已经初始化：
+
+\begin{cpp}
+extern thread_local constinit int data;
+int get_data() { return data; }
+\end{cpp}
+
+\begin{myNotic}
+同一个声明中不能同时使用constexpr、constinit和consteval修饰符中的多个。
+\end{myNotic}
+
+

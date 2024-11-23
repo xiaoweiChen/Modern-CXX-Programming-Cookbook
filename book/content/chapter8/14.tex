@@ -1,0 +1,190 @@
+
+std::cout 是 std::ostream 类型的一个全局对象，用于向标准输出控制台写入文本。尽管对其写入操作保证是线程安全的，但这一保障仅限于 operator<{}< 的单次调用。多次此类连续调用 operator<{}< 可能会在调用之间中断并稍后恢复，这使得有必要采用同步机制来避免破坏结果。这适用于所有多线程操作同一输出流的情况。为了简化，C++20 引入了 std::basic\_osyncstream 来提供一种机制，同步写入同一输出流的线程。本示例中，将介绍如何使用这一新工具。
+
+\mySubsubsection{}{How to do it...}
+
+为了同步来自多个线程的输出流写入访问，按以下步骤操作：
+
+\begin{itemize}
+\item
+包含 <syncstream> 头文件。
+
+\item
+定义一个 std::osyncstream 类型的变量来包装共享的输出流，例如 std::cout。
+
+\item
+仅使用该包装变量写入输出流。
+\end{itemize}
+
+下面的代码展示了这种模式的一个例子：
+
+\begin{cpp}
+std::vector<std::jthread> threads;
+for (int i = 1; i <= 10; ++i)
+{
+    threads.push_back(
+        std::jthread([](const int id)
+            {
+                std::osyncstream scout{ std::cout };
+                scout << "thread " << id << " running\n";
+            }, i));
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+默认情况下，标准 C++ 流对象 std::cin/std::wcin、std::cout/std::wcout、std::cerr/std::wcerr 和 std::clog/std::wclog 同步了相应的 C 标准输入输出流 stdin、stdout 和 stderr（除非调用了 \verb|std::ios_base::sync_with_stdio()| 函数禁用了这种同步），所以应用到 C++ 流对象上的任何操作都会立即应用于对应的 C 流。此外，访问这些流是保证线程安全的，对 \verb|operator <<| 或 \verb|>>| 的调用是原子的；另一个线程不能访问流直到当前调用完成，但多次调用可以中断：
+
+\begin{cpp}
+std::vector<std::jthread> threads;
+for (int i = 1; i <= 10; ++i)
+{
+    threads.push_back(
+        std::jthread([](const int id)
+            {
+                std::cout << "thread " << id << " running\n";
+            }, i));
+}
+\end{cpp}
+
+输出在不同的执行中有所不同：
+
+\begin{shell}
+thread thread thread 6 running
+thread 2 running
+1 running
+thread 3 running
+5 running
+thread 4thread 7 running
+thread 10 running
+thread 9 running
+running
+thread 8 running
+\end{shell}
+
+线程函数中有三次不同的调用 \verb|operator <<|。虽然每次调用本身是原子的，但线程可以在调用之间挂起，以便其他线程有机会执行。这就是为什么会看到的输出呈现上述形状的原因。
+
+这个问题可以通过几种方式解决。可以使用同步机制，比如互斥锁。但在特定情况下，更简单的解决方案是使用本地的 std::stringstream 实例构建要在控制台上显示的文本，并且只对 \verb|operator<<| 进行一次调用：
+
+\begin{cpp}
+std::vector<std::jthread> threads;
+for (int i = 1; i <= 10; ++i)
+{
+    threads.push_back(
+        std::jthread([](const int id)
+            {
+                std::stringstream ss;
+                ss << "thread " << id << " running\n";
+                std::cout << ss.str();
+            }, i));
+}
+\end{cpp}
+
+经过这些修改后，输出呈现出预期的形式：
+
+\begin{shell}
+thread 1 running
+thread 2 running
+thread 3 running
+thread 4 running
+thread 5 running
+thread 6 running
+thread 7 running
+thread 8 running
+thread 9 running
+thread 10 running
+\end{shell}
+
+C++20 中，可以使用 std::osyncstream/std::wosyncstream 实例来包装输出流以同步访问。osyncstream 类保证，如果所有来自不同线程的写操作都通过此类的实例发生，则不会有数据竞争。std::basic\_osyncstream 类型包装了一个 std::basic\_syncbuf 实例，后者又包装了一个输出缓冲区，同时包含一个单独的内部缓冲区。这个类在内部缓冲区中累积输出，并在实例销毁或显式调用 emit() 成员函数时，将输出传输给包装的缓冲区。
+
+同步流包装器可以用来同步输出流的访问，不仅仅是 std::ostream/std::wostream（即 std::cout/std::wcout 的类型）。例如，它可以用来同步对字符串流的访问：
+
+\begin{cpp}
+int main()
+{
+    std::ostringstream str{ };
+    {
+        std::osyncstream syncstr{ str };
+        syncstr << "sync stream demo";
+        std::cout << "A:" << str.str() << '\n'; // [1]
+    }
+    std::cout << "B:" << str.str() << '\n';    // [2]
+}
+\end{cpp}
+
+这里，定义了一个名为 str 的 std::ostringstream 实例。内层代码块中，该实例包装入一个 std::osyncstream 实例中，然后通过这个包装器向字符串流中写入文本 "sync stream demo"。在标记为 [1] 的行中，将字符串流的内容打印到控制台。但是，由于同步流尚未销毁，也没有调用 emit()，因此流缓冲区的内容为空。当同步流超出作用域时，其内部缓冲区的内容转移到包装的流中。因此，在标记为 [2] 的行中，str 字符串流包含了文本 "sync stream demo"。程序的输出如下所示：
+
+\begin{shell}
+A:
+B:sync stream demo
+\end{shell}
+
+可以扩展这个例子来展示 emit() 成员函数如何影响流的行为：
+
+\begin{cpp}
+int main()
+{
+    std::ostringstream str{ };
+    {
+        std::osyncstream syncstr{ str };
+        syncstr << "sync stream demo";
+        std::cout << "A:" << str.str() << '\n'; // [1]
+        syncstr.emit();
+        std::cout << "B:" << str.str() << '\n'; // [2]
+        syncstr << "demo part 2";
+        std::cout << "C:" << str.str() << '\n'; // [3]
+    }
+    std::cout << "D:" << str.str() << '\n';    // [4]
+}
+\end{cpp}
+
+这个第二个例子的第一部分是相同的。在标记为 [1] 的行中，字符串缓冲区的内容为空。但是在调用 emit() 之后，同步流将其内部缓冲区的内容转移给包装的输出流。因此，在标记为 [2] 的行中，字符串缓冲区包含了文本 "sync stream demo"。新的文本 "demo part 2" 通过同步流向字符串流写入，但在执行标记为 [3] 的行之前，这些内容不会转移到字符串流中，所以字符串流的内容没有变化。当内层代码块结束时，同步流的作用域结束，同步流内部缓冲区的新内容再次转移到已包装的字符串流中，现在该字符串流将包含文本 "sync stream demodemo part 2"。因此，这个第二个例子的输出如下：
+
+\begin{shell}
+A:
+B:sync stream demo
+C:sync stream demo
+D:sync stream demodemo part
+\end{shell}
+
+std::basic\_syncstream 类型有一个名为 \verb|get_wrapped()| 的成员函数，返回一个指向包装流缓冲区的指针。这可以用来构造新的 std::basic\_syncstream 类型实例，可以通过不同的 std::basic\_osyncstream 实例序列化内容到同一个输出流：
+
+\begin{cpp}
+int main()
+{
+    std::ostringstream str{ };
+    {
+        std::osyncstream syncstr{ str };
+        syncstr << "sync stream demo";
+        std::cout << "A:" << str.str() << '\n';    // [1]
+        {
+            std::osyncstream syncstr2{ syncstr.get_wrapped() };
+            syncstr2 << "demo part 3";
+            std::cout << "B:" << str.str() << '\n'; // [2]
+        }
+        std::cout << "C:" << str.str() << '\n';    // [3]
+    }
+    std::cout << "D:" << str.str() << '\n';       // [4]
+}
+\end{cpp}
+
+同样地，这个例子的第一部分没有变化。但有一个第二个内层代码块，其中构建了 std::osyncstream 的第二个实例，使用的是调用 syncstr 的 \verb|get_wrapped()| 成员函数返回的流缓冲区指针。在标记为 [2] 的行中，两个 std::osyncstream 实例都没有销毁，因此str 字符串流的内容仍然为空。第一个销毁的同步流是 syncstr2，在第二个内层代码块结束时。在标记为 [3] 的行中，字符串流的内容将是 "demo part 3"。然后，第一个同步流对象 syncstr 在第一个内层代码块结束时超出作用域，将文本 "sync stream demo" 添加到字符串流中。运行这个程序的输出如下：
+
+\begin{shell}
+A:
+B:
+C:demo part 3
+D:demo part 3sync stream demo
+\end{shell}
+
+虽然在所有这些例子中都定义了命名变量，但也可以使用临时同步流来写入输出流：
+
+\begin{cpp}
+threads.push_back(
+    std::jthread([](const int id)
+        {
+            std::osyncstream{ std::cout } << "thread " << id
+                                          << " running\n";
+        }, i));
+\end{cpp}
+

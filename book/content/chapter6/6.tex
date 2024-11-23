@@ -1,0 +1,137 @@
+
+C++ 没有像其他语言（如 C\# 或 Java）那样的层次类型系统，不能像 .NET 和 Java 中的 Object 类型或原生 JavaScript 那样，在单个变量中存储多种类型的值。开发人员长期以来一直使用 void* 来达到这一目的，这只存储指向任何事物的指针，并且不是安全的类型。根据最终目标，替代方案可以包括模板或重载函数。C++17 引入了一种标准的类型安全容器，称为 \verb|std::any|，可以保存类型的单个值。
+
+\mySubsubsection{}{Getting ready}
+
+\verb|std::any| 基于 \verb|boost::any| 设计，并且可以在 \verb|<any>| 头文件中找到。如果熟悉 \verb|boost::any| 并且在代码中使用过，则可以无缝迁移到 \verb|std::any|。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下操作来操作 \verb|std::any|：
+
+\begin{itemize}
+\item
+存储值时，可以使用构造函数或将值直接赋给 \verb|std::any| 变量：
+
+\begin{cpp}
+std::any value(42); // integer 42
+value = 42.0;       // double 42.0
+value = "42"s;      // std::string "42"
+\end{cpp}
+
+\item
+读取值时，使用非成员函数 \verb|std::any_cast()|：
+
+\begin{cpp}
+std::any value = 42.0;
+try
+{
+    auto d = std::any_cast<double>(value);
+    std::cout << d << '\n'; // prints 42
+}
+catch (std::bad_any_cast const & e)
+{
+    std::cout << e.what() << '\n';
+}
+\end{cpp}
+
+\item
+检查存储值的类型时，使用成员函数 \verb|type()|：
+
+\begin{cpp}
+inline bool is_integer(std::any const & a)
+{
+    return a.type() == typeid(int);
+}
+\end{cpp}
+
+\item
+检查容器是否存储了值时，使用成员函数 \verb|has_value()|：
+
+\begin{cpp}
+auto ltest = [](std::any const & a) {
+    if (a.has_value())
+        std::cout << "has value" << '\n';
+    else
+        std::cout << "no value" << '\n';
+};
+std::any value;
+ltest(value); // no value
+value = 42;
+ltest(value); // has value
+\end{cpp}
+
+\item
+修改存储值时，使用成员函数 \verb|emplace()|、\verb|reset()| 或 \verb|swap()|：
+
+\begin{cpp}
+std::any value = 42;
+ltest(value); // has value
+value.reset();
+ltest(value); // no value
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|std::any| 是一种类型安全的容器，可以保存任何类型（或者更准确地说，其退化类型）的可复制构造值。在容器中存储值非常简单——可以使用可用的构造函数（默认构造函数创建一个不存储任何值的容器）或赋值操作符。但读取值并不是直接可能的，需要使用非成员函数 \verb|std::any_cast()|，将存储的值转换为指定的类型。如果存储的值与转换的类型不同，此函数将抛出 \verb|std::bad_any_cast|。隐式可转换类型之间的转换，如 int 和 long，也不行。\verb|std::bad_any_cast| 继承自 \verb|std::bad_cast|，因此可以捕获这两种异常类型中的任何一种。
+
+可以使用成员函数 \verb|type()| 检查存储值的类型，该函数返回一个 \verb|type_info| 常量引用。如果容器为空，此函数将返回 \verb|typeid(void)|。要检查容器是否存储了值，可以使用成员函数 \verb|has_value()|，如果有值则返回 true，如果容器为空则返回 false。
+
+以下示例展示了如何检查容器是否有值、如何检查存储值的类型，以及如何从容器中读取值：
+
+\begin{cpp}
+void log(std::any const & value)
+{
+    if (value.has_value())
+    {
+        auto const & tv = value.type();
+        if (tv == typeid(int))
+        {
+            std::cout << std::any_cast<int>(value) << '\n';
+        }
+        else if (tv == typeid(std::string))
+        {
+            std::cout << std::any_cast<std::string>(value) << '\n';
+        }
+        else if (tv == typeid(
+        std::chrono::time_point<std::chrono::system_clock>))
+        {
+            auto t = std::any_cast<std::chrono::time_point<
+                std::chrono::system_clock>>(value);
+            auto now = std::chrono::system_clock::to_time_t(t);
+            std::cout << std::put_time(std::localtime(&now), "%F %T")
+                      << '\n';
+        }
+        else
+        {
+            std::cout << "unexpected value type" << '\n';
+        }
+    }
+    else
+    {
+        std::cout << "(empty)" << '\n';
+    }
+}
+log(std::any{});                       // (empty)
+log(42);                               // 42
+log("42"s);                            // 42
+log(42.0);                             // unexpected value type
+log(std::chrono::system_clock::now()); // 2016-10-30 22:42:57
+\end{cpp}
+
+如果想存储类型的多个值，可以使用如 \verb|std::vector| 这样的标准容器来保存 \verb|std::any| 类型的值。下面是一个示例：
+
+\begin{cpp}
+std::vector<std::any> values;
+values.push_back(std::any{});
+values.push_back(42);
+values.push_back("42"s);
+values.push_back(42.0);
+values.push_back(std::chrono::system_clock::now());
+for (auto const & v : values)
+    log(v);
+\end{cpp}
+
+这个段代码中，名为 values 的vector包含了 \verb|std::any| 类型的元素，这些元素又分别包含了一个整数、一个字符串、一个浮点数和一个 \verb|std::chrono::time_point| 值。
+

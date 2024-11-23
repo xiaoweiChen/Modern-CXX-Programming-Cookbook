@@ -1,0 +1,256 @@
+C++ 最重要的现代特性之一是 lambda 表达式，也称为 lambda 函数或简称 lambda。Lambda 表达式能够定义匿名函数对象，这些对象可以捕获作用域内的变量，并调用或作为参数传递给函数。其可避免了定义命名函数或函数对象的需要，Lambda 在许多方面都很有用。本示例中，将介绍如何将它们与标准算法一起使用。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中，将介绍接受一个函数或谓词作为参数的标准算法，该函数或谓词会应用到迭代过程中遇到的元素上。需要知道什么是一元和二元函数，以及什么是谓词和比较函数。还需熟悉函数类型实例，因为 lambda 表达式实际上是函数类型实例的语法糖。
+
+\mySubsubsection{}{How to do it...}
+
+应该优先使用 lambda 表达式来传递回调给标准算法，而不是使用函数或函数对象：
+
+\begin{itemize}
+\item
+如果需要在一个地方使用 lambda，可以在调用的地方定义匿名 lambda 表达式：
+
+\begin{cpp}
+auto numbers =
+    std::vector<int>{ 0, 2, -3, 5, -1, 6, 8, -4, 9 };
+auto positives = std::count_if(
+    std::begin(numbers), std::end(numbers),
+    [](int const n) {return n > 0; });
+\end{cpp}
+
+\item
+如果需要在多个地方调用 lambda，可以定义一个命名 lambda，即分配给一个变量（通常使用 auto 指定类型）：
+
+\begin{cpp}
+auto ispositive = [](int const n) {return n > 0; };
+auto positives = std::count_if(
+    std::begin(numbers), std::end(numbers), ispositive);
+\end{cpp}
+
+\item
+如果需要 lambda 仅在参数类型上有所不同（C++14），则可以使用泛型 lambda 表达式：
+
+\begin{cpp}
+auto positives = std::count_if(
+std::begin(numbers), std::end(numbers),
+    [](auto const n) {return n > 0; });
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it work...}
+
+第二点中展示的非泛型lambda表达式接受一个常量整数，并在其大于0时返回true，否则返回false。编译器定义了一个具有调用操作符的无名函数对象，其签名与lambda表达式的签名相同：
+
+\begin{cpp}
+struct __lambda_name__
+{
+    bool operator()(int const n) const { return n > 0; }
+};
+\end{cpp}
+
+编译器定义无名函数对象的方式取决于如何定义lambda表达式，包括是否捕获变量、使用mutable说明符或异常说明，或者具有尾随返回类型。前面显示的\verb|__lambda_name__|函数对象实际上是编译器生成的简化版本，还定义了默认的复制构造函数、移动构造函数、默认析构函数，以及删除的赋值操作符。
+
+\begin{myNotic}
+lambda表达式实际上是一个类(class)，编译器需要实例化该类型实例。lambda表达式的实例称为lambda闭包。
+\end{myNotic}
+
+下面的示例中，计算一个范围内大于等于5且小于等于10的元素数量：
+
+\begin{cpp}
+auto numbers = std::vector<int>{ 0, 2, -3, 5, -1, 6, 8, -4, 9 };
+auto minimum { 5 };
+auto maximum { 10 };
+auto inrange = std::count_if(
+    std::begin(numbers), std::end(numbers),
+    [minimum, maximum](int const n) {
+        return minimum <= n && n <= maximum;});
+\end{cpp}
+
+lambda通过复制（即按值）捕获两个变量，minimum和maximum。编译器创建的无名函数实例，加上前面提到的默认和删除的特殊成员后，这个类(class)看起来会像这样：
+
+\begin{cpp}
+class __lambda_name_2__
+{
+    int minimum_;
+    int maximum_;
+    public:
+    explicit __lambda_name_2__(int const minimum, int const maximum) :
+    minimum_( minimum), maximum_( maximum)
+    {}
+    __lambda_name_2__(const __lambda_name_2__&) = default;
+    __lambda_name_2__(__lambda_name_2__&&) = default;
+    __lambda_name_2__& operator=(const __lambda_name_2__&)
+    = delete;
+    ~__lambda_name_2__() = default;
+    bool operator() (int const n) const
+    {
+        return minimum_ <= n && n <= maximum_;
+    }
+};
+\end{cpp}
+
+lambda表达式可通过复制（或按值）或引用捕获变量，而且两种方式的不同组合是可能的。但不能多次捕获同一个变量，只能在捕获列表的开始处使用\&或=。
+
+\begin{myNotic}
+lambda表达式可以访问以下几种类型的变量：从封闭作用域捕获的变量、lambda参数、其内局部声明的变量、lambda在类内声明并且捕获了指针时的类数据成员，以及具有静态存储持续性的变量，例如：全局变量。
+
+lambda只能从封闭函数作用域捕获变量，不能捕获具有静态存储持续性的变量（命名空间作用域中声明的变量或带有static或external说明符的变量）。
+\end{myNotic}
+
+下表展示了lambda捕获语义的组合：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{Lambda}    & \textbf{描述}                                                                        \\ \hline
+\endfirsthead
+%
+\endhead
+%
+{[}{]}()\{\}       & 不捕获任何东西。                                                                  \\ \hline
+{[}\&{]}()\{\}     & 按引用捕获所有。                                                           \\ \hline
+{[}={]}()\{\}      & 按值捕获所有。自C++20起，隐式捕获指针this已弃用。 \\ \hline
+{[}\&x{]}()\{\}    &  只按引用捕获x。                                                    \\ \hline
+{[}x{]}()\{\}      & 只按值复制捕获x。                                                                    \\ \hline
+{[}\&x...{]}()\{\} & 按引用捕获扩展包x。                                                     \\ \hline
+{[}x...{]}()\{\}   & 按值复制捕获扩展包x。                                                          \\ \hline
+{[}\&, x{]}()\{\}  & 按引用捕获所有，除了按值复制捕获的x。                     \\ \hline
+{[}=, \&x{]}()\{\} & 按值捕获所有，除了按引用捕获的x。                     \\ \hline
+{[}\&, this{]}()\{\} & 按引用捕获所有，除了按值捕获的指针this（this按值捕获）。 \\ \hline
+{[}x, x{]}()\{\}   & 错误；x捕获两次。                                                                 \\ \hline
+{[}\&, \&x{]}()\{\}  & 错误；所有都按引用捕获，不能再指定按引用捕获x。                         \\ \hline
+{[}=, =x{]}()\{\}  & 错误；所有都按值复制捕获，不能再指定按值捕获x。    \\ \hline
+{[}\&this{]}()\{\} & 错误；指针this总是按值捕获。                                         \\ \hline
+{[}\&, ={]}()\{\}  & 错误；不能同时按值和按引用捕获所有。                             \\ \hline
+{[}x=expr{]}()\{\} & x是lambda闭包的数据成员，由表达式expr初始化。            \\ \hline
+{[}\&x=expr{]}()\{\} & x是lambda闭包的引用数据成员，由表达式expr初始化。                                 \\ \hline
+\end{longtable}
+
+\begin{center}
+表3.1: lambda捕获示例及其解释
+\end{center}
+
+C++17中lambda表达式的一般形式如下所示：
+
+\begin{cpp}
+[capture-list](params) mutable constexpr exception attr -> ret
+{ body }
+\end{cpp}
+
+ 此语法中显示的所有部分实际上都是可选的，但捕获列表和函数主体除外，二者都可以为空。如果不需要参数，则可以省略参数列表。由于编译器可以从返回表达式的类型推断出返回类型，因此无需指定返回类型。mutable说明符（告诉编译器lambda可以实际修改按值捕获的变量，但这不同于按值捕获，因为变化仅在lambda内部可见）、constexpr说明符（指示编译器生成一个constexpr调用操作符）、异常说明符和属性都是可选的。
+
+\begin{myNotic}
+最简单的lambda表达式是\verb|[]{}|，通常写作\verb|[](){}|。
+\end{myNotic}
+
+上表中的最后两个例子是广义lambda捕获的形式。这些是在C++14中引入的，可以捕获具有移动语义的变量，也可以用于在lambda中定义的新类型实例。下面的例子展示了如何使用广义lambda捕获来按移动方式捕获变量：
+
+\begin{cpp}
+auto ptr = std::make_unique<int>(42);
+auto l = [lptr = std::move(ptr)](){return ++*lptr;};
+\end{cpp}
+
+类型中的lambda需要捕获类数据成员时，可以采用几种方式：
+
+\begin{itemize}
+\item
+以形式\verb|[x=expr]|单独捕获数据成员：
+
+\begin{cpp}
+struct foo
+{
+    int         id;
+    std::string name;
+    auto run()
+    {
+        return [i=id, n=name] { std::cout << i << ' ' << n << '\n'; };
+    }
+};
+\end{cpp}
+
+\item
+以形式\verb|[=]|捕获整个对象（通过\verb|[=]|隐式捕获指针this在C++20中已弃用）：
+
+\begin{cpp}
+struct foo
+{
+    int         id;
+    std::string name;
+    auto run()
+    {
+        return [=] { std::cout << id << ' ' << name << '\n'; };
+    }
+};
+\end{cpp}
+
+\item
+通过捕获this指针捕获整个对象。如果需要调用类的其他方法，这是必需的。当实例本身按值捕获时，可用\verb|[*this]|捕获；当指针按值捕获时，可用\verb|[this]|捕获。如果实例可能在捕获后，但在调用lambda之前超出作用范围(原始实例析构)，这会有很大的不同：
+
+\begin{cpp}
+struct foo
+{
+    int         id;
+    std::string name;
+    auto run()
+    {
+        return[this]{ std::cout << id << ' ' << name << '\n'; };
+    }
+};
+auto l = foo{ 42, "john" }.run();
+l(); // does not print 42 john
+\end{cpp}
+\end{itemize}
+
+这里，正确的捕获应该是\verb|[*this]|，以便实例按值复。即使临时对象已经超出作用范围，lambda也会输出42 john。
+
+C++20标准对捕获指针this进行了几项更改：
+
+\begin{itemize}
+\item
+当使用\verb|[=]|时，隐式捕获this已弃用。这将导致编译器发出弃用警告。
+
+\item
+当捕获所有内容时，通过\verb|[=, this]|显式按值复制捕获this指针的方法，并只能通过\verb|[this]|捕获this指针。
+\end{itemize}
+
+lambda表达式仅在参数方面有所不同，可以像模板一样以泛型方式书写lambda，可使用auto说明符来指定类型参数（不涉及模板语法）。
+
+C++23之前，可以在lambda表达式的可选异常说明符和可选尾随返回类型之间指定属性。这样的属性适用于类型，而不是函数调用操作符。然而，像\verb|[[nodiscard]]|或\verb|[[noreturn]]|这样的属性只在函数上有意义，而不在类型上有意义。
+
+因此，从C++23开始，这一限制发生了变化，使得属性也可以进行指定：
+
+\begin{itemize}
+\item
+lambda引入符及其可选捕获之后，或者
+
+\item
+模板参数列表及其可选requires子句之后。
+\end{itemize}
+
+在lambda声明的这些部分中声明的属性适用于函数调用操作符，而不是类型。
+
+来看一个例子：
+
+\begin{cpp}
+auto linc = [](int a) [[deprecated]] { return a+1; };
+linc(42);
+\end{cpp}
+
+\verb|[[deprecated]]|属性适用于lambda的类型，编译代码片段时不会产生警告。在C++23中，可以这样写：
+
+\begin{cpp}
+auto linc = [][[nodiscard,deprecated]](int a) { return a+1; };
+linc(42);
+\end{cpp}
+
+有了这个改变，\verb|[[nodiscard]]|和\verb|[[deprecated]]|这两个属性都适用于lambda类型的函数调用操作符。这会导致发出两个警告：一个使用了已弃用的函数，另一个忽略了返回类型。
+
+
+
+
+
+

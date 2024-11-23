@@ -1,0 +1,237 @@
+
+流的读写操作可能会依赖于语言和地区设置，例如：数字、时间值或货币值的写入和解析，或者字符串的比较（排序），都可能受到这些设置的影响。C++ I/O库通过区域（locale）和特定组件（facet）设置提供了一种通用机制来实现国际化特性。本示例中，将介绍如何使用区域设置来控制输入/输出流的行为。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中的所有代码都使用了预定义的控制台流对象 std::cout，同样的规则适用于所有的I/O流实例。此外，将使用以下实例和lambda函数：
+
+\begin{cpp}
+auto now = std::chrono::system_clock::now();
+auto stime = std::chrono::system_clock::to_time_t(now);
+auto ltime = std::localtime(&stime);
+std::vector<std::string> names
+{"John", "adele", "Øivind", "François", "Robert", "Åke"};
+auto sort_and_print = [](std::vector<std::string> v,
+                         std::locale const & loc)
+{
+    std::sort(v.begin(), v.end(), loc);
+    for (auto const & s : v) std::cout << s << ' ';
+    std::cout << '\n';
+};
+
+\end{cpp}
+
+Øivind 和 Åke 包含了丹麦/挪威特有的字符 Ø 和 Å。丹麦/挪威字母表中，这两个字符是字母表的最后两个（按此顺序）。这里用来展示，区域设置的效果。
+
+本示例中使用的区域设置名称（如 \verb|en_US.utf8|, \verb|de_DE.utf8| 等）是在UNIX系统上使用的。下表列出了这些名称在Windows系统上的等价物：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{UNIX} & \textbf{Windows}       \\ \hline
+\endfirsthead
+%
+\endhead
+%
+en\_US.utf8   & English\_US.1252       \\ \hline
+en\_GB.utf8   & English\_UK.1252       \\ \hline
+de\_DE.utf8   & German\_Germany.1252   \\ \hline
+no\_NO.utf8   & Norwegian\_Norway.1252 \\ \hline
+\end{longtable}
+
+\begin{center}
+表7.1：本示例中使用的UNIX和Windows区域设置名称列表
+\end{center}
+
+\mySubsubsection{}{How to do it...}
+
+要控制流的本地化设置，必须遵循以下步骤：
+
+\begin{itemize}
+\item
+使用 std::locale 类型表示本地化设置，构造本地化实例有多种方式：
+
+\begin{itemize}
+\item
+默认构造是使用全局区域设置（程序启动时，默认为C区域设置）
+
+\item
+从本地名称构造，如C、POSIX、\verb|en_US.utf8| 等，前提是操作系统支持
+
+\item
+从另一区域设置复制，除了指定的一个特定组件外
+
+\item
+从另一区域设置复制，除了指定类别中的所有特定组件从另一个指定的区域设置复制：
+
+\begin{cpp}
+// default construct
+auto loc_def = std::locale {};
+// from a name
+auto loc_us = std::locale {"en_US.utf8"};
+// from another locale except for a facet
+auto loc1 = std::locale {loc_def, new std::collate<wchar_t>};
+// from another local, except the facet in a category
+auto loc2 = std::locale {loc_def, loc_us, std::locale::collate};
+\end{cpp}
+\end{itemize}
+
+\item
+要获取默认C区域设置的副本，可使用 std::locale::classic() 静态方法：
+
+\begin{cpp}
+auto loc = std::locale::classic();
+\end{cpp}
+
+\item
+要改变每次默认构造区域设置时，复制的默认区域设置，可使用 std::locale::global() 静态方法：
+
+\begin{cpp}
+std::locale::global(std::locale("en_US.utf8"));
+\end{cpp}
+
+\item
+使用 imbue() 方法更改I/O流的当前区域设置：
+
+\begin{cpp}
+std::cout.imbue(std::locale("en_US.utf8"));
+\end{cpp}
+\end{itemize}
+
+以下列表展示了使用不同区域设置的例子：
+
+\begin{itemize}
+\item
+使用特定的区域设置，通过其名称标识。区域设置为德语：
+
+\begin{cpp}
+auto loc = std::locale("de_DE.utf8");
+std::cout.imbue(loc);
+std::cout << 1000.50 << '\n';
+// 1.000,5
+std::cout << std::showbase << std::put_money(1050) << '\n';
+// 10,50 €
+std::cout << std::put_time(ltime, "%c") << '\n';
+// So 04 Dez 2016 17:54:06 JST
+sort_and_print(names, loc);
+// adele Åke François John Øivind Robert
+\end{cpp}
+
+\item
+对应用户设置（系统中定义）的区域设置，通过从空字符串构造 std::locale 类型实例实现：
+
+\begin{cpp}
+auto loc = std::locale("");
+std::cout.imbue(loc);
+std::cout << 1000.50 << '\n';
+// 1,000.5
+std::cout << std::showbase << std::put_money(1050) << '\n';
+// $10.50
+std::cout << std::put_time(ltime, "%c") << '\n';
+// Sun 04 Dec 2016 05:54:06 PM JST
+sort_and_print(names, loc);
+// adele Åke François John Øivind Robert
+\end{cpp}
+
+\item
+设置并使用全局区域设置：
+
+\begin{cpp}
+std::locale::global(std::locale("no_NO.utf8")); // set global
+auto loc = std::locale{};                       // use global
+std::cout.imbue(loc);
+std::cout << 1000.50 << '\n';
+// 1 000,5
+std::cout << std::showbase << std::put_money(1050) << '\n';
+// 10,50 kr
+std::cout << std::put_time(ltime, "%c") << '\n';
+// sön 4 dec 2016 18:02:29
+sort_and_print(names, loc);
+// adele François John Robert Øivind Åke
+\end{cpp}
+
+\item
+使用默认的本地(C)区域设置：
+
+\begin{cpp}
+auto loc = std::locale::classic();
+std::cout.imbue(loc);
+std::cout << 1000.50 << '\n';
+// 1000.5
+std::cout << std::showbase << std::put_money(1050) << '\n';
+// 1050
+std::cout << std::put_time(ltime, "%c") << '\n';
+// Sun Dec 4 17:55:14 2016
+sort_and_print(names, loc);
+// François John Robert adele Åke Øivind
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+区域设置实例实际上并不存储本地化的设置。区域设置是一种异构容器，包含多个特定组件。特定组件是一个定义本地化和国际化的设置的实例。标准定义了每个区域设置必须包含的一系列组件。除此之外，区域设置还可以包含其他用户定义的组件。以下是所有标准定义的组件列表：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+std::collate\textless{}char\textgreater{}    & std::collate\textless{}wchar\_t\textgreater{}    \\ \hline
+\endfirsthead
+%
+\endhead
+%
+std::ctype\textless{}char\textgreater{}      & std::ctype\textless{}wchar\_t\textgreater{}      \\ \hline
+\begin{tabular}[c]{@{}l@{}}std::codecvt\textless{}char,char,mbstate\_t\textgreater\\ std::codecvt\textless{}char16\_t,char,mbstate\_t\textgreater{}\end{tabular} &
+\begin{tabular}[c]{@{}l@{}}std::codecvt\textless{}char32\_t,char,mbstate\_t\textgreater\\ std::codecvt\textless{}wchar\_t,char,mbstate\_t\textgreater{}\end{tabular} \\ \hline
+\begin{tabular}[c]{@{}l@{}}std::moneypunct\textless{}char\textgreater\\ std::moneypunct\textless{}char,true\textgreater{}\end{tabular} &
+\begin{tabular}[c]{@{}l@{}}std::moneypunct\textless{}wchar\_t\textgreater\\ std::moneypunct\textless{}wchar\_t,true\textgreater{}\end{tabular} \\ \hline
+std::money\_get\textless{}char\textgreater{} & std::money\_get\textless{}wchar\_t\textgreater{} \\ \hline
+std::money\_put\textless{}char\textgreater{} & std::money\_put\textless{}wchar\_t\textgreater{} \\ \hline
+std::numpunct\textless{}char\textgreater{}   & std::numpunct\textless{}wchar\_t\textgreater{}   \\ \hline
+std::num\_get\textless{}char\textgreater{}   & std::num\_get\textless{}wchar\_t\textgreater{}   \\ \hline
+std::num\_put\textless{}char\textgreater{}   & std::num\_put\textless{}wchar\_t\textgreater{}   \\ \hline
+std::time\_get\textless{}char\textgreater{}  & std::time\_get\textless{}wchar\_t\textgreater{}  \\ \hline
+std::time\_put\textless{}char\textgreater{}  & std::time\_put\textless{}wchar\_t\textgreater{}  \\ \hline
+std::messages\textless{}char\textgreater{}   & std::messages\textless{}wchar\_t\textgreater{}   \\ \hline
+\end{longtable}
+
+\begin{center}
+表7.2：标准组件列表
+\end{center}
+
+本示例范围之外的是逐一讨论这个列表中的所有组件。不过，\verb|std::money_get| 是一个封装了解析字符流中货币值规则的组件，而 \verb|std::money_put| 则是一个封装了格式化货币值为字符串规则的组件。以类似的方式，\verb|std::time_get| 封装了日期和时间解析规则，而 \verb|std::time_put| 封装了日期和时间格式化规则。
+
+区域设置是一个包含不可变组件实例的不可变实例，区域设置实现为引用计数指针的引用计数数组。数组通过 std::locale::id 索引，所有组件都必须继承自基类 std::locale::facet ，并且必须具有类型为 std::locale::id 的公共静态成员，名为 id。
+
+只能通过使用其中一个重载的构造函数或 combine() 方法来创建区域设置实例，该方法如其名所示，结合当前区域设置与新的编译时可识别组件，并返回一个新的区域设置实例。下面的例子展示了，使用美国英语区域设置，但使用挪威语数字标点设置的情况：
+
+\begin{cpp}
+std::locale loc = std::locale("English_US.1252")
+                    .combine<std::numpunct<char>>(
+                        std::locale("Norwegian_Norway.1252"));
+std::cout.imbue(loc);
+std::cout << "en_US locale with no_NO numpunct: " << 42.99 << '\n';
+// en_US locale with no_NO numpunct: 42,99
+\end{cpp}
+
+另一方面，可以使用 \verb|std::has_facet()| 函数模板确定一个区域设置是否包含特定的组件，或者使用 \verb|std::use_facet()| 函数模板获取由特定区域设置实现的组件引用。
+
+前面的例子中，对一个字符串vector进行了排序，并将一个区域设置对象作为第三个参数传递给 std::sort() 泛型算法，第三个参数应该是一个比较函数实例。传递一个区域设置实例之所以可行是因为 std::locale 具有一个 operator()，使用该区域设置的排序组件可以使用字典序比较两个字符串。实际上是 std::locale 直接提供的唯一本地化功能，但所做的实际上是调用排序组件的 compare() 方法，该方法根据组件规则执行字符串的比较。
+
+每个程序在启动时都会创建一个全局区域设置，内容会复制到每一个默认构造的区域设置中。全局区域设置可以使用静态方法 std::locale::global() 替换。默认情况下，全局区域设置是C区域设置，这是一个等同于ANSI C中同名区域设置的区域设置。这个区域设置是为了处理简单的英文文本而创建的，也是C++中默认提供的，以确保与C的兼容性。可以使用静态方法 std::locale::classic() 获取指向此区域设置的引用。
+
+默认情况下，所有流都使用区域设置来写入或解析文本，也可以使用流的 imbue() 方法更改流使用的区域设置。imbue() 是 \verb|std::ios_base| 类型的一个成员，而所有I/O流都从 \verb|std::ios_base| 派生。与之配套的成员方法是 getloc()，返回当前流的区域设置的副本。
+
+\begin{myTip}
+前面的例子中，修改了 std::cout 流实例的区域设置。实际上，会希望为与标准C流关联的所有流对象设置相同的区域设置：cin、cout、cerr 和 clog（或 wcin、wcout、wcerr 和 wclog）。
+\end{myTip}
+
+想要使用特定的区域设置（如本食谱中所示的德语或挪威语）时，必须确保这些区域设置在系统上可用。在Windows上，这通常不是问题，但在Linux系统上，可能未安装。这种情况下，尝试实例化一个 std::locale 实例，比如：使用 \verb|std::locale("de_DE.utf8")|，将会抛出 \verb|std::runtime_error| 异常。要在系统上安装区域设置，请查阅其文档以找到需要执行的步骤。
+
+
+
+
+

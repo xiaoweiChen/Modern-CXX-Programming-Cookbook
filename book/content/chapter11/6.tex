@@ -1,0 +1,118 @@
+
+Google Test 是最广泛使用的 C++ 测试框架，Chromium 项目和 LLVM 编译器等项目都在使用它来进行单元测试。Google Test可在多个平台上使用多种编译器编写单元测试。Google Test 是一个便携、轻量级的框架，具有简单而全面的 API，用于使用断言编写测试；这里，测试分组为测试套件，测试套件又可组合成测试程序。
+
+该框架提供了有用的特性，比如：重复测试若干次和在首次失败时中断测试以调用调试器。无论是否启用了异常，其断言都能正常工作。接下来的示例将涵盖框架最重要的功能。本示例，将介绍如何安装框架并设置第一个测试项目。
+
+\mySubsubsection{}{Getting ready}
+
+和 Boost.Test 一样，Google Test 框架也有基于宏的 API。虽然编写测试只需要使用提供的宏，但为了更好地使用框架，建议对宏有一个良好的理解。
+
+\mySubsubsection{}{How to do it...}
+
+为了使用 Google Test，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+从 \url{https://github.com/google/googletest} 克隆或下载 Git 仓库。
+
+\item
+如果选择下载，请解压存档。
+
+\item
+使用提供的构建脚本构建框架。
+\end{enumerate}
+
+为了使用 Google Test 创建第一个测试程序，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+创建一个新的空 C++ 项目。
+
+\item
+进行必要的特定于开发环境的设置，以便项目的头文件夹（称为 include）可用于包含头文件。
+
+\item
+将项目链接到 gtest 共享库。
+
+\item
+向项目中添加一个新源文件，内容如下：
+
+\begin{cpp}
+#include <gtest/gtest.h>
+TEST(FirstTestSuite, FirstTest)
+{
+    int a = 42;
+    ASSERT_TRUE(a > 0);
+}
+int main(int argc, char **argv)
+{
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}
+\end{cpp}
+
+\item
+构建并运行项目。
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+Google Test 框架提供了一组简单易用的宏来创建测试和编写断言。与 Boost.Test 等其他测试框架相比，测试的结构也得到了简化。
+
+\begin{myNotic}
+需要提到几个与术语相关的重要方面，Google Test 并不使用测试套件这一术语。Google Test 中的一个测试用例基本上就是一个测试套件，并等同于 Boost.Test 中的测试套件。另一方面，测试函数等同于测试用例。这导致了混淆，Google Test 遵循了国际软件测试资格委员会（ISTQB）使用的通用术语，即测试用例和测试套件，并开始在其代码和文档中逐步替换这些术语。本书中我们将使用这些术语。
+\end{myNotic}
+
+该框架提供了一整套致命和非致命的断言、强大的异常处理支持，以及自定义测试执行方式和输出生成方式的能力。但与 Boost.Test 库不同的是，Google Test 中的测试套件不能包含其他测试套件，只能包含测试函数。
+
+框架的文档可在 GitHub 项目的页面上找到。对于这本书的这一版，使用的是 Google Test 框架版本 1.14，但这里展示的代码适用于框架的早期版本，并且预计也能适用于未来版本。“How to do it…”部分中展示的示例代码包含以下部分：
+
+\begin{enumerate}
+\item
+\verb|#include <gtest/gtest.h>| 包含框架的主要头文件。
+
+\item
+\verb|TEST(FirstTestSuite, FirstTest)| 声明了一个名为 FirstTest 的测试，作为名为 FirstTestSuite 的测试套件的一部分。这些名称必须是有效的 C++ 标识符，但不允许包含下划线。测试函数的实际名称是由测试套件名称和测试名称通过下划线连接而成。例子中，名称为 \verb|FirstTestSuite_FirstTest|。来自不同测试套件的测试可以有相同的单个名称，测试函数没有参数并且返回 void。多个测试可以用相同的测试套件分组。
+
+\item
+\verb|ASSERT_TRUE(a > 0);| 是一个断言宏，如果条件评估为假，会导致致命错误并从当前函数返回，框架定义了许多其他的断言宏。
+
+\item
+\verb|testing::InitGoogleTest(&argc, argv);| 初始化框架，必须在调用 \verb|RUN_ALL_TESTS()| 之前调用。
+
+\item
+\verb|return RUN_ALL_TESTS();| 自动检测并调用所有用 \verb|TEST()| 或 \verb|TEST_F()| 宏定义的测试。从宏返回的值用作 main() 函数的返回值，因为自动测试服务根据 main() 函数返回的值来确定测试程序的结果，而不是打印到 stdout 或 stderr 流的输出。宏 \verb|RUN_ALL_TESTS()| 只能调用一次；多次调用不受支持，其与框架的一些高级特性冲突。
+\end{enumerate}
+
+执行此测试程序将提供以下结果：
+
+\begin{shell}
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from FirstTestCase
+[ RUN      ] FirstTestCase.FirstTestFunction
+[       OK ] FirstTestCase.FirstTestFunction (1 ms)
+[----------] 1 test from FirstTestCase (1 ms total)
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (2 ms total)
+[  PASSED  ] 1 test.
+\end{shell}
+
+对于许多测试程序而言，main() 函数的内容与本示例中的内容相同。为了避免编写这样的 main() 函数，框架提供了一个基本实现，可以通过将程序链接到 \verb|gtest_main| 动态库来使用。
+
+\mySubsubsection{}{There's more...}
+
+Google Test 框架也可以与其他测试框架一起使用。可以使用另一个测试框架，如 Boost.Test 或 CppUnit 编写测试，并使用 Google Test 断言宏。为此，可以从代码或命令行设置 \verb|throw_on_failure 标志|，使用 \verb|--gtest_throw_on_failure| 参数，或使用 \verb|GTEST_THROW_ON_FAILURE| 环境变量并初始化框架：
+
+\begin{cpp}
+#include "gtest/gtest.h"
+int main(int argc, char** argv)
+{
+    testing::GTEST_FLAG(throw_on_failure) = true;
+    testing::InitGoogleTest(&argc, argv);
+}
+\end{cpp}
+
+启用 \verb|throw_on_failure| 选项时，失败的断言将打印错误消息并抛出异常，这些异常将主机测试框架捕获并视为失败。如果未启用异常，失败的 Google Test 断言将告诉程序以非零代码退出，这同样会被主机测试框架视为失败。
+
+

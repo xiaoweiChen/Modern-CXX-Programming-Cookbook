@@ -1,0 +1,261 @@
+本章中，已经多次讨论了折叠操作，是一种将二元函数应用于生成单一值的操作。介绍可变参数函数模板时见过这种操作，并将在高阶函数中再次见到。许多情况下，可变参数函数模板中参数包的展开是一种折叠操作。为了简化这类可变参数函数模板的编写，C++17引入了折叠表达式，可以在二元操作符上对参数包进行折叠。本示例中，将介绍如何使用折叠表达式来简化可变参数函数模板的编写。
+
+\mySubsubsection{}{Getting ready}
+
+本示例基于前一节的可变参数函数模板add()，实现是一个左折叠操作，再次展示该函数：
+
+\begin{cpp}
+template <typename T>
+T add(T value)
+{
+    return value;
+}
+template <typename T, typename... Ts>
+T add(T head, Ts... rest)
+{
+    return head + add(rest...);
+}
+\end{cpp}
+
+\mySubsubsection{}{How to do it...}
+
+要在二元操作符上对参数包进行折叠，请使用以下形式：
+
+\begin{itemize}
+\item
+一元左折叠 (... op pack)：
+
+\begin{cpp}
+template <typename... Ts>
+auto add(Ts... args)
+{
+    return (... + args);
+}
+\end{cpp}
+
+\item
+二元左折叠 (init op ... op pack)：
+
+\begin{cpp}
+template <typename... Ts>
+auto add_to_one(Ts... args)
+{
+    return (1 + ... + args);
+}
+\end{cpp}
+
+\item
+一元右折叠 (pack op ...)：
+
+\begin{cpp}
+template <typename... Ts>
+auto add(Ts... args)
+{
+    return (args + ...);
+}
+\end{cpp}
+
+\item
+二元右折叠 (pack op ... op init)：
+
+\begin{cpp}
+template <typename... Ts>
+auto add_to_one(Ts... args)
+{
+    return (args + ... + 1);
+}
+\end{cpp}
+\end{itemize}
+
+\begin{myNotic}
+括号是折叠表达式的一部分，不能省略。
+\end{myNotic}
+
+\mySubsubsection{}{How it work...}
+
+编译器遇到折叠表达式时，会其展开成以下表达式：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{表达式}   & \textbf{展开}                                 \\ \hline
+\endfirsthead
+%
+\endhead
+%
+(... op pack)         & ((pack\$1 op pack\$2) op ...) op pack\$n             \\ \hline
+(init op ... op pack) & (((init op pack\$1) op pack\$2) op ...) op pack\$n   \\ \hline
+(pack op ...)         & pack\$1 op (... op (pack\$n-1 op pack\$n))           \\ \hline
+(pack op ... op init) & pack\$1 op (... op (pack\$n-1 op (pack\$n op init))) \\ \hline
+\end{longtable}
+
+\begin{center}
+表3.2: 折叠表达式的形式
+\end{center}
+
+当使用二元形式时，省略号两边的操作符必须相同，初始化值中不得包含未展开的参数包。
+
+以下二元操作符支持与折叠表达式一起使用：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|l|l|l|l|l|l|l|l|l|l|}
+\hline
++ &
+- &
+* &
+/ &
+\% &
+\textasciicircum{} &
+\& &
+| &
+= &
+\textless{} &
+\textgreater{} &
+\textless{}\textless{} \\ \hline
+\endfirsthead
+%
+\endhead
+%
+\textgreater{}\textgreater{} &
++= &
+-= &
+*= &
+/= &
+\%= &
+\textasciicircum{}= &
+\&= &
+|= &
+\textless{}\textless{}= &
+\textgreater{}\textgreater{}= &
+== \\ \hline
+!= &
+\textless{}= &
+\textgreater{}= &
+\&\& &
+|| &
+, &
+.* &
+-\textgreater{}*. &
+&
+&
+&
+\\ \hline
+\end{longtable}
+
+\begin{center}
+表3.3: 支持与折叠表达式一起使用的二元操作符
+\end{center}
+
+使用一元形式时，只有 *、+、\verb|&|、|、\verb|&&|、|| 和 ,（逗号）这样的操作符允许与空参数包一起使用。这种情况下，空包的值如下：
+
+% Please add the following required packages to your document preamble:
+% \usepackage{longtable}
+% Note: It may be necessary to compile the document several times to get a multi-page table to line up properly
+\begin{longtable}{|l|l|}
+\hline
+\textbf{操作符} & \textbf{空包值} \\ \hline
+\endfirsthead
+%
+\endhead
+%
++                 & 0                         \\ \hline
+*                 & 1                         \\ \hline
+\&                & -1                        \\ \hline
+|                 & 0                         \\ \hline
+\&\&              & true                      \\ \hline
+||                & false                     \\ \hline
+,                 & void()                    \\ \hline
+\end{longtable}
+
+\begin{center}
+表3.4: 可以与空参数包一起使用操作符
+\end{center}
+
+现在有了之前实现的函数模板（考虑左折叠版本），可以编写以下代码：
+
+\begin{cpp}
+auto sum = add(1, 2, 3, 4, 5);         // sum = 15
+auto sum1 = add_to_one(1, 2, 3, 4, 5); // sum = 16
+\end{cpp}
+
+调用add(1, 2, 3, 4, 5)，将产生以下函数：
+
+\begin{cpp}
+int add(int arg1, int arg2, int arg3, int arg4, int arg5)
+{
+    return ((((arg1 + arg2) + arg3) + arg4) + arg5);
+}
+\end{cpp}
+
+由于现代编译器的优化非常激进，这个函数可以内联，最终会得到一个如auto sum = 1 + 2 + 3 + 4 + 5这样的表达式。
+
+\mySubsubsection{}{There's more...}
+
+折叠表达式适用于所有支持的二元操作符的重载，但不适用于任意二元函数。可以通过提供一个包装类型来实现一个解决方法，该类型将持有某个值，以及该包装类型的重载操作符：
+
+\begin{cpp}
+template <typename T>
+struct wrapper
+{
+    T const & value;
+};
+template <typename T>
+constexpr auto operator<(wrapper<T> const & lhs, wrapper<T> const & rhs)
+{
+    return wrapper<T> {lhs.value < rhs.value ? lhs.value : rhs.value};
+}
+\end{cpp}
+
+这里，wrapper 是一个简单的类模板，保存类型为 T 的值的一个常量引用。为此类模板提供了重载的 operator<；此重载不返回布尔值，而是返回一个 wrapper 类型实例以保存两个参数中较小的值。这里展示的可变参数函数模板 min() ，使用重载的 operator< 折叠扩展为 wrapper 类型模板实例的参数包：
+
+\begin{cpp}
+template <typename... Ts>
+constexpr auto min(Ts&&... args)
+{
+    return (wrapper<Ts>{args} < ...).value;
+}
+auto m = min(3, 1, 2); // m = 1
+\end{cpp}
+
+min() 函数可展开为类似于以下的内容：
+
+\begin{cpp}
+template<>
+inline constexpr int min<int, int, int>(int && __args0,
+                                        int && __args1,
+                                        int && __args2)
+{
+    return
+    operator<(wrapper_min<int>{__args0},
+        operator<(wrapper_min<int>{__args1},
+            wrapper_min<int>{__args2})).value;
+}
+\end{cpp}
+
+可以看到对二元操作符 < 的级联调用，这些调用返回一个 Wrapper<int> 值。否则，无法使用折叠表达式实现 min() 函数。以下实现无效：
+
+\begin{cpp}
+template <typename... Ts>
+constexpr auto minimum(Ts&&... args)
+{
+    return (args < ...);
+}
+\end{cpp}
+
+调用 min(3, 1, 2)，编译器会将其转换为：
+
+\begin{cpp}
+template<>
+inline constexpr bool minimum<int, int, int>(int && __args0,
+                                             int && __args1,
+                                             int && __args2)
+{
+    return __args0 < (static_cast<int>(__args1 < __args2));
+}
+\end{cpp}
+
+结果是一个返回布尔值的函数，而不是实际的整数值，即所提供的参数之间的最小值。

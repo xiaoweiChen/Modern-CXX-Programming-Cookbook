@@ -1,0 +1,193 @@
+
+标准库包含多种容器，以满足多样性和各种需求。有顺序容器（其中元素按特定位置排列）、容器适配器（为顺序容器提供不同的接口）、关联容器（其中顺序由与元素相关联的键决定）、无序关联容器（其中元素没有遵循特定顺序）。为特定任务选择正确的容器并不总是直截了当的。本实例将提供指导方针，助你决定在什么情况下使用哪种容器。
+
+\mySubsubsection{}{How to do it...}
+
+要决定应使用哪种标准容器，请考虑以下指导原则：
+
+\begin{itemize}
+\item
+当没有其他特殊要求时，使用 std::vector 作为默认容器。
+
+\item
+如果序列的长度在编译时已知且固定，则使用 std::array。
+
+\item
+如果频繁需要在序列的开头和结尾添加或移除元素，则使用 std::deque。
+
+\item
+如果频繁需要在序列中间（即除了开头和结尾以外的地方）添加或移除元素，并且需要双向遍历序列，则使用 std::list。
+
+\item
+如果频繁需要在序列中的任意位置添加或移除元素，但只需要单向遍历序列，则使用 std::forward\_list。
+
+\item
+如果需要一个具有后进先出（LIFO）语义的序列，则使用 std::stack。
+
+\item
+如果需要一个具有先进先出（FIFO）语义的序列，则使用 std::queue。
+
+\item
+如果需要一个具有FIFO语义的序列，但元素需按照严格的弱排序（最大的——优先级最高的元素排在最前面），则使用 std::priority\_queue。
+
+\item
+如果需要存储键值对且元素的顺序不重要但键必须唯一，则使用 std::unordered\_map。
+
+\item
+如果需要存储键值对且键必须唯一，但元素的顺序由键决定，则使用 std::map。
+
+\item
+如果需要存储键值对，键可以重复，且元素的顺序不重要，则使用 std::unordered\_multimap。
+
+\item
+如果需要存储键值对，键可以重复，且元素按照它们的键排序，则使用 std::multimap。
+
+\item
+如果需要存储唯一的值但它们的顺序不重要，则使用 std::unordered\_set。
+
+\item
+如果需要存储唯一的值但元素的顺序很重要（最小的元素先存入），则使用 std::set。
+
+\item
+如果想存储非唯一的值，尽管它们的顺序不重要，但希望拥有集合的查找能力，则使用 std::unordered\_multiset。
+
+\item
+如果想存储非唯一的值，但元素的顺序很重要，最小的键先出现，并希望拥有集合的查找能力，则使用 std::multiset。
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+容器是存储其他对象的对象，内部管理着被存储对象使用的内存。提供了对元素的访问和其他由标准化接口定义的功能。标准库中有四种类型的容器：
+
+\begin{itemize}
+\item
+\textbf{顺序容器} 存储元素的顺序不由元素的值决定。顺序容器通常实现为数组（元素在内存中连续存储）或链表（元素存储在指向其他节点的节点中）。标准顺序容器包括 std::array、std::vector、std::list、std::forward\_list 和 std::deque。
+
+\item
+\textbf{容器适配器} 定义了一个面向顺序容器的适应接口，包括 std::stack、std::queue 和 std::priority\_queue。
+
+\item
+\textbf{关联容器} 存储元素的顺序由与每个元素相关联的键决定。虽然支持插入和删除，但这不能发生在特定位置，而是取决于键。其提供了搜索元素的良好性能，所有容器都可以进行二分搜索，复杂度为对数级。标准关联容器包括 std::map、std::set、std::multimap 和 std::multiset。
+
+\item
+\textbf{无序关联容器} 存储的元素没有特定顺序。这些容器通过哈希表实现，使得搜索元素成为常数时间操作。与关联容器不同，无序容器不支持二分搜索。必须为存储在无序关联容器中的元素类型实现哈希函数。标准容器包括 std::unordered\_map、std::unordered\_multimap、std::unordered\_set 和 std::unordered\_multiset。
+\end{itemize}
+
+std::vector 容器可能使用最广泛，书中的代码片段也显示了这一点。vector 在连续的内存中顺序存储其元素，可以增长和缩小。虽然可以在序列的任何位置插入元素，但最高效的插入和删除操作是在序列的末尾进行的（push\_back() 和 pop\_back()）：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 2, 3, 5, 8 };
+v.push_back(13); // insert at the end
+\end{cpp}
+
+以下是向 vector 末尾插入元素前后的概念表示：
+
+\myGraphic{0.7}{content/chapter5/images/1.png}{图5.1: 向 vector 末尾插入元素}
+
+在序列的任何其他位置插入或删除元素（使用 insert() 和 erase()）的性能较低，因为插入/删除位置之后的所有元素都必须在内存中移动。如果插入操作会导致 vector 的容量（可以存储在分配内存中的元素数量）超过，则必须重新分配内存。这时，将分配一个新的更大的连续内存序列，所有已存储的元素将复制到这个新的缓冲区中，同时复制新添加的元素，旧的内存块将删除：
+
+\begin{cpp}
+std::vector<int> v{ 1, 1, 2, 3, 5, 8 };
+v.insert(v.begin() + 3, 13); // insert in the middle
+\end{cpp}
+
+以下是向 vector 中间插入新元素前后的概念表示：
+
+\myGraphic{0.7}{content/chapter5/images/2.png}{图5.2: 向 vector 中间插入元素}
+
+如果在序列的开头频繁发生插入或删除操作，更好的选择是 std::deque 容器。这允许在两端快速插入和删除（使用 push\_front() / pop\_front() 和 push\_back() / pop\_back()）。两端的删除操作不会使指向其余元素的指针或引用失效。但与 std::vector 不同，std::deque 并不在内存中连续存储其元素，而是存储在一系列固定长度的数组中。虽然索引元素涉及两层指针解引用，而 std::vector 只有一层，但扩展 deque 比 vector 更快，不需要重新分配所有内存并复制现有元素：
+
+\begin{cpp}
+std::deque<int> d{ 1,2,3,5,8 };
+d.push_front(1); // insert at the beginning
+d.push_back(13); // insert at the end
+\end{cpp}
+
+无论是 std::vector 还是 std::deque，在序列中间（即除了两端以外的位置）插入或删除操作的性能都不好。提供中间位置常数时间插入的容器是 std::list，以双向链表的形式实现的，所以元素不是在连续的内存中存储的。然而，std::list 的使用场景并不多。一种情况是在需要进行大量中间位置插入和删除操作时，而不是遍历列表时。当需要频繁拆分和合并一个或多个序列时，也可以使用 std::list。
+
+如果还需要在插入或删除后保持列表中元素的迭代器和引用的有效性，那么 std::list 是一个不错的选择：
+
+\begin{cpp}
+std::list<int> l{ 1, 1, 2, 3, 5, 8 };
+auto it = std::find(l.begin(), l.end(), 3);
+l.insert(it, 13);
+\end{cpp}
+
+以下是双向链表及其在中间插入新元素的概念表示：
+
+\myGraphic{0.8}{content/chapter5/images/3.png}{图5.3: 双向链表中间插入元素}
+
+如果希望存储由键标识的值，关联容器是合适的选择。可以通过 std::map 和 std::unordered\_map 存储键值对。这两种容器有很大的不同：
+
+\begin{itemize}
+\item
+std::map 按键（使用比较函数，默认为 std::less）对键值对进行排序，而 std::unordered\_map 名副其实，不保留任何顺序。
+
+\item
+std::map 使用自平衡二叉搜索树（如红黑树）实现，而 std::unordered\_map 使用哈希表实现。由于哈希表需要更多的簿记数据，std::unordered\_map 存储相同数量的元素会比 std::map 使用更多的内存。
+
+\item
+std::map 提供对数复杂度 $O(log(n))$的搜索操作，插入和删除操作也一样加上重新平衡的时间；而 std::unordered\_map 平均提供常数时间$O(1)$的插入操作，最坏的情况下的所有搜索、插入和删除操作的复杂度降低到线性$O(n)$。
+\end{itemize}
+
+根据这些差异，我们可以识别每种容器的典型使用场景：
+
+\begin{itemize}
+\item
+std::map 推荐用于：
+
+\begin{itemize}
+\item
+需要在容器中按定义的顺序存储元素，以便按顺序访问
+
+\item
+需要获取某个元素的后继或前驱
+
+\item
+需要使用 <、<=、> 或 >= 操作符对映射进行字典序比较
+
+\item
+需要使用如 binary\_search()、lower\_bound() 或 upper\_bound() 等算法
+\end{itemize}
+
+\item
+std::unordered\_map 推荐用于：
+
+\begin{itemize}
+\item
+不需要按特定顺序存储唯一的对象
+
+\item
+频繁执行插入、删除和查找操作
+
+\item
+需要访问单个元素，而不需要遍历整个序列
+\end{itemize}
+\end{itemize}
+
+为了使用 std::unordered\_map，必须为存储元素的类型定义一个哈希函数（可以是 std::hash<T> 的特化或其他实现）。std::unordered\_map 中，元素是存储在桶中的。元素存储在哪一个桶中取决于键的哈希值。好的哈希函数可以防止冲突，从而使所有操作都能在常数时间内完成——$O(1)$。另一方面，如果哈希函数设计不当，可能会导致冲突，这会使得查找和插入/删除操作退化为线性复杂度——$O(n)$。
+
+当想存储唯一的对象但没有与每个对象关联的键时，合适的标准容器是 std::set 和 std::unordered\_set。集合与映射非常相似，只是对象本身也是键。这两个容器，std::set 和 std::unordered\_set，之间的差异与之前讨论的 std::map 和 std::unordered\_map 相同：
+
+\begin{itemize}
+\item
+std::set 中对象是有序的，而 std::unordered\_set 中无序。
+
+\item
+std::set 使用红黑树实现，而 std::unordered\_set 使用哈希表实现。
+
+\item
+std::set 对于搜索操作提供对数复杂度$O(log(n))$，以及插入和删除操作时相同的复杂度加上重新平衡的时间；而 std::unordered\_set 平均提供常数时间$O(1)$的插入操作，尽管最坏情况下所有搜索、插入和删除操作的复杂度降低到线性$O(n)$。
+\end{itemize}
+
+考虑到这些差异以及与 std::map 和 std::unordered\_map 容器的相似之处，可以确定与 std::map 类似的 std::set 的使用场景，以及与 std::unordered\_map 类似的 std::unordered\_set 的使用场景。同样地，对于使用 std::unordered\_set，必须为存储对象的类型定义一个哈希函数。
+
+当需要存储与键关联的多个值时，可以使用 std::multimap 和 std::unordered\_multimap。这两者与 std::map 和 std::unordered\_map 的考量相同。std::multimap 对于 std::map 就像 std::unordered\_multimap 对于 std::unordered\_map 一样。类似地，std::multiset 和 std::unordered\_multiset 可用于在集合中存储重复项。
+
+综合考虑所有不同类型的标准容器及其基于特性的典型用途，可以使用下面的流程图来选择最适合的容器。此流程图是我基于 Mikael Persson 创建并在 StackOverflow 上分享的图表制作的 (\url{https://stackoverflow.com/a/22671607/648078})。
+
+\myGraphic{0.9}{content/chapter5/images/4.png}{图 5.4: 选择合适标准容器的流程图}
+
+\begin{myTip}
+虽然本指南旨在帮助选择合适的标准容器，但并没有涵盖所有容器和所有可能的考量因素。当性能至关重要时，最佳选择可能不是典型的那个。各位读者应该尝试不同的实现方案，对其进行基准测试，并根据测量结果来决定解决方案。
+\end{myTip}

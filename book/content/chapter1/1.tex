@@ -1,0 +1,234 @@
+
+自动类型推导是现代C++中最重要的特性，新的C++标准中可以使用auto作为类型的占位符，让编译器来推断实际的类型。C++11，auto可以用来声明局部变量，以及使用后置返回类型表示函数的返回类型。C++14，auto可以用于不需要指定后置类型函数的返回类型，以及lambda表达式中的参数声明。C++17，auto还可以用于声明结构化绑定，这部分内容将在本章末尾讨论。C++20允许使用auto简化函数模板的语法。C++23允许使用auto执对prvalue的副本进行显式转换。未来标准版本可能会将auto的应用扩展到更多情况。C++11和C++14引入auto，开发者应该了解这些优点，并尽可能地使用auto。Andrei Alexandrescu提出了一个术语并由Herb Sutter推广——尽可能地使用auto（AAA）(\url{ https://herbsutter.com/2013/08/12/gotw-94-solution-aaa-style-almost-always-auto/}）。
+
+\mySubsubsection{}{How to do it...}
+
+以下情况，使用auto作为实际类型的占位符：
+
+\begin{itemize}
+\item
+不想限定于某个特定类型时，局部变量的声明形式可为auto name = expression：
+
+\begin{cpp}
+auto i = 42;          // int
+auto d = 42.5;        // double
+auto s = "text";      // char const *
+auto v = { 1, 2, 3 }; // std::initializer_list<int>
+\end{cpp}
+
+\item
+需要限定于某个特定类型时，局部变量的声明形式可为auto name = type-id \{ expression \}：
+
+\begin{cpp}
+auto b  = new char[10]{ 0 };            // char*
+auto s1 = std::string {"text"};         // std::string
+auto v1 = std::vector<int> { 1, 2, 3 }; // std::vector<int>
+auto p  = std::make_shared<int>(42);    // std::shared_ptr<int>
+\end{cpp}
+
+\item
+需要定义命名的lambda函数时，除非该lambda需要传递或返回给另一个函数，否则声明形式为auto name = lambda-expression：
+
+\begin{cpp}
+auto upper = [](char const c) {return toupper(c); };
+\end{cpp}
+
+\item
+定义lambda参数和返回值时：
+
+\begin{cpp}
+auto add = [](auto const a, auto const b) {return a + b;};
+\end{cpp}
+
+\item
+不希望限定于某个特定类型时，用auto声明函数的返回类型：
+
+\begin{cpp}
+template <typename F, typename T>
+auto apply(F&& f, T value)
+{
+    return f(value);
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+auto说明符是实际类型的占位符。当使用auto时，编译器会根据以下实例推断实际类型：
+
+\begin{itemize}
+\item
+auto用于声明变量时，从初始化变量使用的表达式的类型推断。
+
+\item
+auto用作函数返回类型的占位符时，从函数的后置返回类型或返回表达式的类型推断。
+\end{itemize}
+
+某些情况下，需要限定于特定类型。例如第一个例子中，编译器推断s的类型为char const *。如有一个std::string，则必须显式指定类型，v的类型也会推断为std::initializer\_list<int>。所以，规则指出推断的类型是std::initializer\_list<T>，其中T在我们的例子中为int。但这里可能想要一个std::vector<int>，那就必须在赋值号右侧显式指定类型。
+
+使用auto代替实际类型的好处：
+
+\begin{itemize}
+\item
+auto不可能出现未初始化的变量。这是开发人员在声明变量，并指定实际类型时常犯的一个错误。然而，使用auto要求初始化变量以推断类型。未初始化的变量会导致未定义行为，所以用已定义的值初始化变量很重要。
+
+\item
+使用auto确保始终使用预期的类型，防止隐式转换的发生。以下例子中，获取一个vector的大小，并将其赋值给一个局部变量。第一种情况下，变量的类型是int，尽管size()方法返回的是size\_t，所以会发生从size\_t到int的隐式转换。但对于类型使用auto将推断出正确的类型，即size\_t：
+
+\begin{cpp}
+auto v = std::vector<int>{ 1, 2, 3 };
+// implicit conversion, possible loss of data
+int size1 = v.size();
+// OK
+auto size2 = v.size();
+// ill-formed (warning in gcc, error in clang & VC++)
+auto size3 = int{ v.size() };
+\end{cpp}
+
+\item
+auto促进了良好的面向对象实践，如优先考虑接口而非实现。这在面向对象编程的中很重要，提供了在不同实现之间切换的灵活性、模块化以及可测试性，因为模拟对象变得容易。指定的类型越少，代码就越通用，对未来的变化就越兼容，这是OOP的基本原则。
+
+\item
+auto意味着更少的输入（通常），对不关心的类型减少关注，常见的例子就是迭代器。当遍历一个范围时，并不会关心迭代器的具体类型。只会对迭代器本身感兴趣，所以auto可以节省输入（可能很长）名称，并帮助开发者专注于实际代码而不是类型名称。以下示例中，第一个for循环中显式使用了迭代器的类型。使用auto说明符的第二个循环看起来更简单，免去输入和对于实际类型的关注：
+
+\begin{cpp}
+std::map<int, std::string> m;
+for (std::map<int, std::string>::const_iterator
+it = m.cbegin();
+it != m.cend(); ++it)
+{ /*...*/ }
+for (auto it = m.cbegin(); it != m.cend(); ++it)
+{ /*...*/ }
+\end{cpp}
+
+\item
+auto声明变量提供了一致的编码风格，类型始终位于右侧。如果动态分配对象，则需要在赋值的左右两侧都写类型，例如：int* p = new int(42)。使用auto后，类型仅需在右侧指定一次。
+\end{itemize}
+
+然而，使用auto也有一些需要注意的地方：
+
+\begin{itemize}
+\item
+auto说明符只是类型的占位符，不是const/volatile和引用说明符的占位符。如果需要const/volatile和/或引用类型(\&)，则需要显式指定。下面的例子中，foo类的get()成员函数返回一个int的引用；当变量x从返回值初始化时，编译器推断的类型是int，而不是int\&，所以对x所做的更改都不会影响到foo.x\_，为了达到目的应使用auto\&：
+
+\begin{cpp}
+class foo {
+    int x;
+public:
+    foo(int const value = 0) :x{ value } {}
+    int& get() { return x; }
+};
+foo f(42);
+auto x = f.get();
+x = 100;
+std::cout << f.get() << '\n'; // prints 42
+\end{cpp}
+
+\item
+对于不可移动的类型，不能使用auto：
+
+\begin{cpp}
+auto ai = std::atomic<int>(42); // error
+\end{cpp}
+
+\item
+对于多词类型，如long long、long double或struct foo，不能使用auto。但第一种情况，可能的解决办法是使用字面量或类型别名；此外，在Clang和GCC（不是MSVC）中，可以将类型名称放在括号内，(long long)\{ 42 \}。至于第二种情况，以这种方式使用struct/class主要是为了兼容C语言，无论如何都应该避免：
+
+\begin{cpp}
+auto l1 = long long{ 42 }; // error
+using llong = long long;
+auto l2 = llong{ 42 };     // OK
+auto l3 = 42LL;            // OK
+auto l4 = (long long){ 42 }; // OK with gcc/clang
+\end{cpp}
+
+\item
+如果使用了auto说明符，仍需要知道类型，在大多数IDE中可以通过将光标放在变量上来查看。离开了IDE，就很难知道实际类型了，只能自己从初始化表达式中推断出来，这需要在代码中查找函数的返回类型。
+\end{itemize}
+
+auto可用于指定函数的返回类型。C++11中，需要在函数声明中使用后置返回类型。而在C++14中，这一限制放宽了，返回值的类型由编译器从返回表达式中推断得出。如果有多个返回值，则具有相同的类型：
+
+\begin{cpp}
+// C++11
+auto func1(int const i) -> int
+{ return 2*i; }
+// C++14
+auto func2(int const i)
+{ return 2*i; }
+\end{cpp}
+
+auto不会保留const/volatile和引用修饰符，auto作为函数返回类型占位符时的问题。以先前的foo.get()为例，这次有一个名为proxy\_get()的包装函数，接受foo的引用，调用get()并返回get()返回的值，这是一个int\&。但编译器会推断proxy\_get()的返回类型为int，而不是int\&。
+
+尝试将该值赋给int\&会出错：
+
+\begin{cpp}
+class foo
+{
+    int x_;
+public:
+    foo(int const x = 0) :x_{ x } {}
+    int& get() { return x_; }
+};
+auto proxy_get(foo& f) { return f.get(); }
+auto f = foo{ 42 };
+auto& x = proxy_get(f); // cannot convert from 'int' to 'int &'
+\end{cpp}
+
+要解决这个问题，需要返回auto\&。但对于模板和完美转发返回类型，不了解它是值还是引用的情况，存在一个问题。C++14中的解决方案是decltype(auto)，这样可以正确推断类型：
+
+\begin{cpp}
+decltype(auto) proxy_get(foo& f)
+{ return f.get(); }
+auto f = foo{ 42 };
+decltype(auto) x = proxy_get(f);
+\end{cpp}
+
+decltype说明符用于检查实体或表达式的声明类型。当声明类型很麻烦或者根本无法用标准符号声明就很有用，例如：声明lambda类型和依赖于模板参数的类型。
+
+最后一个重要案例是在lambda中使用auto。自C++14起，既可以在lambda返回类型中也可以在lambda参数类型中使用auto。这样的lambda称为泛型lambda，因为lambda定义的闭包类型具有模板化的调用操作符。以下是一个泛型lambda的例子，接受两个auto参数并返回应用operator+到实际类型的结果：
+
+\begin{cpp}
+auto ladd = [] (auto const a, auto const b) { return a + b; };
+\end{cpp}
+
+编译器生成的函数对象具有以下形式，其中调用操作符是一个函数模板：
+
+\begin{cpp}
+struct
+{
+    template<typename T, typename U>
+    auto operator () (T const a, U const b) const { return a+b; }
+} L;
+\end{cpp}
+
+此lambda可以用于添加定义了operator+的操作数：
+
+\begin{cpp}
+auto i = ladd(40, 2);            // 42
+auto s = ladd("forty"s, "two"s); // "fortytwo"s
+\end{cpp}
+
+这个例子中，使用ladd lambda来加两个整数，并且将它们连接成std::string对象（使用C++14的用户定义字面量操作符""s）。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

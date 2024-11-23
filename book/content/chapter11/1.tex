@@ -1,0 +1,191 @@
+
+Boost.Test 是最古老，也是最受欢迎的 C++ 测试框架，提供了一组易于使用的 API，用于编写测试并将其组织成测试用例和测试套件。Boost.Test 对断言、异常处理、固件等测试框架所需的重要特性支持良好。
+
+接下来的几个示例中将展示其特性，这些特性能够编写单元测试。本示例中，将介绍如何安装框架并创建一个简单的测试项目。
+
+\mySubsubsection{}{Getting ready}
+
+Boost.Test 框架有一个基于宏的 API。只需要使用提供的宏来编写测试，但想很好地使用这个框架，建议对宏有一个很好的理解。
+
+\mySubsubsection{}{How to do it...}
+
+为了设置环境以使用 Boost.Test，请按照以下步骤操作：
+
+\begin{itemize}
+\item
+从 \url{http://www.boost.org/} 下载最新版本的 Boost 库。
+
+\item
+解压存档内容。
+
+\item
+使用提供的工具和脚本来构建库，以便使用静态或动态库版本。如果计划使用纯头文件版本的库，则此步不是必需的。
+\end{itemize}
+
+Linux 系统上，也可以使用包管理工具来安装库。例如，在 Ubuntu 上，可以使用 app-get 安装包含 Boost.Test 库的 libboost-test-dev 包，命令如下：
+
+\begin{shell}
+sudo apt-get install libboost-test-dev
+\end{shell}
+
+\begin{myNotic}
+建议查阅库的在线文档以获取各种系统的安装步骤。
+\end{myNotic}
+
+要使用 Boost.Test 库的纯头文件版本创建的第一个测试程序，请按照以下步骤操作：
+
+\begin{enumerate}
+\item
+创建一个新的空白 C++ 项目。
+
+\item
+进行特定于开发环境的必要设置，以便项目的 Boost 主文件夹可用于包含头文件。
+
+\item
+向项目中添加一个新源文件：
+
+\begin{cpp}
+#define BOOST_TEST_MODULE My first test module
+#include <boost/test/included/unit_test.hpp>
+BOOST_AUTO_TEST_CASE(first_test_function)
+{
+    int a = 42;
+    BOOST_TEST(a > 0);
+}
+\end{cpp}
+
+\item
+如果想链接到动态库，还需要定义 \verb|BOOST_TEST_DYN_LINK| 宏。
+
+\item
+构建并运行项目。
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+Boost.Test 库可以从 \url{http://www.boost.org/} 下载，随同其他 Boost 库一起提供。本书中使用的是 1.83 版本，这些示例中讨论的功能可能会在未来的许多版本中可用。测试库有三种版本：
+
+\begin{itemize}
+\item
+单头文件：可以在不构建库的情况下编写测试程序，只需要包含一个头文件。其局限性在于模块只能有一个翻译单元，可以将模块拆分为多个头文件，以便将不同的测试套件分开存放。
+
+\item
+静态库：可以在不同的翻译单元之间分割模块，但首先需要将库构建为静态库。
+
+\item
+动态库：与静态库相同，但优点在于，对于具有许多测试模块的程序，这个库只链接一次，而不是每个模块链接一次，从而可减小二进制文件大小。但在这种情况下，运行时必须有动态库可用。
+\end{itemize}
+
+简单起见，本书将使用单头文件版本。静态和动态库版本，需要构建库。下载的存档文件中包含了构建库的脚本。但具体的步骤根据平台和编译器的不同而有所变化；这里不会介绍这些步骤，可以在网上去查找。
+
+为了使用库，有几个术语和概念需要理解：
+
+\begin{itemize}
+\item
+测试模块是一个执行测试的程序。有两种类型的模块：单文件（使用单头文件版本时）和多文件（使用静态或动态版本时）。
+
+\item
+测试断言检查测试模块的条件。
+
+\item
+测试用例是一组一个或多个测试断言，由测试模块独立执行和监控，如果失败或泄露未捕获的异常，其他测试的执行就不会停止。
+
+\item
+测试套件是一个或多个测试用例或测试套件的集合。
+
+\item
+测试单元是测试用例或测试套件。
+
+\item
+测试树是测试单元的层次结构。在此结构中，测试用例是叶子节点，测试套件是非叶子节点。
+
+\item
+测试运行器是给定测试树后执行必要初始化、测试执行和结果报告的组件。
+
+\item
+测试报告是测试运行器执行测试后产生的报告。
+
+\item
+测试日志是在测试模块执行期间记录的所有事件。
+
+\item
+测试设置是负责框架初始化、测试树构建和个人测试用例设置的测试模块部分。
+
+\item
+测试清理是负责清理操作的测试模块部分。
+
+\item
+测试固件是一对设置和清理操作，为多个测试单元调用，以避免重复代码。
+\end{itemize}
+
+定义了这些概念后，就可以解释上面列出的示例代码了：
+
+\begin{enumerate}
+\item
+\verb|#define BOOST_TEST_MODULE|在 My first test module 定义了一个模块初始化的存根，并为主测试套件设置了一个名称。这必须在包含任何库头文件之前定义。
+
+\item
+\verb|#include <boost/test/included/unit_test.hpp>| 包含单头文件库，其中包含了所有其他必要的头文件。
+
+\item
+\verb|BOOST_AUTO_TEST_CASE(first_test_function)| 声明了一个无参数的测试用例 (\verb|first_test_function|)，并自动注册将其包含在测试树中作为封装测试套件的一部分。这个例子中，测试套件是主测试套件，由 \verb|BOOST_TEST_MODULE| 定义。
+
+\item
+\verb|BOOST_TEST(a > 0);| 执行测试断言。
+\end{enumerate}
+
+执行此测试模块的输出如下：
+
+\begin{shell}
+Running 1 test case...
+*** No errors detected
+\end{shell}
+
+\mySubsubsection{}{There's more...}
+
+如果不想让库生成 main() 函数，而希望自己编写，则需要在包含库头文件之前定义另外两个宏 - \verb|BOOST_TEST_NO_MAIN| 和 \verb|BOOST_TEST_ALTERNATIVE_INIT_API|。然后，在自己的 main() 函数中，通过提供默认初始化函数 \verb|init_unit_test()| 作为参数来调用默认的测试运行器 \verb|unit_test_main()|：
+
+\begin{cpp}
+#define BOOST_TEST_MODULE My first test module
+#define BOOST_TEST_NO_MAIN
+#define BOOST_TEST_ALTERNATIVE_INIT_API
+#include <boost/test/included/unit_test.hpp>
+BOOST_AUTO_TEST_CASE(first_test_function)
+{
+    int a = 42;
+    BOOST_TEST(a > 0);
+}
+int main(int argc, char* argv[])
+{
+    return boost::unit_test::unit_test_main(init_unit_test, argc, argv);
+}
+\end{cpp}
+
+还可以自定义测试运行器的初始化函数，必须移除 \verb|BOOST_TEST_MODULE| 宏的定义，并改写一个不带参数并返回布尔值的初始化函数：
+
+\begin{cpp}
+#define BOOST_TEST_NO_MAIN
+#define BOOST_TEST_ALTERNATIVE_INIT_API
+#include <boost/test/included/unit_test.hpp>
+#include <iostream>
+BOOST_AUTO_TEST_CASE(first_test_function)
+{
+    int a = 42;
+    BOOST_TEST(a > 0);
+}
+bool custom_init_unit_test()
+{
+    std::cout << "test runner custom init\n";
+    return true;
+}
+int main(int argc, char* argv[])
+{
+    return boost::unit_test::unit_test_main(
+        custom_init_unit_test, argc, argv);
+}
+\end{cpp}
+
+\begin{myTip}
+可在自己不定义 main() 函数的情况下，自定义初始化函数。这时，不应该定义 \verb|BOOST_TEST_NO_MAIN| 宏，初始化函数应命名为 \verb|init_unit_test()|。
+\end{myTip}
+

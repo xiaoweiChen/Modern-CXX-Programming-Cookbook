@@ -1,0 +1,153 @@
+类似于上一个示例中讨论的货币输入输出操纵符，C++11 标准提供了控制时间值在流中写入和读取的操纵符，其中时间值以 std::tm 类型实例的形式表示，该对象持有日历日期和时间。本示例中，将介绍如何使用这些时间操纵符。
+
+\mySubsubsection{}{Getting ready}
+
+时间 I/O 操纵符使用的时间值以 std::tm 值表示，应该对 <ctime> 头文件中的这个结构体有所了解。也应该熟悉区域设置及其如何为流设置
+
+本示例中讨论的操纵符可在 std 命名空间中的 <iomanip> 头文件中找到。
+
+\mySubsubsection{}{How to do it...}
+
+要将时间值写入输出流，应该按照以下步骤操作：
+
+\begin{enumerate}
+\item
+获取给定时间对应的日历日期和时间值，以下示例是将当前时间转换为以日历日期和时间表示的本地时间：
+
+\begin{cpp}
+auto now = std::chrono::system_clock::now();
+auto stime = std::chrono::system_clock::to_time_t(now);
+auto ltime = std::localtime(&stime);
+auto ttime = std::time(nullptr);
+auto ltime = std::localtime(&ttime);
+\end{cpp}
+
+\item
+使用 \verb|std::put_time()| 提供指向表示日历日期和时间的 std::tm 指针，以及指向表示格式的空终止字符字符串的指针。C++11 标准提供了一长串可以使用的格式列表，可以在 \url{http://en.cppreference.com/w/cpp/io/manip/put_time} 查看这些格式。
+
+\item
+为了根据特定区域设置的标准写入日期和时间字符串，可通过调用 imbue() 设置流的区域设置，然后使用 \verb|std::put_time()| 操纵符：
+
+\begin{cpp}
+std::cout.imbue(std::locale("en_GB.utf8"));
+std::cout << std::put_time(ltime, "%c") << '\n';
+// Sun 04 Dec 2016 05:26:47 JST
+\end{cpp}
+\end{enumerate}
+
+以下是支持的时间格式的一些示例：
+
+\begin{itemize}
+\item
+ISO 8601 日期格式 \verb|"%F"| 或 \verb|"%Y-%m-%d"|:
+
+\begin{cpp}
+std::cout << std::put_time(ltime, "%F") << '\n';
+// 2016-12-04
+\end{cpp}
+
+\item
+ISO 8601 时间格式 \verb|"%T"|:
+
+\begin{cpp}
+std::cout << std::put_time(ltime, "%T") << '\n';
+// 05:26:47
+\end{cpp}
+
+\item
+ISO 8601 结合 UTC 格式的日期和时间 \verb|"%FT%T%z"|:
+
+\begin{cpp}
+std::cout << std::put_time(ltime, "%FT%T%z") << '\n';
+// 2016-12-04T05:26:47+0900
+\end{cpp}
+
+\item
+ISO 8601 周格式 \verb|"%Y-W%V"|:
+
+\begin{cpp}
+std::cout << std::put_time(ltime, "%Y-W%V") << '\n';
+// 2016-W48
+\end{cpp}
+
+\item
+ISO 8601 带周数的日期格式 \verb|"%Y-W%V-%u"|:
+
+\begin{cpp}
+std::cout << std::put_time(ltime, "%Y-W%V-%u") << '\n';
+// 2016-W48-7
+\end{cpp}
+
+\item
+ISO 8601 序数日期格式 \verb|"%Y-%j"|:
+
+\begin{cpp}
+std::cout << std::put_time(ltime, "%Y-%j") << '\n';
+// 2016-339
+\end{cpp}
+\end{itemize}
+
+要从输入流读取时间值，应该按照以下步骤操作：
+
+\begin{enumerate}
+\item
+声明std::tm 类型实例，用于保存从流中读取的时间值：
+
+\begin{cpp}
+auto time = std::tm {};
+\end{cpp}
+
+\item
+使用 \verb|std::get_time()| 提供指向 std::tm 指针，该对象将保存时间值，以及指向表示格式的空终止字符字符串的指针。格式列表可以在 \url{http://en.cppreference.com/w/cpp/io/manip/get_time} 查看。以下示例解析了 ISO 8601 结合的日期和时间值：
+
+\begin{cpp}
+std::istringstream stext("2016-12-04T05:26:47+0900");
+stext >> std::get_time(&time, "%Y-%m-%dT%H:%M:%S");
+if (!stext.fail()) { /* do something */ }
+\end{cpp}
+
+\item
+为了根据特定区域设置的标准读取日期和时间字符串，首先通过调用 imbue() 设置流的区域设置，然后使用 \verb|std::get_time()| 操纵符：
+
+\begin{cpp}
+std::istringstream stext("Sun 04 Dec 2016 05:35:30 JST");
+stext.imbue(std::locale("en_GB.utf8"));
+stext >> std::get_time(&time, "%c");
+if (stext.fail()) { /* do something else */ }
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{Hot it works...}
+
+两个时间值的操纵符，\verb|put_time()| 和 \verb|get_time()|非常相似：都是带有两个参数的函数模板。第一个参数是指向表示日历日期和时间的 std::tm 指针，该对象保存要写入流的值或从流中读取的值。第二个参数是指向表示时间文本格式空终止字符字符串的指针。\verb|put_time()| 使用 \verb|std::time_put()| 特性来输出日期和时间值，而 \verb|get_time()| 使用 \verb|std::time_get()| 特性来解析日期和时间值。这两个操纵符函数模板都会返回一个未指定类型的实例。这些函数不会抛出异常：
+
+\begin{cpp}
+template<class CharT>
+/*unspecified*/ put_time(const std::tm* tmb, const CharT* fmt);
+template<class CharT>
+/*unspecified*/ get_time(std::tm* tmb, const CharT* fmt);
+\end{cpp}
+
+\begin{myTip}
+使用 \verb|put_time()| 将日期和时间值写入输出流的结果字符串与调用 std::strftime() 或 std::wcsftime() 得到的结果相同。
+\end{myTip}
+
+标准定义了一长串可用的转换说明符，这些说明符组成了格式字符串。这些说明符以前缀 \% 开头，某些情况下后面跟着一个 E 或者一个 0。有些说明符等效；例如，\verb|%F| 等同于 \verb|%Y-%m-%d|（这是 ISO 8601 日期格式），\verb|%T| 等同于 \verb|%H:%M:%S|（这是 ISO 8601 时间格式）。本示例中只提到了一些转换说明符，特别是 ISO 8601 日期和时间格式。要查看完整的转换说明符列表，请参考 C++ 标准或之前提到的链接。
+
+\begin{myNotic}
+并非所有由 \verb|put_time()| 支持的转换说明符也由 \verb|get_time()| 支持。例如，z（ISO 8601 格式中的 UTC 偏移量）和 Z（时区名称或缩写）说明符只能与 \verb|put_time()| 一起使用：
+
+\begin{cpp}
+std::istringstream stext("2016-12-04T05:26:47+0900");
+auto time = std::tm {};
+stext >> std::get_time(&time, "%Y-%m-%dT%H:%M:%S%z"); // fails
+stext >> std::get_time(&time, "%Y-%m-%dT%H:%M:%S");   // OK
+\end{cpp}
+\end{myNotic}
+
+一些转换说明符所代表的文本取决于区域设置，所有以 E 或 0 开头的说明符都有区域设置依赖。要为流设置特定的区域设置，可以使用 imbue()。
+
+\begin{myNotic}
+前面的一个示例中使用的 std::localtime()，如果成功则返回指向静态内部 std::tm 指针（否则返回 nullptr）。外部不应该尝试释放此指针所指向的内存区域！
+\end{myNotic}
+

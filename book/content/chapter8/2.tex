@@ -1,0 +1,256 @@
+
+线程允许同时执行多个函数，这些函数通常需要访问共享资源。对共享资源的访问必须同步，以便一次只有一个线程可以读取或写入共享资源。本示例中，将介绍C++标准定义了哪些机制来同步线程对共享数据的访问。
+
+\mySubsubsection{}{Getting ready}
+
+本示例中讨论的互斥锁（mutex）和锁（lock）类分别位于<mutex>头文件中的std命名空间下，以及C++14的共享互斥锁和锁位于<shared\_mutex>头文件中。
+
+\mySubsubsection{}{How to do it...}
+
+使用以下模式同步对单个共享资源的访问：
+
+\begin{enumerate}
+\item
+适当的作用域（类或全局作用域）中定义一个互斥锁：
+
+\begin{cpp}
+std::mutex g_mutex;
+\end{cpp}
+
+\item
+每个线程访问共享资源之前获取该互斥锁：
+
+\begin{cpp}
+void thread_func()
+{
+    using namespace std::chrono_literals;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        std::cout << "running thread "
+                  << std::this_thread::get_id() << '\n';
+    }
+    std::this_thread::yield();
+    std::this_thread::sleep_for(2s);
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        std::cout << "done in thread "
+                  << std::this_thread::get_id() << '\n';
+    }
+}
+\end{cpp}
+\end{enumerate}
+
+使用以下模式同步对多个共享资源的同时访问以避免死锁：
+
+\begin{enumerate}
+\item
+适当的作用域（全局或类作用域）中为每个共享资源定义一个互斥锁：
+
+\begin{cpp}
+template <typename T>
+struct container
+{
+    std::mutex     mutex;
+    std::vector<T> data;
+};
+\end{cpp}
+
+\item
+使用带有死锁避免算法的std::lock()同时锁定互斥锁：
+
+\begin{cpp}
+template <typename T>
+void move_between(container<T> & c1, container<T> & c2,
+                  T const value)
+{
+    std::lock(c1.mutex, c2.mutex);
+    // continued at 3.
+}
+\end{cpp}
+
+\item
+锁定后，采用每个互斥锁的所有权进入std::lock\_guard类，确保函数结束时（或作用域结束时）安全释放：
+
+\begin{cpp}
+// continued from 2.
+std::lock_guard<std::mutex> l1(c1.mutex, std::adopt_lock);
+std::lock_guard<std::mutex> l2(c2.mutex, std::adopt_lock);
+c1.data.erase(
+    std::remove(c1.data.begin(), c1.data.end(), value),
+    c1.data.end());
+c2.data.push_back(value);
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+互斥锁（mutex，即互斥）是一种同步原语，可保护多个线程对共享资源的并发访问。C++标准库提供了几种实现：
+
+\begin{itemize}
+\item
+\verb|std::mutex| 是最常用的互斥锁类型；前面的代码段中有所说明。提供了获取和释放互斥锁的方法。lock() 尝试获取互斥锁，如果不可用则阻塞，\verb|try_lock()| 尝试获取互斥锁，如果不可用则不阻塞并返回，unlock() 释放互斥锁。
+
+\item
+\verb|std::timed_mutex| 类似于 std::mutex，提供了两种使用超时获取互斥锁的方法：\verb|try_lock_for()| 尝试获取互斥锁并在指定时间内不可用时返回，\verb|try_lock_until()| 尝试获取互斥锁并在到达指定时间点前不可用时返回。
+
+\item
+\verb|std::recursive_mutex| 类似于 std::mutex，可以从同一个线程多次获取互斥锁而不阻塞。
+
+\item
+\verb|std::recursive_timed_mutex| 是递归互斥锁和带超时的互斥锁的组合。
+
+\item
+\verb|std::shared_timed_mutex|，自C++14起，用于多个读者可以同时访问同一资源，而不会引起数据竞争的情况下，而只允许一个写者。实现了两层访问锁定——共享（多个线程可以共享同一互斥锁的所有权）和独占（只有一个线程可以拥有互斥锁）——并且提供了超时功能。
+
+\item
+\verb|std::shared_mutex|，自C++17起，类似于 shared\_timed\_mutex，但没有超时功能。
+\end{itemize}
+
+第一个锁定可用互斥锁的线程获得所有权并继续执行。任何线程连续尝试锁定互斥锁的所有后续尝试都会失败，包括已经拥有互斥锁的线程，并且 lock() 方法会阻塞线程，直到通过调用 unlock() 释放互斥锁为止。如果线程需要能够在不阻塞的情况下多次锁定互斥锁，从而进入死锁状态，则应使用 \verb|recursive_mutex| 类模板。
+
+使用互斥锁保护对共享资源的访问的典型方法包括锁定互斥锁、使用共享资源，然后解锁互斥锁：
+
+\begin{cpp}
+g_mutex.lock();
+// use the shared resource such as std::cout
+std::cout << "accessing shared resource" << '\n';
+g_mutex.unlock();
+\end{cpp}
+
+但这种方法容易出错，因为每次对 lock() 的调用都必须与所有执行路径上的 unlock() 调用配对；也就是说，正常的返回路径和异常返回路径。为了安全地获取和释放互斥锁，C++标准定义了几种锁：
+
+\begin{itemize}
+\item
+\verb|std::lock_guard| 是前面看到的锁定机制；代表了一个以RAII方式实现的互斥锁包装器。试图在构造时获取互斥锁，并在析构时释放互斥锁，从C++11开始提供的：
+
+\begin{cpp}
+template <class M>
+class lock_guard
+{
+public:
+    typedef M mutex_type;
+    explicit lock_guard(M& Mtx) : mtx(Mtx)
+    {
+        mtx.lock();
+    }
+    lock_guard(M& Mtx, std::adopt_lock_t) : mtx(Mtx)
+    { }
+    ~lock_guard() noexcept
+    {
+        mtx.unlock();
+    }
+    lock_guard(const lock_guard&) = delete;
+    lock_guard& operator=(const lock_guard&) = delete;
+private:
+    M& mtx;
+};
+\end{cpp}
+
+\item
+\verb|std::unique_lock| 是一个互斥锁所有权包装器，提供了延迟锁定、时间锁定、递归锁定、所有权转移和支持条件变量的功能。这是从C++11开始提供的。
+
+\item
+\verb|std::shared_lock| 是一个互斥锁共享所有权包装器，提供了延迟锁定、时间锁定和所有权转移的支持。这是从C++14开始提供的。
+
+\item
+\verb|std::scoped_lock| 是一个多互斥锁的RAII方式实现的包装器。构造时，试图以避免死锁的方式像使用 std::lock() 一样获取互斥锁的所有权，并在析构时以相反的顺序释放互斥锁。这是从C++17开始提供的。
+\end{itemize}
+
+\begin{myNotic}
+RAII（Resource Acquisition Is Initialization，即资源获取即初始化）是一种编程技术，用于某些编程语言，包括C++，简化资源管理，确保程序正确性，减少代码量。这种技术将资源的生命周期绑定到一个对象上。资源的分配（也称为获取）在实例创建时（构造函数中）完成，资源的释放（解除分配）在实例销毁时（析构函数中）完成。这确保了资源不会泄露，前提是绑定的实例本身没有泄露。有关RAII的更多信息，参见 \url{https://en.cppreference.com/w/cpp/language/raii}。
+\end{myNotic}
+
+“How to do it...”的第一个例子中，使用了 \verb|std::mutex| 和 \verb|std::lock_guard| 来保护对程序中所有线程共享的 std::cout 流实例的访问。以下示例展示了如何在多个线程上并发执行 \verb|thread_func()| 函数：
+
+\begin{cpp}
+std::vector<std::thread> threads;
+for (int i = 0; i < 5; ++i)
+    threads.emplace_back(thread_func);
+for (auto & t : threads)
+    t.join();
+\end{cpp}
+
+此程序的一个可能输出如下：
+
+\begin{shell}
+running thread 140296854550272
+running thread 140296846157568
+running thread 140296837764864
+running thread 140296829372160
+running thread 140296820979456
+done in thread 140296854550272
+done in thread 140296846157568
+done in thread 140296837764864
+done in thread 140296820979456
+done in thread 140296829372160
+\end{shell}
+
+当一个线程需要获取旨在保护多个共享资源的多个互斥锁时，逐一获取它们可能会导致死锁：
+
+\begin{cpp}
+template <typename T>
+void move_between(container<T> & c1, container<T> & c2, T const value)
+{
+    std::lock_guard<std::mutex> l1(c1.mutex);
+    std::lock_guard<std::mutex> l2(c2.mutex);
+    c1.data.erase(
+        std::remove(c1.data.begin(), c1.data.end(), value),
+        c1.data.end());
+    c2.data.push_back(value);
+}
+container<int> c1;
+c1.data.push_back(1);
+c1.data.push_back(2);
+c1.data.push_back(3);
+container<int> c2;
+c2.data.push_back(4);
+c2.data.push_back(5);
+c2.data.push_back(6);
+std::thread t1(move_between<int>, std::ref(c1), std::ref(c2), 3);
+std::thread t2(move_between<int>, std::ref(c2), std::ref(c1), 6);
+t1.join();
+t2.join();
+\end{cpp}
+
+例子中，container 保存着可以从不同线程同时访问的数据，需要通过获取互斥锁来保护。\verb|move_between()| 函数是一个线程安全的函数，从一个容器中移除一个元素并将其添加到另一个容器中。为此，可按顺序获取两个容器的互斥锁，然后从第一个容器中删除该元素，并将其添加到第二个容器的末尾。
+
+这个函数容易出现死锁，因为在获取锁的过程中可能会触发竞争条件。假设有一个场景，其中两个不同的线程以不同的参数执行此函数：
+
+\begin{itemize}
+\item
+第一个线程以 c1 和 c2 的顺序开始执行。
+
+\item
+第一个线程在获取 c1 容器的锁之后被挂起。第二个线程以 c2 和 c1 的顺序开始执行。
+
+\item
+第二个线程在获取 c2 容器的锁之后被挂起。
+
+\item
+第一个线程继续执行并试图获取 c2 的互斥锁，但由于互斥锁不可用，因此发生死锁（可以通过在线程获取第一个互斥锁后让其短暂睡眠来模拟）。
+\end{itemize}
+
+为了避免这类可能的死锁，应该以死锁避免的方式获取互斥锁，标准库提供了一个 std::lock() 工具函数。\verb|move_between()| 函数需要通过替换两个锁来更改，用下面的代码替换：
+
+\begin{cpp}
+std::lock(c1.mutex, c2.mutex);
+std::lock_guard<std::mutex> l1(c1.mutex, std::adopt_lock);
+std::lock_guard<std::mutex> l2(c2.mutex, std::adopt_lock);
+\end{cpp}
+
+互斥锁的所有权仍然必须转移到锁实例，这样才能在函数执行结束后（或者根据情况，在特定作用域结束时）正确释放。
+
+C++17 中，提供了一种新互斥锁包装器 \verb|std::scoped_lock|，可以用来简化代码，比如前面的例子中的代码。这种类型的锁可以以无死锁的方式获取多个互斥锁的所有权。当作用域锁销毁时，这些互斥锁就会释放。前面的代码等同于以下一行代码：
+
+\begin{cpp}
+std::scoped_lock lock(c1.mutex, c2.mutex);
+\end{cpp}
+
+\verb|scoped_lock| 提供了一种简化的机制，在作用域块期间拥有一个或多个互斥锁，也可编写简单且健壮的代码。
+
+
+
+
+
+
+

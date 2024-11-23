@@ -1,0 +1,126 @@
+
+<strstream> 头文件从标准I/O库的初期就是其组成部分，包含提供对存储在数组中的字符序列进行流操作的类型。然而，这个头文件早在C++98标准中弃用了，但因当时没有合适的替代，所以仍然可用。C++20标准引入了 std::span 类型，是一个非拥有性的实例序列视图。C++23标准中，新增了一个 <spanstream> 头文件作为 <strstream> 的替代。此头文件包含了一组能够对外部提供的内存缓冲区执行流操作的类型。本示例中，将介绍如何使用I/O span流解析或写入文本。
+
+\mySubsubsection{}{How to do it...}
+
+请按照以下方式使用C++23的span流：
+
+\begin{itemize}
+\item
+为了从外部数组解析文本，使用 std::ispanstream：
+
+\begin{cpp}
+char text[] = "1 1 2 3 5 8";
+std::ispanstream is{ std::span<char>{text} };
+int value;
+while (is >> value)
+{
+    std::cout << value << '\n';
+}
+\end{cpp}
+
+\item
+为了写入文本，使用 std::ospanstream：
+
+\begin{cpp}
+char text[15]{};
+int numbers[]{ 1, 1, 2, 3, 5, 8 };
+std::ospanstream os{ std::span<char>{text} };
+for (int n : numbers)
+{
+    os << n << ' ';
+}
+\end{cpp}
+
+\item
+为了既从同一外部数组读取和写入，使用 std::spanstream：
+
+\begin{cpp}
+char text[] = "1 1 2 3 5 8 ";
+std::vector<int> numbers;
+std::spanstream ss{ std::span<char>{text} };
+int value;
+while (ss >> value)
+{
+    numbers.push_back(value);
+}
+ss.clear();
+ss.seekp(0);
+std::for_each(numbers.rbegin(), numbers.rend(),
+[&ss](const int n) { ss << n << ' '; });
+std::cout << text << '\n'; // prints 8 5 3 2 1 1
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{Hot it works...}
+
+流输入/输出操作可以与外部分配的缓冲区一起使用，但<strstream> 头文件及其 strstream, istrstream, ostrstream 和 strstreambuf 类型在C++98标准中就已弃用。弃用的原因包括安全性问题，strstreambuf 不强制边界检查，以及灵活性不足，其底层缓冲区的大小调整能力有限。唯一推荐的替代方案是 std::stringstream。
+
+C++23标准中，新引入的 <spanstream> 头文件中提供了一组类型：\verb|basic_spanstream|, \verb|basic_ispanstream|, \verb|basic_ospanstream| 和 \verb|basic_spanbuf|。这些类支持对外部分配的固定大小缓冲区执行流操作，这些类型不提供对缓冲区所有权的支持或重新分配。对于这种情况，应该使用 std::stringstream。
+
+\verb|std::basic_spanbuf| 控制对字符序列的输入和输出，关联的序列（输入的来源和输出的目标）是一个外部分配的固定大小的缓冲区，可以初始化为或提供为一个 std::span。这个类型由 \verb|std::basic_ispanstream|, \verb|std::basic_ospanstream|, 和 \verb|std::basic_spanstream| 包装，后者提供了更高层次的接口用于输入/输出操作，如 \verb|std::basic_istream|, \verb|std::basic_ostream| 和 \verb|std::basic_stream| 类型的定义。
+
+再举一个例子，假设有一个字符串，其中包含由逗号分隔的一系列键值对。需要读取这些对并将其放入map中。使用C++23可以编写如下代码：
+
+\begin{cpp}
+char const text[] = "severity=1,code=42,message=generic error";
+std::unordered_map<std::string, std::string> m;
+std::string key, val;
+std::ispanstream is(text);
+while (std::getline(is, key, '=') >> std::ws)
+{
+    if(std::getline(is, val, ','))
+        m[key] = val;
+}
+for (auto const & [k, v] : m)
+{
+    std::cout << k << " : " << v << '\n';
+}
+\end{cpp}
+
+std::getline() 函数允许从输入流中读取字符，直到遇到流的结束或者指定的分隔符。首先使用 = 和 , 分隔符分割文本。直到 = 的字符序列代表键，而从 = 后面直到下一个逗号或结束的所有内容则是值。\verb|std::ws| 是一个I/O操纵符，用于从输入流中丢弃空白字符，读取直到找到等号；等号之前的文本即为键。然后，直到找到逗号（或到达流的结尾）；逗号之前的文本即为值，只要持续查找等号即可。
+
+从固定大小的缓冲区读取并不困难，但写入则需要更多的检查，因为写入不能超出缓冲区的边界，否则写入操作会失败。通过一个例子，可以更好地理解：
+
+\begin{cpp}
+char text[3]{};
+std::ospanstream os{ std::span<char>{text} };
+os << "42";
+auto pos = os.tellp();
+os << "44";
+if (!os.good())
+{
+    os.clear();
+    os.seekp(pos);
+}
+// text is {'4','2','4'}
+// prints (examples): 见下方[1]
+std::cout << text << '\n';
+os << '\0';
+// text is {'4','2','\0'}
+// prints: 42
+std::cout << text << '\n';
+\end{cpp}
+
+{
+\tiny
+[1] "424╠╠╠╠╠... or 424MƂ etc"
+}
+
+外部数组有3个字节。写入文本 "42"，这次操作成功了。然后，尝试写入文本 "44"。但是，这需要外部缓冲区有4个字节，而实际上只有3个。在写入字符 "4" 之后，操作失败了。此时，文本缓冲区的内容是 '4','2','4'，并且没有空终止符。如果将其输出到控制台，424后面会根据内存中的内容显示一些乱码，直到遇到第一个0。
+
+为了检查写入操作是否失败，使用 good() 成员函数。如果返回 false，则需要清除错误标志。还需要将流的输出位置指示器设置回，尝试写入前的位置（通过 tellp() 成员函数获取）。此时，向输出缓冲区写入一个0，其内容将是 '4','2',\verb|'\0'|，因此将其输出到控制台将显示文本 42。
+
+如果想同时从同一个缓冲区读取和写入，可以使用 std::spanstream 类型，其提供了输入和输出流操作。
+
+
+
+
+
+
+
+
+
+
+
+

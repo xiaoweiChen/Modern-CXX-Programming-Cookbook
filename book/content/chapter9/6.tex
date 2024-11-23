@@ -1,0 +1,232 @@
+
+在前两个示例中，了解了constexpr函数，允许在所有输入都在编译时可用的情况下，在编译时函数，以及立即函数（C++20），这些函数保证总是编译时执行（否则，会产生错误）。constexpr函数的一个重要方面是常量表达式上下文；这些是在其中所有表达式和函数都在编译时执行的代码路径。常量计算上下文对于更有效地优化代码非常有用。另一方面，从constexpr函数中调用立即函数仅在C++23中成为可能。本示例中，将介绍如何利用常量表达式上下文。
+
+
+\mySubsubsection{}{How to do it...}
+
+为了判断函数上下文是否为常量表达式，以便提供编译时实现，可以使用以下方法：
+
+\begin{itemize}
+\item
+C++20可以使用标准库中的\verb|std::is_constant_evaluated()|函数，该函数位于\verb|<type_traits>|头文件中，并与常规的if语句结合使用：
+
+\begin{cpp}
+constexpr double power(double base, int exponent)
+{
+    if(std::is_constant_evaluated())
+    {
+        double result = 1.0;
+        if (exponent == 0)
+        {
+            return result;
+        }
+        else if (exponent > 0) {
+            for (int i = 0; i < exponent; i++) {
+                result *= base;
+            }
+        }
+        else {
+            exponent = -exponent;
+            for (int i = 0; i < exponent; i++) {
+                result *= base;
+            }
+            result = 1.0 / result;
+        }
+        return result;
+    }
+    else
+    {
+        return std::pow(base, exponent);
+    }
+}
+int main()
+{
+    constexpr double a = power(10, 5); // compile-time eval
+    std::cout << a << '\n';
+    double b = power(10, 5);           // runtime eval
+    std::cout << b << '\n';
+}
+\end{cpp}
+
+\item
+C++23可以使用if consteval语句，这是\verb|if(std::is_constant_evaluated()|语句的简化版：
+
+\begin{cpp}
+constexpr double power(double base, int exponent)
+{
+    if consteval
+    {
+        double result = 1.0;
+        if (exponent == 0)
+        {
+            return result;
+        }
+        else if (exponent > 0) {
+            for (int i = 0; i < exponent; i++) {
+                result *= base;
+            }
+        }
+        else {
+            exponent = -exponent;
+            for (int i = 0; i < exponent; i++) {
+                result *= base;
+            }
+            result = 1.0 / result;
+        }
+        return result;
+    }
+    else
+    {
+        return std::pow(base, exponent);
+    }
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+C++20标准提供了一个名为\verb|std::is_constant_evaluated()|的标准库函数（位于\verb|<type_traits>|头文件中），可以检测调用是否发生在constexpr函数内的常量表达式上下文中。
+
+此函数通常与常规if语句一起使用，如上一节提供的例子中计算数字的幂值。该实现的关键点包括：
+
+\begin{itemize}
+\item
+在常量表达式上下文中，使用可以在编译时由编译器执行的算法来优化代码。
+
+\item
+非常量表达式上下文（即运行时）中，调用std::pow()函数来计算幂。
+\end{itemize}
+
+然而，这个函数和常量表达式上下文有一些“陷阱”：
+
+\begin{itemize}
+\item
+因为函数的参数在编译时已知，并不意味着上下文为常量表达式。在下面的代码中，第一次调用constexpr函数power()是在常量表达式上下文中。但第二次不是，即使所有参数在编译时已知且函数声明为constexpr：
+
+\begin{cpp}
+constexpr double a = power(10, 5); // [1] compile-time eval
+double b = power(10, 5);           // [2] runtime eval
+\end{cpp}
+
+\item
+如果与constexpr if语句一起使用，\verb|std::is_constant_evaluated()|函数总是为true（像GCC和Clang这样的编译器会为此细微错误提供警告）：
+
+\begin{cpp}
+constexpr double power(double base, int exponent)
+{
+    if constexpr (std::is_constant_evaluated())
+    {
+    }
+}
+\end{cpp}
+\end{itemize}
+
+这是一个报告的错误示例：
+
+\begin{shell}
+prog.cc: In function 'constexpr double power(double, int)':
+prog.cc:10:45: warning: 'std::is_constant_evaluated' always evaluates to true in 'if constexpr' [-Wtautological-compare]
+   10 |     if constexpr (std::is_constant_evaluated())
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~^~
+\end{shell}
+
+C++23标准提供了比\verb|std::is_constant_evaluated()|函数更好的替代方案，即if consteval语句。这有几个优点：
+
+\begin{itemize}
+\item
+不需要包含头文件
+
+\item
+避免了关于使用哪种形式的if语句的混淆
+
+\item
+允许在常量表达式上下文中调用立即函数
+\end{itemize}
+
+C++23的power函数实现改变为：
+
+\begin{cpp}
+constexpr double power(double base, int exponent)
+{
+    if consteval
+    {
+        /* ... */
+    }
+    else
+    {
+        return std::pow(base, exponent);
+    }
+}
+\end{cpp}
+
+if consteval语句始终需要花括号。否定形式也是可能的，可以使用!或者not关键字。下面的代码中，每对语句都是等价的：
+
+\begin{cpp}
+if !consteval {/*statement*/}          // [1] equivalent to [2]
+if consteval {} else {/*statement*/}   // [2]
+if not consteval {/*statement1*/}      // [3] equivalent to [4]
+else {/*statement2*/}
+if consteval {/*statement2*/}          // [4]
+else {/*statement1*/}
+\end{cpp}
+
+if consteval语句还允许在constexpr函数的常量表达式上下文中调用立即函数。来看一个C++20的例子：
+
+\begin{cpp}
+consteval int plus_one(int const i)
+{
+    return i + 1;
+}
+consteval int plus_two(int i)
+{
+    return plus_one(i) + 1;
+}
+constexpr int plus_two_alt(int const i)
+{
+    if (std::is_constant_evaluated())
+    {
+        return plus_one(i) + 1;
+    }
+    else
+    {
+        return i + 2;
+    }
+}
+\end{cpp}
+
+\verb|plus_one()|函数是一个立即函数，可以从同样是立即函数的\verb|plus_two()|函数中调用。不可能从\verb|plus_two_alt()|函数中调用，constexpr函数并且调用\verb|plus_one()|函数是常量的，因为这不是一个常量表达式。
+
+这个问题通过C++23中的if consteval语句得到了解决。这使得在常量表达式上下文中调用立即函数成为可能：
+
+\begin{cpp}
+constexpr int plus_two_alt(int const i)
+{
+    if consteval
+    {
+        return plus_one(i) + 1;
+    }
+    else
+    {
+        return i + 2;
+    }
+}
+\end{cpp}
+
+随着if consteval语句的可用性，\verb|std::is_constant_evaluated()|函数变得过时。实际上，可以使用if consteval语句来实现：
+
+\begin{cpp}
+constexpr bool is_constant_evaluated() noexcept
+{
+    if consteval {
+        return true;
+    } else {
+        return false;
+    }
+}
+\end{cpp}
+
+\begin{myNotic}
+当使用C++23编译器时，应该总是优先选择if consteval语句，而非过时的\verb|std::is_constant_evaluated()|。
+\end{myNotic}
+
+

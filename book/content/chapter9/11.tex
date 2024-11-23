@@ -1,0 +1,211 @@
+当这些对象或数组需要共享时，不可能使用 \verb|std::unique_ptr| 管理动态分配的对象或数组。因为 \verb|std::unique_ptr| 保持其唯一所有权。C++ 标准提供了另一种智能指针，称为 \verb|std::shared_ptr|；很多方面与 \verb|std::unique_ptr| 相似，但不同之处在于可以与其他 \verb|std::shared_ptr| 实例共享对象或数组的所有权。本示例中，将介绍 \verb|std::shared_ptr| 如何工作，以及它与 \verb|std::unique_ptr| 的区别。还将介绍 \verb|std::weak_ptr|，这是一种非资源拥有的智能指针，其持有一个由 \verb|std::shared_ptr| 管理实例的引用。
+
+\mySubsubsection{}{Getting ready}
+
+请阅读前一个示例以熟悉 \verb|unique_ptr| 和 \verb|make_unique()| 的工作原理。将使用其中定义的\verb|foo|、\verb|foo_deleter|、\verb|Base| 和 \verb|Derived| 类型，并且会多次引用它们。
+
+\verb|shared_ptr| 和 \verb|weak_ptr| 类型，以及 \verb|make_shared()| 函数模板均位于 <memory> 头文件中的 std 命名空间下。
+
+\begin{myNotic}
+为了简单和可读性，不会使用完全限定名 \verb|std::unique_ptr|、\verb|std::shared_ptr| 和 \verb|std::weak_ptr|，而是使用 \verb|unique_ptr|、\verb|shared_ptr| 和 \verb|weak_ptr|。
+\end{myNotic}
+
+\mySubsubsection{}{How to do it...}
+
+以下是使用 \verb|shared_ptr| 和 \verb|weak_ptr| 时需要了解的一些典型操作：
+
+\begin{itemize}
+\item
+使用可用的重载构造函数之一，创建通过指针管理对象的 \verb|shared_ptr|。默认构造函数创建一个空的 \verb|shared_ptr|，即不管理任何对象：
+
+\begin{cpp}
+std::shared_ptr<int> pnull1;
+std::shared_ptr<int> pnull2(nullptr);
+std::shared_ptr<int> pi1(new int(42));
+std::shared_ptr<int> pi2 = pi1;
+std::shared_ptr<foo> pf1(new foo());
+std::shared_ptr<foo> pf2(new foo(42, 42.0, "42"));
+\end{cpp}
+
+\item
+或者，从 C++11 开始，可以使用 \verb|std::make_shared()| 函数模板来创建 \verb|shared_ptr| 对象：
+
+\begin{cpp}
+std::shared_ptr<int> pi  = std::make_shared<int>(42);
+std::shared_ptr<foo> pf1 = std::make_shared<foo>();
+std::shared_ptr<foo> pf2 = std::make_shared<foo>(42, 42.0, "42");
+\end{cpp}
+
+\item
+C++20可以使用 \verb|std::make_shared_for_overwrite()| 函数模板创建默认初始化的对象或对象数组的 \verb|shared_ptr|。这些对象之后应赋予确定的值：
+
+\begin{cpp}
+std::shared_ptr<int> pi = std::make_shared_for_overwrite<int>();
+std::shared_ptr<foo[]> pa = std::make_shared_for_overwrite<foo[]>(3);
+\end{cpp}
+
+\item
+如果默认删除操作不适合销毁托管对象，可以使用带有自定义删除器的重载构造函数：
+
+\begin{cpp}
+std::shared_ptr<foo> pf1(new foo(42, 42.0, "42"),
+                         foo_deleter());
+std::shared_ptr<foo> pf2(
+new foo(42, 42.0, "42"),
+    [](foo* p) {
+        std::cout << "deleting foo from lambda..." << '\n';
+        delete p;});
+\end{cpp}
+
+\item
+当管理对象数组时，总是要指定删除器。删除器可以是 \verb|std::default_delete| 的偏特化版本，也可以是接受模板类型指针的函数：
+
+\begin{cpp}
+std::shared_ptr<int> pa1(
+    new int[3]{ 1, 2, 3 },
+        std::default_delete<int[]>());
+std::shared_ptr<int> pa2(
+    new int[3]{ 1, 2, 3 },
+        [](auto p) {delete[] p; });
+
+\end{cpp}
+
+\item
+要访问托管对象的原始指针，可使用 get() 函数：
+
+\begin{cpp}
+void func(int* ptr)
+{
+    if (ptr != nullptr)
+        std::cout << *ptr << '\n';
+    else
+        std::cout << "null" << '\n';
+}
+std::shared_ptr<int> pi;
+func(pi.get());
+pi = std::make_shared<int>(42);
+func(pi.get());
+\end{cpp}
+
+\item
+使用操作符 * 和 -> 解引用指向托管对象的指针：
+
+\begin{cpp}
+std::shared_ptr<int> pi = std::make_shared<int>(42);
+*pi = 21;
+std::shared_ptr<foo> pf = std::make_shared<foo>(42, 42.0, "42");
+pf->print();
+\end{cpp}
+
+\item
+如果 \verb|shared_ptr| 管理的是对象数组，可以使用操作符 [] 访问数组中的各个元素。这是 C++17 中引入的功能：
+
+\begin{cpp}
+std::shared_ptr<int[]> pa1(
+    new int[3]{ 1, 2, 3 },
+        std::default_delete<int[]>());
+for (int i = 0; i < 3; ++i)
+    pa1[i] *= 2;
+\end{cpp}
+
+\item
+要检查 \verb|shared_ptr| 是否管理了某个对象，可以使用显式的布尔操作符或检查 \verb|get() != nullptr|：
+
+\begin{cpp}
+std::shared_ptr<int> pnull;
+if (pnull) std::cout << "not null" << '\n';
+std::shared_ptr<int> pi(new int(42));
+if (pi) std::cout << "not null" << '\n';
+\end{cpp}
+
+\item
+\verb|shared_ptr| 实例可以存储在容器中，如 std::vector：
+
+\begin{cpp}
+std::vector<std::shared_ptr<foo>> data;
+for (int i = 0; i < 5; i++)
+    data.push_back(
+        std::make_shared<foo>(i, i, std::to_string(i)));
+auto pf = std::make_shared<foo>(42, 42.0, "42");
+data.push_back(std::move(pf));
+assert(!pf);
+\end{cpp}
+
+\item
+使用 \verb|weak_ptr| 维护对共享对象的非拥有引用，这些引用可以在以后通过从 \verb|weak_ptr| 对象构造的 \verb|shared_ptr| 访问：
+
+\begin{cpp}
+auto sp1 = std::make_shared<int>(42);
+assert(sp1.use_count() == 1);
+std::weak_ptr<int> wpi = sp1;
+assert(sp1.use_count() == 1);
+auto sp2 = wpi.lock(); // sp2 type is std::shared_ptr<int>
+assert(sp1.use_count() == 2);
+assert(sp2.use_count() == 2);
+sp1.reset();
+assert(sp1.use_count() == 0);
+assert(sp2.use_count() == 1);
+\end{cpp}
+
+\item
+当需要为另一个 \verb|shared_ptr| 管理的实例创建 \verb|shared_ptr| 时，可以使用 \verb|std::enable_shared_from_this| 类模板作为类型的基类：
+
+\begin{cpp}
+struct Apprentice;
+struct Master : std::enable_shared_from_this<Master>
+{
+    ~Master() { std::cout << "~Master" << '\n'; }
+    void take_apprentice(std::shared_ptr<Apprentice> a);
+    private:
+    std::shared_ptr<Apprentice> apprentice;
+};
+struct Apprentice
+{
+    ~Apprentice() { std::cout << "~Apprentice" << '\n'; }
+    void take_master(std::weak_ptr<Master> m);
+    private:
+    std::weak_ptr<Master> master;
+};
+void Master::take_apprentice(std::shared_ptr<Apprentice> a)
+{
+    apprentice = a;
+    apprentice->take_master(shared_from_this());
+}
+void Apprentice::take_master(std::weak_ptr<Master> m)
+{
+    master = m;
+}
+auto m = std::make_shared<Master>();
+auto a = std::make_shared<Apprentice>();
+m->take_apprentice(a);
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+\verb|shared_ptr| 在许多方面都非常类似于 \verb|unique_ptr|，但用于不同的目的：共享对象或数组的所有权。两个或更多的 \verb|shared_ptr| 智能指针可以管理同一个动态分配的对象或数组，当最后一个智能指针超出作用域、使用赋值操作符 = 赋予新指针或使用方法 reset() 重置时，对象会自动销毁。默认情况下，对象是通过删除操作符 delete 销毁；但是用户可以向构造函数提供自定义删除器，这是使用 \verb|std::make_shared()| 无法做到的。如果 \verb|shared_ptr| 用于管理对象数组，则必须提供自定义删除器。可以使用 \verb|std::default_delete<T[]>|，其 \verb|std::default_delete| 类模板的偏特化版本，使用删除操作符 delete[] 删除动态分配的数组。
+
+实用函数 \verb|std::make_shared()|（自 C++11 起可用），不像自 C++14 起才可用的 \verb|std::make_unique()|，除非需要提供自定义删除器，否则应该用来创建智能指针。这样做的主要原因是与 \verb|make_unique()| 相同：避免在某些上下文中抛出异常时可能出现的潜在内存泄漏。更多信息，请参阅前一个示例中提供的关于 \verb|std::make_unique()| 的解释。
+
+C++20增加了一个新的函数，叫做 \verb|std::make_shared_for_overwrite()|。与 \verb|make_shared()| 类似，不同之处在于默认初始化对象或对象数组。此函数可以在通用代码中使用，当未知类型模板参数是否是平凡可复制时。此函数表达了创建一个可能未初始化的对象指针的意图，以便稍后对其进行覆盖。
+
+同样地，就像 \verb|unique_ptr| 的情况一样，管理派生类对象的 \verb|shared_ptr| 可以隐式转换为管理基类对象的 \verb|shared_ptr|。如果派生类 Derived 继承自 Base，则这是可能的。这种隐式转换只有在 Base 具有虚析构函数时才是安全的（当对象应该通过指向基类的指针或引用多态地删除时，所有的基类都应该是这样的）；否则，将产生未定义行为。C++17添加了几个新的非成员函数：\verb|std::static_pointer_cast()|、\verb|std::dynamic_pointer_cast()|、\verb|std::const_pointer_cast()| 和 \verb|std::reinterpret_pointer_cast()|。这些函数分别应用 \verb|static_cast|、\verb|dynamic_cast|、\verb|const_cast| 和 \verb|reinterpret_cast| 到存储的指针，返回一个新的指定类型的 \verb|shared_ptr|。
+
+下面的例子中，Base 和 Derived 是前一个示例中使用的类型：
+
+\begin{cpp}
+std::shared_ptr<Derived> pd = std::make_shared<Derived>();
+std::shared_ptr<Base> pb = pd;
+std::static_pointer_cast<Derived>(pb)->print();
+\end{cpp}
+
+当需要一个智能指针来引用一个共享对象，但又不希望它参与到共享所有权中。假设构建了一个树形结构，其中节点对它的子节点有引用，这些子节点由 \verb|shared_ptr| 表示。另一方面，假设一个节点需要保持对其父节点的引用。如果这个引用也是 \verb|shared_ptr|，将创建循环引用，导致没有对象能够自动销毁。
+
+\verb|weak_ptr| 是一种用于打破此类循环依赖关系的智能指针，其持有由 \verb|shared_ptr| 管理的对象或数组的非拥有引用。可以由 \verb|shared_ptr| 创建 \verb|weak_ptr|。为了访问托管对象，需要获取一个临时的 \verb|shared_ptr|。为此，需要使用 \verb|lock()| 方法。该方法原子地检查所引用的对象是否仍然存在，并返回一个空的 \verb|shared_ptr|（如果对象已不存在）或者一个拥有该对象的 \verb|shared_ptr|（如果对象仍然存在）。由于 \verb|weak_ptr| 是一个非拥有智能指针，在 \verb|weak_ptr| 超出作用域之前，或在所有拥有该对象的 \verb|shared_ptr| 对象已销毁、重置或分配给其他指针之前，所引用的对象可能会销毁。可以使用 \verb|expired()| 方法来检查引用的对象是否已销毁或仍然可用。
+
+前面的例子模拟了师徒关系。有一个 Master 类型和一个 Apprentice 类型。Master 类型有一个对 Apprentice 类型的引用和一个名为 \verb|take_apprentice()| 的方法来设置 Apprentice 实例。Apprentice 类型有一个对 Master 类型的引用和一个名为 \verb|take_master()| 的方法来设置 Master 实例。为了避免循环依赖，这两个引用之一必须由 \verb|weak_ptr| 表示。例子中，Master 类型拥有一个 \verb|shared_ptr| 来管理 Apprentice 实例，而 Apprentice 类型则拥有一个 \verb|weak_ptr| 来跟踪 Master 实例的引用。这个例子稍微复杂一些，因为\verb|Apprentice::take_master()| 是在 \verb|Master::take_apprentice()| 方法中调用的，需要一个 \verb|weak_ptr<Master>|。为了从 Master 类型内部调用的，必须能够在 Master 类型中使用 this 指针创建一个 \verb|shared_ptr<Master>|。唯一安全地实现是使用 \verb|std::enable_shared_from_this|。
+
+\verb|std::enable_shared_from_this| 是一个类型模板，必须作为需要为当前对象（即 this 指针）创建一个 \verb|shared_ptr| 的类型的基类，前提是这个对象已经由另一个 \verb|shared_ptr| 管理。其类型模板参数必须是继承自它的那个类型，这遵循了奇特递归模板模式（Curiously Recurring Template Pattern）。它有两个方法：\verb|shared_from_this()| 返回一个共享当前对象所有权的 \verb|shared_ptr|，而 \verb|weak_from_this()| 返回一个持有当前对象非拥有引用的 \verb|weak_ptr|。后者方法仅在 C++17 中可用。这些方法只能在一个由现有的 \verb|shared_ptr| 管理的对象上调用；否则，从 C++17 开始，则会抛出一个 \verb|std::bad_weak_ptr| 异常。在 C++17 之前，这种行为未定义。
+
+如果不使用 \verb|std::enable_shared_from_this| 并直接创建 \verb|shared_ptr<T>(this)|，这将导致有多个 \verb|shared_ptr| 对象独立地管理同一个对象，彼此之间互不知情。当这种情况发生时，该对象最终会被不同的 \verb|shared_ptr| 对象多次销毁。
+

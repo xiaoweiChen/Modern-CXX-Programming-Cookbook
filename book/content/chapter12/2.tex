@@ -1,0 +1,226 @@
+
+模块的源码可能会变得庞大且难以维护，模块可能由逻辑上分离的部分组成。为了帮助处理这样的场景，模块由分区部分组合而成。一个导出实体的模块单元，如果是分区的话，称为模块接口分区。
+
+然而，也可能存在不导出任何东西的内部分区，这样的分区单元称为模块实现分区。本示例中，将介绍如何使用接口和实现分区。
+
+\mySubsubsection{}{Getting ready}
+
+继续本示例之前，应该先阅读上一个示例。您
+
+\begin{myNotic}
+接下来的代码中，将使用仅在 C++23 中可用的 std 模块。对于之前的版本，请在 VC++ 中使用 std.core 或者编译器支持的其他特定模块。
+\end{myNotic}
+
+\mySubsubsection{}{How to do it...}
+
+可以将一个模块拆分为多个分区，方法如下：
+
+\begin{itemize}
+\item
+每个分区单元必须以 export module modulename:partitionname; 形式的声明开始。只有全局模块片段可以前置于此类声明：
+
+\begin{cpp}
+// --- geometry-core.ixx/.cppm ---
+export module geometry:core;
+import std;
+export template <class T,
+    typename = typename std::enable_if_t<std::is_arithmetic_v<T>, T>>
+struct point
+{
+    T x;
+    T y;
+};
+export using int_point = point<int>;
+export constexpr int_point int_point_zero{ 0,0 };
+export template <class T>
+double distance(point<T> const& p1, point<T> const& p2)
+{
+    return std::sqrt((p2.x - p1.x) * (p2.x - p1.x) +
+                     (p2.y - p1.y) * (p2.y - p1.y));
+}
+// --- geometry-literals.ixx/.cppm ---
+export module geometry:literals;
+import :core;
+namespace geometry_literals
+{
+    export int_point operator ""_ip(const char* ptr, std::size_t)
+    {
+        int x = 0, y = 0;
+        if(ptr)
+        {
+            while (*ptr != ',' && *ptr != ' ')
+                x = x * 10 + (*ptr++ - '0');
+            while (*ptr == ',' || *ptr == ' ') ptr++;
+            while (*ptr != 0)
+                y = y * 10 + (*ptr++ - '0');
+        }
+        return { x, y };
+    }
+}
+\end{cpp}
+
+\item
+主模块接口单元中，使用 export import :partitionname; 形式的语句导入并导出分区：
+
+\begin{cpp}
+// --- geometry.ixx/.cppm ---
+export module geometry;
+export import :core;
+export import :literals;
+\end{cpp}
+
+\item
+导入由多个分区组成的模块的代码，只会看到作为一个整体构建的模块(前提是源自单一模块单元)：
+
+\begin{cpp}
+// --- main.cpp ---
+import std;
+import geometry;
+int main()
+{
+    int_point p{ 3, 4 };
+    std::cout << distance(int_point_zero, p) << '\n';
+    {
+        using namespace geometry_literals;
+        std::cout << distance("0,0"_ip, "30,40"_ip) << '\n';
+    }
+}
+\end{cpp}
+
+\item
+可以创建不导出任何东西,但包含可在同一模块中使用的代码的内部分区。这样的分区必须以 module modulename:partitionname; 形式（不带 export 关键字）的声明开始。不同的编译器可能还需要分区文件具有不同的扩展名。对于 VC++，扩展名必须是 .cpp：
+
+\begin{cpp}
+// --- geometry-details.cpp --
+module geometry:details;
+import std;
+std::pair<int, int> split(const char* ptr)
+{
+    int x = 0, y = 0;
+    if(ptr)
+    {
+        while (*ptr != ',' && *ptr != ' ')
+            x = x * 10 + (*ptr++ - '0');
+        while (*ptr == ',' || *ptr == ' ') ptr++;
+        while (*ptr != 0)
+            y = y * 10 + (*ptr++ - '0');
+    }
+    return { x, y };
+}
+// --- geometry-literals.ixx/.cppm ---
+export module geometry:literals;
+import :core;
+import :details;
+namespace geometry_literals
+{
+    export int_point operator ""_ip(const char* ptr, std::size_t)
+    {
+        auto [x, y] = split(ptr);
+        return {x, y};
+    }
+}
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+前面展示的代码是对前一个示例中介绍模块的延续。geometry 模块已经拆分为两个不同的分区，分别命名为 \verb|core| 和 \verb|literals|。
+
+当声明分区时，必须使用 modulename:partitionname 形式的名称，例如 geometry:core 和 geometry:literals。模块导入分区时，这并不必要。可以在主分区单元 geometry.ixx 和模块接口分区 geometry-literals.ixx 中看到。为了清晰起见，再次列出这些代码：
+
+\begin{cpp}
+// --- geometry-literals.ixx/.cppm ---
+export module geometry:literals;
+// import the core partition
+import :core;
+// --- geometry.ixx/.cppm ---
+export module geometry;
+// import the core partition and then export it
+export import :core;
+// import the literals partition and then export it
+export import :literals;
+\end{cpp}
+
+虽然模块分区是不同的文件，但并不会作为单独的模块或子模块出现在使用模块的翻译单元中。它们会作为一个单一的聚合模块导出。如果将 main.cpp 文件中的源代码与前一个示例中的源代码进行比较，则看不到任何差异。
+
+\begin{myNotic}
+与模块接口单元一样，没有关于包含分区的文件命名规则。但编译器可能要求不同的扩展名，或支持某些特定的命名方案。例如，VC++ 使用 <module-name>-<partition-name>.ixx 方案，这简化了构建命令。
+\end{myNotic}
+
+分区，就像模块一样，可以包含不从模块导出的代码。一个分区可能完全不包含导出，只是一个内部分区。这样的分区称为模块实现分区，在模块声明中定义时不使用 export 关键字。
+
+一个内部分区的例子是前面展示的 geometry:details 分区，提供了一个名为 split() 的辅助函数，用于解析字符串中的两个由逗号分隔的整数。然后，该分区导入到 geometry:literals 分区中，split() 函数用来实现用户定义的字面值操作符 \_ip。
+
+\mySubsubsection{}{There's more...}
+
+分区是模块的划分，并不是子模块，其在逻辑上不能脱离模块而存在。C++ 语言中没有子模块的概念。本示例中使用分区编写的代码，也可以使用模块来编写：
+
+\begin{cpp}
+// --- geometry-core.ixx ---
+export module geometry.core;
+import std;
+export template <class T,
+    typename = typename std::enable_if_t<std::is_arithmetic_v<T>, T>>
+struct point
+{
+    T x;
+    T y;
+};
+export using int_point = point<int>;
+export constexpr int_point int_point_zero{ 0,0 };
+export template <class T>
+double distance(point<T> const& p1, point<T> const& p2)
+{
+    return std::sqrt(
+        (p2.x - p1.x) * (p2.x - p1.x) +
+        (p2.y - p1.y) * (p2.y - p1.y));
+}
+// --- geometry-literals.ixx ---
+export module geometry.literals;
+import geometry.core;
+namespace geometry_literals
+{
+    export int_point operator ""_ip(const char* ptr, std::size_t)
+    {
+        int x = 0, y = 0;
+        if(ptr)
+        {
+            while (*ptr != ',' && *ptr != ' ')
+                x = x * 10 + (*ptr++ - '0');
+            while (*ptr == ',' || *ptr == ' ') ptr++;
+            while (*ptr != 0)
+                y = y * 10 + (*ptr++ - '0');
+        }
+        return { x, y };
+    }
+}
+// --- geometry.ixx ---
+export module geometry;
+export import geometry.core;
+export import geometry.literals;
+\end{cpp}
+
+例子中，有三个模块：geometry.core、geometry.literals 和 geometry。这里，geometry 导入并重新导出了前两个模块的全部内容。因此，main.cpp 文件中的代码不需要改变。
+
+仅通过导入 geometry 模块，就能访问 geometry.core 和 geometry.literals 模块的内容。
+
+然而，如果不再定义 geometry 模块，则需要显式地导入这两个模块：
+
+\begin{cpp}
+import std;
+import geometry.core;
+import geometry.literals;
+int main()
+{
+    int_point p{ 3, 4 };
+    std::cout << distance(int_point_zero, p) << '\n';
+    {
+        using namespace geometry_literals;
+        std::cout << distance("0,0"_ip, "30,40"_ip) << '\n';
+    }
+}
+\end{cpp}
+
+选择使用分区还是多个模块来组件化源码，应取决于项目特点。如果使用多个较小的模块，可以为导入提供更好的粒度。这对于开发大型库很重要，用户应该只导入他们使用的东西（而不需要导入一个非常大的模块，即使他们只需要其中的一些功能）。
+
+

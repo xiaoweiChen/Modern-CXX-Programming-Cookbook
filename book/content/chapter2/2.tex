@@ -1,0 +1,165 @@
+
+有时候，需要知道并使用数值类型（如 char、int 或 double）能够表示的最小值和最大值。许多开发人员为此目的使用标准 C 宏，例如 CHAR\_MIN/CHAR\_MAX、INT\_MIN/INT\_MAX 和 DBL\_MIN/DBL\_MAX。C++ 提供名为 numeric\_limits 的类模板，为每种数值类型提供了特化版本，可以查询该类型的最小值和最大值。然而，numeric\_limits 的功能不仅限于此，还提供了常量来查询类型属性，比如该类型是否有符号、表示值所需多少位、是否能表示浮点类型的无穷大等。
+
+C++11前，由于 numeric\_limits<T> 不能在需要常量的地方使用（例如：数组的大小或 switch 语句的 case 标签），开发者通常更倾向于在整个代码中使用 C 宏。这种情况在 C++11 中发生了变化，因为 numeric\_limits<T> 的所有静态成员现在都是 constexpr 类型，所以可以在需要常量表达式的地方使用。这一变化增强了 numeric\_limits 的灵活性和实用性，使其成为现代 C++ 编程中处理数值类型属性的首选。
+
+\mySubsubsection{}{Getting ready}
+
+numeric\_limits<T> 类模板在 <limits> 头文件中，并位于 std 命名空间下。
+
+\mySubsubsection{}{How to do it...}
+
+使用 std::numeric\_limits<T> 查询数值类型 T 的各种属性：
+
+\begin{itemize}
+\item
+min() 和 max() 静态方法来获取类型的最小值和最大值：
+
+\begin{cpp}
+// example 1
+template<typename T, typename Iter>
+T minimum(Iter const start, Iter const end) // finds the
+// minimum value
+// in a range
+{
+    T minval = std::numeric_limits<T>::max();
+    for (auto i = start; i < end; ++i)
+    {
+        if (*i < minval)
+        minval = *i;
+    }
+    return minval;
+}
+// example 2
+int range[std::numeric_limits<char>::max() + 1] = { 0 };
+// example 3
+switch(get_value())
+{
+    case std::numeric_limits<int>::min():
+    // do something
+    break;
+}
+\end{cpp}
+
+\item
+使用其他静态方法和静态常量来获取数值类型的其他属性。以下是一个例子，其中 bits 变量是一个 std::bitset 实例，包含表示由变量 n（这是一个整数）所代表的数值所需的一系列位：
+
+\begin{cpp}
+auto n = 42;
+std::bitset<std::numeric_limits<decltype(n)>::digits>
+bits { static_cast<unsigned long long>(n) };
+\end{cpp}
+\end{itemize}
+
+\begin{myNotic}
+C++11 起，std::numeric\_limits<T> 的使用没有限制；现代 C++ 代码中，建议优先使用，而非 C 中定义的宏。
+\end{myNotic}
+
+\mySubsubsection{}{How it work...}
+
+std::numeric\_limits<T> 类模板允许开发者查询数值类型的属性。实际值通过特化获得，标准库为所有内置数值类型（如 char、short、int、long、float、double 等）提供了特化。此外，第三方库也可能为其他类型提供实现，例如：实现了 bigint 类型和 decimal 类型的数值库，可能会为这些类型提供 numeric\_limits 的特化。
+
+<limits> 头文件中提供了以下数值类型的特化。char16\_t 和 char32\_t 类型的特化是在 C++11 中新增的；其他特化在此之前就已经存在。除了前面列出的特化外，库还为这些数值类型的每一个 cv 限定版本提供了特化，这些特化与未限定的特化相同。对于类型 int，有四个实际的特化（并且它们是相同的）：numeric\_limits<int>、numeric\_limits<const int>、numeric\_limits<volatile int> 和 numeric\_limits<const volatile int>。 可以在 \url{https://en.cppreference.com/w/cpp/types/numeric_limits} 上找到特化的完整列表.
+
+自 C++11 起，std::numeric\_limits 的所有静态成员都是 constexpr 类型，可以在需要常量表达式的地方使用。这相对于 C++ 宏有几个显著的优势：
+
+\begin{itemize}
+\item
+更容易记忆，只需要知道类型的名称。
+
+\item
+支持 C 中不可用的类型，如 char16\_t 和 char32\_t。
+
+\item
+模板中未知类型的唯一解决方案。
+
+\item
+min 和 max 只是提供的多种类型属性中的两个，其实际用途超出了显示的数值限制。因此，这个类应称为 numeric\_properties，而不是 numeric\_limits。
+\end{itemize}
+
+以下是函数模板 print\_type\_properties()，用于输出类型的最小值和最大值，以及其他信息：
+
+\begin{cpp}
+emplate <typename T>
+void print_type_properties()
+{
+    std::cout
+    << "min="
+    << std::numeric_limits<T>::min()        << '\n'
+    << "max="
+    << std::numeric_limits<T>::max()        << '\n'
+    << "bits="
+    << std::numeric_limits<T>::digits       << '\n'
+    << "decdigits="
+    << std::numeric_limits<T>::digits10     << '\n'
+    << "integral="
+    << std::numeric_limits<T>::is_integer   << '\n'
+    << "signed="
+    << std::numeric_limits<T>::is_signed    << '\n'
+    << "exact="
+    << std::numeric_limits<T>::is_exact     << '\n'
+    << "infinity="
+    << std::numeric_limits<T>::has_infinity << '\n';
+}
+\end{cpp}
+
+如果对 unsigned short、int 和 double 调用 print\_type\_properties() 函数，将得到以下输出：
+
+print\_type\_properties() 函数对 unsigned short、int 和 double 的输出如下：
+
+\begin{itemize}
+\item
+unsigned short
+
+\begin{shell}
+min=0
+max=65535
+bits=16
+decdigits=4
+integral=1
+signed=0
+exact=1
+infinity=0
+\end{shell}
+
+\item
+int
+
+\begin{shell}
+min=-2147483648
+max=2147483647
+bits=31
+decdigits=9
+integral=1
+signed=1
+exact=1
+infinity=0
+\end{shell}
+
+\item
+double
+
+\begin{shell}
+min=2.22507e-308
+max=1.79769e+308
+bits=53
+decdigits=15
+integral=0
+signed=1
+exact=0
+infinity=1
+\end{shell}
+\end{itemize}
+
+注意，digits 和 digits10 常量之间存在差异：
+
+\begin{itemize}
+\item
+digits 表示整数类型的位数（不包括符号位，如果有）和填充位（如果有），以及浮点类型的尾数位数。
+
+\item
+digits10 表示一个类型可以无损地表示的十进制数字的数量。为了更好地理解，看一下 unsigned short 的情况。这是一种 16 位的整数类型，可以表示介于 0 和 65,536 之间的数字，可以表示最多五位的十进制数字，即从 10,000 到 65,536，但不能表示所有五位的十进制数字，因为从 65,537 到 99,999 的数字需要更多的位。因此，无需更多位即可表示的最大数字具有四位十进制数字（从 1,000 到 9,999），这就是 digits10 所指示的值。对于整数类型 T，digits10 的值与 digits 常量直接相关，即 std::numeric\_limits<T>::digits * std::log10(2)。
+\end{itemize}
+
+标准库中算术类型的别名（如 std::size\_t），也可以使用 std::numeric\_limits 来检查。然而，其他非算术类型的标准类型，如 std::complex<T> 或 std::nullptr\_t，则没有 std::numeric\_limits 的特化。
+

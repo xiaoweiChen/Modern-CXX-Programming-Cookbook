@@ -1,0 +1,89 @@
+
+
+C++20 标准包括了对标准库的两大更新：范围库（ranges library）和协程（coroutines）。关于后者，提供的支持是最小的。C++20 标准仅仅定义了一个构建协程的框架，像 libcoro 这样的库创建出来以提供实际的协程，如前两个示例中看到的任务（task）和生成器（generator）。C++23 标准引入了首个标准协程，称为 std::generator。这将范围和协程结合在一起，因为 std::generator 是一个表示同步协程生成器的视图。这是一个标准实现，对应于上一个示例。本示例中，来介绍其是如何工作的。
+
+\begin{myNotic}
+写作本文时，只有 GCC 14 支持这一标准协程。
+\end{myNotic}
+
+\mySubsubsection{}{How to do it...}
+
+为了以惰性的方式生成一系列元素，编写一个协程：
+
+\begin{itemize}
+\item
+std::generator<T> 作为返回类型。
+
+\item
+\verb|co_yield| 语句返回一个值。
+\end{itemize}
+
+\begin{cpp}
+std::generator<int> iota(int start = 0, int step = 1) noexcept
+{
+    auto value = start;
+    for (int i = 0;; ++i)
+    {
+        co_yield value;
+        value += step;
+    }
+}
+int main()
+{
+    for (auto i : iota())
+    {
+        std::cout << i << ' ';
+        if (i >= 10) break;
+    }
+}
+\end{cpp}
+
+\mySubsubsection{}{How it works...}
+
+std::generator 类型模板位于其自己的头文件 <generator> 中，派生自 \verb|std::ranges::view_interface|，因此是从协程（一种可中断的函数）计算中产生的元素的视图。该类定义如下：
+
+\begin{cpp}
+template<class Ref, class V = void, class Allocator = void>
+class generator
+    : public ranges::view_interface<generator<Ref, V, Allocator>>;
+\end{cpp}
+
+每当协程恢复并且 \verb|co_yield| 语句计算时，就会产生序列的一个新元素。以下是一个包含一系列 \verb|co_yield| 语句的例子（而不是一个循环）。总共来说，这个协程产生三个元素。如果 \verb|get_values()| 协程只计算一次，就只会产生一个元素。可称此为延迟计算：
+
+\begin{cpp}
+std::generator<int> get_values() noexcept
+{
+    co_yield 1;
+    co_yield 2;
+    co_yield 3;
+}
+\end{cpp}
+
+std::generator 类型是一个同步生成器；协程只能使用 \verb|co_yield| 语句来返回值。不可能在协程内使用 \verb|co_await| 操作符，为此需要一个不同类型的生成器，而这样的生成器目前不可用。
+
+另一个使用 std::generator 类型生成值序列的例子如下，可生成斐波那契数列。前一个示例中有相同的例子，唯一的改变是用 C++23 标准提供的 std::generator<int> 替换了自己编写的 generator<int>：
+
+\begin{cpp}
+std::generator<int> fibonacci() noexcept
+{
+    int a = 0, b = 1;
+    while (true)
+    {
+        co_yield b;
+        auto tmp = a;
+        a = b;
+        b += tmp;
+    }
+}
+int main()
+{
+    int c = 1;
+    for (auto i : fibonacci())
+    {
+        std::cout << i << ' ';
+        if (++c > 10) break;
+    }
+}
+\end{cpp}
+
+

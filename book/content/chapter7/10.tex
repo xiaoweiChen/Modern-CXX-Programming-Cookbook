@@ -1,0 +1,148 @@
+
+
+诸如复制、重命名、移动或删除文件的操作直接由文件系统库提供。当涉及到从文件中删除内容时，必须执行明确的动作。
+
+无论处理的是文本文件还是二进制文件，都可以使用以下模式：
+
+\begin{enumerate}
+\item
+创建一个临时文件。
+
+\item
+仅将原始文件中所需的内容复制到临时文件中。
+
+\item
+删除原始文件。
+
+\item
+将临时文件重命名/移动到原始文件的名称/位置。
+\end{enumerate}
+
+本示例中，将介绍如何为文本文件实现这种模式。
+
+\mySubsubsection{}{Getting ready}
+
+本食示例将考虑从文本文件中删除空行或以分号 (;) 开头的行。这个例子中，有一个初始文件，称为 sample.dat，其中包含莎士比亚戏剧的名字，但也包括空行和以分号开头的行。以下是该文件的部分列表（从开头部分）：
+
+\begin{shell}
+;Shakespeare's plays, listed by genre
+;TRAGEDIES
+Troilus and Cressida
+Coriolanus
+Titus Andronicus
+Romeo and Juliet
+Timon of Athens
+Julius Caesar
+\end{shell}
+
+下一节中列出的代码示例使用了以下变量：
+
+\begin{cpp}
+auto path = fs::current_path();
+auto filepath = path / "sample.dat";
+auto temppath = path / "sample.tmp";
+auto err = std::error_code{};
+\end{cpp}
+
+在接下来的部分，会教授如何将这种模式编码实现。
+
+\mySubsubsection{}{How to do it...}
+
+执行以下操作以从文件中删除内容：
+
+\begin{enumerate}
+\item
+打开文件以读取：
+
+\begin{cpp}
+std::ifstream in(filepath);
+if (!in.is_open())
+{
+    std::cout << "File could not be opened!" << '\n';
+    return;
+}
+\end{cpp}
+
+\item
+打开另一个临时文件以供写入；如果文件已存在，则截断其内容：
+
+\begin{cpp}
+std::ofstream out(temppath, std::ios::trunc);
+if (!out.is_open())
+{
+    std::cout << "Temporary file could not be created!" << '\n';
+    return;
+}
+\end{cpp}
+
+\item
+从输入文件中逐行读取，并将选定的内容复制到输出文件中：
+
+\begin{cpp}
+auto line = std::string{};
+while (std::getline(in, line))
+{
+    if (!line.empty() && line.at(0) != ';')
+    {
+        out << line << 'n';
+    }
+}
+\end{cpp}
+
+\item
+关闭输入和输出文件：
+
+\begin{cpp}
+in.close();
+out.close();
+\end{cpp}
+
+\item
+删除原始文件：
+
+\begin{cpp}
+auto success = fs::remove(filepath, err);
+if(!success || err)
+{
+    std::cout << err.message() << '\n';
+    return;
+}
+\end{cpp}
+
+\item
+将临时文件重命名/移动到原始文件的名称/位置：
+
+\begin{cpp}
+fs::rename(temppath, filepath, err);
+if (err)
+{
+    std::cout << err.message() << '\n';
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{Hot it works...}
+
+这里描述的模式同样适用于二进制文件，简洁起见，只讨论一个文本文件的例子。这个例子中，临时文件位于与原始文件相同的目录中。作为替代，可以位于单独的目录中，比如：用户临时目录。要获取临时目录的路径，可以使用 \verb|std::filesystem::temp_directory_path()|。Windows 系统上，此函数返回与 GetTempPath() 相同的目录； POSIX 系统上，返回环境变量 TMPDIR、TMP、TEMP 或 TEMPDIR 中指定的路径，如果这些变量均不可用，则返回路径 /tmp。
+
+如何将原始文件的内容复制到临时文件中因需复制的内容而异。前面的例子中，除非行为空或以分号开头，否则将复制整行。
+
+为此，使用 std::getline() 逐行读取原始文件的内容，直到没有更多的行可读。复制了所有必要的内容后，应该关闭文件以便它们可以移动或删除。
+
+为了完成操作，有三种选择：
+
+\begin{itemize}
+\item
+如果临时文件和原始文件在同一目录中，删除原始文件并将临时文件重命名为与原始文件相同的名称；如果位于不同的目录中，则将临时文件移动到原始文件的位置(这是本示例所采用的方法)。为此，可使用 remove() 函数删除原始文件，并使用 rename() 将临时文件重命名为原始文件名。
+
+\item
+将临时文件的内容复制回原始文件（可以使用 \verb|copy()| 或 \verb|copy_file()| 函数），然后删除临时文件（为此使用 \verb|remove()|）。
+
+\item
+重命名原始文件（例如，更改扩展名或名称），然后使用原始文件名重命名/移动临时文件。
+\end{itemize}
+
+\begin{myTip}
+如果采用这里提到的第一种方法，那么必须确保后来替换原始文件的临时文件，具有与原始文件相同的文件权限；否则，根据解决方案的上下文，这可能会有问题。
+\end{myTip}
+

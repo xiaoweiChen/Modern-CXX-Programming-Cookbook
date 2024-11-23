@@ -1,0 +1,174 @@
+前一个示例中，介绍了使用 std::bitset 处理固定大小的位序列。有时 std::bitset 并不是一个好的选择，因为在编译时并不知道位的数量，而简单地定义一个足够大的位集合也不是一个好主意，因为可能会遇到实际位数并不足够大的情况。对此的标准替代方案是使用 std::vector<bool> 容器，std::vector 的一个特化版本，实现了空间和速度上的优化。因为其实现并不是存储布尔值，而是为每个元素存储单独的位。
+
+\begin{myNotic}
+正因为如此，std::vector<bool> 不符合标准容器或顺序容器的要求，std::vector<bool>::iterator 也不符合前向迭代器的要求。因此，这种特化不能用于期望vector的泛型代码中。作为一个vector，具有与 std::bitset 不同的接口，不能视为数字的二进制表示。没有直接的方法可以从数字或字符串构造 std::vector<bool>，也不能将其转换为数字或字符串。
+\end{myNotic}
+
+\mySubsubsection{}{Getting ready}
+
+此示例假设已经熟悉 std::vector 和 std::bitset。
+
+vector<bool> 类在 <vector> 头文件中的 std 命名空间中可用。
+
+\mySubsubsection{}{How to do it...}
+
+要操作 std::vector<bool>，请使用与操作 std::vector<T> 相同的方法：
+
+\begin{itemize}
+\item
+创建一个空vector:
+
+\begin{cpp}
+std::vector<bool> bv; // []
+\end{cpp}
+
+\item
+向vector中添加位：
+
+\begin{cpp}
+bv.push_back(true);  // [1]
+bv.push_back(true);  // [1, 1]
+bv.push_back(false); // [1, 1, 0]
+bv.push_back(false); // [1, 1, 0, 0]
+bv.push_back(true);  // [1, 1, 0, 0, 1]
+\end{cpp}
+
+\item
+设置单个位的值：
+
+\begin{cpp}
+bv[3] = true;        // [1, 1, 0, 1, 1]
+\end{cpp}
+
+\item
+使用泛型算法：
+
+\begin{cpp}
+auto count_of_ones = std::count(bv.cbegin(), bv.cend(), true);
+\end{cpp}
+
+\item
+从vector中移除位：
+
+\begin{cpp}
+bv.erase(bv.begin() + 2); // [1, 1, 1, 1]
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+std::vector<bool> 并不是标准vector，其设计为通过为每个元素存储单个位，而非布尔值来提供空间优化。因此，元素不是存储在一个连续的序列中，不能代替布尔值数组：
+
+\begin{itemize}
+索引操作符不能返回对特定元素的引用，元素不是单独存储的：
+
+\begin{cpp}
+std::vector<bool> bv;
+bv.resize(10);
+auto& bit = bv[0];      // error
+\end{cpp}
+
+\item
+解引用迭代器不能产生对 bool 的引用，原因与上述相同：
+
+\begin{cpp}
+auto& bit = *bv.begin(); // error
+\end{cpp}
+
+\item
+不能保证可以同时从不同线程独立地操作各个位。
+
+\item
+vector不能与要求前向迭代器的算法一起使用，如 std::search()。
+
+\item
+如果代码期望的是 std::vector<T> 并且需要本列表中提到的操作，则该vector不能用于某些泛型代码中。
+\end{itemize}
+
+std::vector<bool> 的一个替代方案是 std::deque<bool>，这是一个标准容器（双端队列），满足所有容器和迭代器的要求，并可以与所有标准算法一起使用，但这不会提供 std::vector<bool> 提供的空间优化。
+
+\mySubsubsection{}{There's more...}
+
+std::vector<bool> 的接口与 std::bitset 非常不同。如果能够以相似的方式编写代码，可以创建一个封装 std::vector<bool> 的包装器，使其看起来像 std::bitset（尽可能）。
+
+以下实现提供了类似于 std::bitset 中可用的成员：
+
+\begin{cpp}
+class bitvector
+{
+    std::vector<bool> bv;
+    public:
+    bitvector(std::vector<bool> const & bv) : bv(bv) {}
+    bool operator[](size_t const i) { return bv[i]; }
+    inline bool any() const {
+        for (auto b : bv) if (b) return true;
+        return false;
+    }
+    inline bool all() const {
+        for (auto b : bv) if (!b) return false;
+        return true;
+    }
+    inline bool none() const { return !any(); }
+    inline size_t count() const {
+        return std::count(bv.cbegin(), bv.cend(), true);
+    }
+    inline size_t size() const { return bv.size(); }
+    inline bitvector & add(bool const value) {
+        bv.push_back(value);
+        return *this;
+    }
+    inline bitvector & remove(size_t const index) {
+        if (index >= bv.size())
+        throw std::out_of_range("Index out of range");
+        bv.erase(bv.begin() + index);
+        return *this;
+    }
+    inline bitvector & set(bool const value = true) {
+        for (size_t i = 0; i < bv.size(); ++i)
+        bv[i] = value;
+        return *this;
+    }
+    inline bitvector& set(size_t const index, bool const value = true) {
+        if (index >= bv.size())
+        throw std::out_of_range("Index out of range");
+        bv[index] = value;
+        return *this;
+    }
+    inline bitvector & reset() {
+        for (size_t i = 0; i < bv.size(); ++i) bv[i] = false;
+        return *this;
+    }
+    inline bitvector & reset(size_t const index) {
+        if (index >= bv.size())
+        throw std::out_of_range("Index out of range");
+        bv[index] = false;
+        return *this;
+    }
+    inline bitvector & flip() {
+        bv.flip();
+        return *this;
+    }
+    std::vector<bool>& data() { return bv; }
+};
+\end{cpp}
+
+这只是一个基本的实现，如果想使用这样的包装器，应该添加其他方法，比如：位逻辑操作、移位、也许是从流中读取和写入等。然而，有了前面的代码，就可以写出以下示例：
+
+\begin{cpp}
+bitvector bv;
+bv.add(true).add(true).add(false); // [1, 1, 0]
+bv.add(false);                     // [1, 1, 0, 0]
+bv.add(true);                      // [1, 1, 0, 0, 1]
+if (bv.any()) std::cout << "has some 1s" << '\n';
+if (bv.all()) std::cout << "has only 1s" << '\n';
+if (bv.none()) std::cout << "has no 1s" << '\n';
+std::cout << "has " << bv.count() << " 1s" << '\n';
+bv.set(2, true);                   // [1, 1, 1, 0, 1]
+bv.set();                          // [1, 1, 1, 1, 1]
+bv.reset(0);                       // [0, 1, 1, 1, 1]
+bv.reset();                        // [0, 0, 0, 0, 0]
+bv.flip();                         // [1, 1, 1, 1, 1]
+\end{cpp}
+
+这些示例非常类似于使用 std::bitset 的示例。这个 bitvector 类拥有与 std::bitset 兼容的 API，但对于处理可变长度的位序列来说很有用。
+

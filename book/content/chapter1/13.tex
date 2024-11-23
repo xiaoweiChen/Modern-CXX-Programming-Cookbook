@@ -1,0 +1,201 @@
+
+返回多个值的函数在编程中非常常见，但C++却缺乏一种直接的解决方案来。开发者通常要在以下几种方式之间做出选择：通过引用参数从函数返回多个值、定义一个包含多个值的结构体、或者返回一个std::pair或std::tuple。前两种方法使用命名变量，这使它们具有清晰表明返回值意义的优点，但缺点是必须显式定义这些变量。std::pair的成员名为first和second，而std::tuple的成员未命名，只能通过函数调用来获取，不过可以使用std::tie()将其复制到命名变量中。所有这些解决方案都不是理想的。
+
+C++17扩展了std::tie()的语义用途，将其提升为一流的核心语言特性，即允许将元组中的值解包到命名变量中，这一特性称为结构化绑定。
+
+\mySubsubsection{}{Getting ready}
+
+对于本示例，应该熟悉标准工具类型std::pair和std::tuple，以及std::tie()。
+
+\mySubsubsection{}{How to do it...}
+
+为了使用支持C++17的编译器从函数返回多个值，可以按照以下步骤操作：
+
+\begin{enumerate}
+\item
+使用std::tuple作为返回类型:
+
+\begin{cpp}
+std::tuple<int, std::string, double> find()
+{
+    return {1, "marius", 1234.5};
+}
+\end{cpp}
+
+\item
+使用结构化绑定将元组中的值解包到命名对象中:
+
+\begin{cpp}
+auto [id, name, score] = find();
+\end{cpp}
+
+\item
+在if语句或switch语句中使用结构化绑定将返回值绑定到变量中:
+
+\begin{cpp}
+if (auto [id, name, score] = find(); score > 1000)
+{
+    std::cout << name << '\n';
+}
+\end{cpp}
+\end{enumerate}
+
+\mySubsubsection{}{How it works...}
+
+结构化绑定（有时也称为分解声明）是一种语言特性，其工作方式类似于std::tie()，但是不必像使用std::tie()，显式地为每个需要解包的值定义命名变量。借助结构化绑定，可以在单个定义中使用auto说明符定义所有命名变量，让编译器推断出每个变量的正确类型。
+
+例如，向std::map插入项目时，insert方法会返回一个std::pair，其中包含指向插入元素或阻止插入的元素的迭代器，以及一个指示插入是否成功的布尔值。下面的代码非常明确，但由于使用了second或first->second，因为需要不断弄清楚它们代表什么，所以代码难以阅读:
+
+\begin{cpp}
+std::map<int, std::string> m;
+auto result = m.insert({ 1, "one" });
+std::cout << "inserted = " << result.second << '\n'
+<< "value = " << result.first->second << '\n';
+\end{cpp}
+
+通过使用std::tie，上述代码可以变得更加易读，std::tie将元组解开为单独的对象（由于std::tuple可以从std::pair转换赋值，因此也可以与std::pair一起使用）:
+
+\begin{cpp}
+std::map<int, std::string> m;
+std::map<int, std::string>::iterator it;
+bool inserted;
+std::tie(it, inserted) = m.insert({ 1, "one" });
+std::cout << "inserted = " << inserted << '\n'
+          << "value = " << it->second << '\n';
+std::tie(it, inserted) = m.insert({ 1, "two" });
+std::cout << "inserted = " << inserted << '\n'
+          << "value = " << it->second << '\n';
+\end{cpp}
+
+尽管这样做的代码不一定更简单，要求提前定义好将要解包对，但使用命名对象可以使代码更容易阅读。当元组中的元素越多，需要定义的实例就越多。
+
+C++17中的结构化绑定，将元组元素解包为命名对象提升到了语言特性的级别；无需使用std::tie()，并且在声明时初始化对象:
+
+\begin{cpp}
+std::map<int, std::string> m;
+{
+    auto [it, inserted] = m.insert({ 1, "one" });
+    std::cout << "inserted = " << inserted << '\n'
+              << "value = " << it->second << '\n';
+}
+{
+    auto [it, inserted] = m.insert({ 1, "two" });
+    std::cout << "inserted = " << inserted << '\n'
+              << "value = " << it->second << '\n';
+}
+\end{cpp}
+
+上例中使用多个块的原因在于同一个作用域内不能重新声明变量，而结构化绑定使用auto说明符进行声明。如果需要多次调用并使用结构化绑定，则必须使用不同的变量名或多个块。另一种方法是避免使用结构化绑定而使用std::tie()，因为后者可以多次调用相同的变量，所以只需要声明一次。
+
+C++17中，还可以以if(init; condition)和switch(init; condition)的形式分别在if和switch语句中声明变量。这可以与结构化绑定结合使用，从而产生更简洁的代码:
+
+\begin{cpp}
+if(auto [it, inserted] = m.insert({ 1, "two" }); inserted)
+{ std::cout << it->second << '\n'; }
+\end{cpp}
+
+试图向映射中插入一个新的值。调用的结果解包成两个变量it和inserted，这两个变量在if语句的作用域中于初始化部分定义，根据inserted变量的值计算if语句的条件。
+
+\mySubsubsection{}{There’s more...}
+
+这里主要介绍了将名称绑定到元组元素的情况，但结构化绑定的应用范围更广，还支持绑定到数组元素或类的数据成员。如果想绑定到数组元素，必须为数组中的每个元素提供一个名称；否则，声明将是非法的。以下是绑定到数组元素的一个示例：
+
+\begin{cpp}
+int arr[] = { 1,2 };
+auto [a, b] = arr;
+auto& [x, y] = arr;
+arr[0] += 10;
+arr[1] += 10;
+std::cout << arr[0] << ' ' << arr[1] << '\n'; // 11 12
+std::cout << a << ' ' << b << '\n';           // 1 2
+std::cout << x << ' ' << y << '\n';           // 11 12
+\end{cpp}
+
+arr是一个包含两个元素的数组。首先将a和b绑定到其元素，然后将x和y引用绑定到其元素。对数组元素所做的更改不会反映在变量a和b中，但会通过引用x和y看到，如注释中这些值的输出所示。这是因为第一次绑定时，创建了一个数组的副本，a和b绑定到了副本的元素上。
+
+绑定到类的数据成员也是可能的，不过有以下限制：
+
+\begin{itemize}
+\item
+绑定只能应用于类的非静态成员。
+
+\item
+类不能有匿名联合成员。
+
+\item
+标识符的数量必须与类的非静态成员数量相匹配。
+\end{itemize}
+
+标识符的绑定顺序与数据成员的声明顺序相同，包括位字段。下面是一个示例：
+
+\begin{cpp}
+struct foo
+{
+    int         id;
+    std::string name;
+};
+foo f{ 42, "john" };
+auto [i, n] = f;
+auto& [ri, rn] = f;
+f.id = 43;
+std::cout << f.id << ' ' << f.name << '\n';   // 43 john
+std::cout << i <<'''' << n <<''\'';           // 42 john
+std::cout << ri <<'''' << rn <<''\'';         // 43 john
+\end{cpp}
+
+再次强调，对foo对象所做的更改不会反映在变量i和n中，但会通过引用ri和rn看到。因为结构化绑定中的每个标识符都成为引用类数据成员的左值的名字（就像数组一样，引用数组的元素），但识符的引用类型是对应的数据成员（或数组元素）。
+
+C++20标准引入了一系列对结构化绑定的改进，包括：
+
+\begin{itemize}
+\item
+可以在结构化绑定的声明中包含static或thread\_local存储类别说明符。
+
+\item
+可以在结构化绑定的声明中使用[[maybe\_unused]]属性。一些编译器，如Clang和GCC，已经支持此功能。
+
+\item
+可以在lambda表达式中捕获结构化绑定标识符。所有标识符，包括绑定到位字段的那些，都可以按值捕获。相反，除了绑定到位字段的标识符外，所有标识符也可以按引用捕获。
+\end{itemize}
+
+有了这些，可以编写如下代码：
+
+\begin{cpp}
+foo f{ 42,"john" };
+auto [i, n] = f;
+auto l1 = [i] {std::cout << i; };
+auto l2 = [=] {std::cout << i; };
+auto l3 = [&i] {std::cout << i; };
+auto l4 = [&] {std::cout << i; };
+\end{cpp}
+
+这些例子展示了在C++20中如何以多种方式在lambda表达式中捕获结构化绑定。
+
+有时候，需要绑定但不使用的变量。在C++26中，将可以通过使用下划线（\_）代替名称来忽略一个变量。尽管撰写本文时没有任何编译器支持此功能，但已纳入了C++26标准。
+
+\begin{cpp}
+foo f{ 42,"john" };
+auto [_, n] = f;
+\end{cpp}
+
+\_是绑定到foo对象的id成员的变量的占位符，用于表明这个值在此上下文中未使用且忽略。
+
+使用\_占位符不仅限于结构化绑定，可以作为非静态类成员、结构化绑定和lambda捕获的标识符。可以使用下划线重新定义同一作用域内的现有声明，从而可以忽略多个变量。但如果在重新声明后使用名为\_的变量，则视为非法。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

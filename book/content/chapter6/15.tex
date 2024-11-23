@@ -1,0 +1,192 @@
+
+模板元编程是C++语言的一个强大特性，能够编写并重用适用于所有类型的泛型代码。而实践中，往往需要泛型代码根据不同的类型以不同的方式工作，或者根本无法工作，这可能是出于设计意图、语义正确性、性能或其他原因。例如，一个泛型算法对于POD（Plain Old Data）类型和非POD类型有不同的实现，或者一个函数模板只能用整数类型实例化。C++11提供了一组类型特征（type traits）来帮助实现这一目标。
+
+类型特征是提供关于其他类型信息的元类型。类型特征库包含了一个长长的列表，用于查询类型属性（如检查一个类型是否为整数类型或两个类型是否相同），也用于执行类型转换（如移除const和volatile限定符或将指针添加到类型）。这本书的前面章节中，已经在多个示例中使用了类型特征；然而，本示例中，将介绍类型特征是什么，以及其工作原理。
+
+\mySubsubsection{}{Getting ready}
+
+C++11中引入的所有类型特征都可以在 \verb|<type_traits>| 头文件的 std 命名空间中找到。
+
+类型特征可以在许多元编程场景中使用。在本示例中，将总结一些这样的使用案例，并理解类型特征的工作原理。
+
+本示例中，将讨论全特化和偏特化。熟悉这些概念将有助于更好地理解类型特征的工作方式。
+
+\mySubsubsection{}{How to do it...}
+
+以下列表显示了使用类型特征实现不同设计目标：
+
+\begin{itemize}
+\item
+\verb|enable_if| 定义函数模板可以实例化的类型的预条件：
+
+\begin{cpp}
+template <typename T,
+          typename = typename std::enable_if_t<
+                std::is_arithmetic_v<T> > >
+T multiply(T const t1, T const t2)
+{
+    return t1 * t2;
+}
+auto v1 = multiply(42.0, 1.5);     // OK
+auto v2 = multiply("42"s, "1.5"s); // error
+\end{cpp}
+
+\item
+\verb|static_assert| 确保满足不变量的需求：
+
+\begin{cpp}
+template <typename T>
+struct pod_wrapper
+{
+    static_assert(std::is_standard_layout_v<T> &&
+                  std::is_trivial_v<T>,
+                  "Type is not a POD!");
+    T value;
+};
+pod_wrapper<int> i{ 42 };            // OK
+pod_wrapper<std::string> s{ "42"s }; // error
+\end{cpp}
+
+\item
+\verb|std::conditional| 在类型之间进行选择：
+
+\begin{cpp}
+template <typename T>
+struct const_wrapper
+{
+    typedef typename std::conditional_t<
+            std::is_const_v<T>,
+            T,
+            typename std::add_const_t<T>> const_type;
+};
+static_assert(
+    std::is_const_v<const_wrapper<int>::const_type>);
+static_assert(
+    std::is_const_v<const_wrapper<int const>::const_type>);
+\end{cpp}
+
+\item
+\verb|constexpr if| 让编译器基于模板实例化的类型生成不同的代码：
+
+\begin{cpp}
+template <typename T>
+auto process(T arg)
+{
+    if constexpr (std::is_same_v<T, bool>)
+        return !arg;
+    else if constexpr (std::is_integral_v<T>)
+        return -arg;
+    else if constexpr (std::is_floating_point_v<T>)
+        return std::abs(arg);
+    else
+        return arg;
+}
+auto v1 = process(false); // v1 = true
+auto v2 = process(42);    // v2 = -42
+auto v3 = process(-42.0); // v3 = 42.0
+auto v4 = process("42"s); // v4 = "42"
+\end{cpp}
+\end{itemize}
+
+\mySubsubsection{}{How it works...}
+
+类型特征是提供类型或其属性的信息类型，也可以用来修改类型。实际上存在两类类型特征：
+
+\begin{itemize}
+\item
+\item 提供关于类型、其属性或关系信息的特征（如 \verb|is_integer|, \verb|is_arithmetic|, \verb|is_array|, \verb|is_enum|, \verb|is_class|, \verb|is_const|, \verb|is_trivial|, \verb|is_standard_layout|, \verb|is_constructible|, \verb|is_same| 等）。这些特征提供了名为 value 的常量 bool 成员。
+
+\item
+修改类型属性的特征（如 \verb|add_const|, \verb|remove_const|, \verb|add_pointer|, \verb|remove_pointer|, \verb|make_signed|, \verb|make_unsigned| 等）。这些特征提供了一个表示转换后类型的成员 typedef，称为 type。
+\end{itemize}
+
+这两种类型的特征都在“How to do it...”有所展示，这里提供了一个简短的概述：
+
+\begin{itemize}
+\item
+第一个例子中，函数模板 multiply() 只允许用算术类型（即整数或浮点数）实例化；当用不同类型的类型实例化时，\verb|enable_if| 不定义一个名为 type 的 typedef 成员，从而产生编译错误。
+
+\item
+第二个例子中，\verb|pod_wrapper| 是一个类模板，只能用 POD 类型实例化。如果使用非 POD 类型，\verb|static_assert| 声明会产生编译错误（要么不是简单类型，要么不符合标准布局）。
+
+\item
+第三个例子中，\verb|const_wrapper| 是一个类模板，提供了一个表示常量限定类型的 typedef 成员，称为 \verb|const_type|。
+
+\item
+这个例子中，使用 std::conditional 在编译时在两种类型之间进行选择：如果类型参数 T 已经是一个常量类型，就直接选择 T。否则，使用 \verb|add_const| 类型特征来用 const 限定符修饰类型。
+
+\item
+第四个例子中，process() 是一个函数模板，其中包含一系列 \verb|if constexpr| 分支。根据使用多种类型特征（\verb|is_same|, \verb|is_integer|, \verb|is_floating_point|）在编译时查询的类型类别，编译器会选择一个分支放入生成的代码中，并丢弃其余分支。像 process(42) 这样的调用，将产生以下函数模板实例：
+
+\begin{cpp}
+int process(int arg)
+{
+    return -arg;
+}
+\end{cpp}
+\end{itemize}
+
+类型特征是通过提供一个类模板，及其部分或完全特化来实现的。以下是某些类型特征的概念实现：
+
+\begin{itemize}
+\item
+\verb|is_void()| 方法指示一个类型是否为 void；这使用了全特化：
+
+\begin{cpp}
+template <typename T>
+struct is_void
+{ static const bool value = false; };
+template <>
+struct is_void<void>
+{ static const bool value = true; };
+\end{cpp}
+
+\item
+\verb|is_pointer()| 方法指示一个类型是否是指向对象或函数的指针；这使用了偏特化：
+
+\begin{cpp}
+template <typename T>
+struct is_pointer
+{ static const bool value = false; };
+template <typename T>
+struct is_pointer<T*>
+{ static const bool value = true; };
+\end{cpp}
+
+\item
+\verb|enable_if()| 类型特征仅当其非类型模板参数是一个评估结果为真的表达式时，才为其类型模板参数定义一个类型别名：
+
+\begin{cpp}
+template<bool B, typename T = void>
+struct enable_if {};
+template<typename T>
+struct enable_if<true, T> { using type = T; };
+\end{cpp}
+\end{itemize}
+
+由于使用 bool 成员 value 查询属性特征（如 \verb|std::is_integer<int>::value|）或使用成员类型别名 type 修改属性特征（如 \verb|std::enable_if<true, T>::type|）过于冗长，C++14 和 C++17 标准引入了一些简化功能：
+
+\begin{itemize}
+\item
+形式为 \verb|std::trait_v<T>| 的变量模板，用于 \verb|std::trait<T>::value|。例如，\verb|std::is_integer_v<T>| 的定义如下：
+
+\begin{cpp}
+template <typename T>
+inline constexpr bool is_integral_v = is_integral<T>::value;
+\end{cpp}
+
+\item
+形式为 \verb|std::trait_t<T>| 的别名模板，用于 \verb|std::trait<T>::type|。例如，\verb|std::enable_if_t<B, T>| 的定义如下：
+
+\begin{cpp}
+template <bool B, typename T = void>
+using enable_if_t = typename enable_if<B,T>::type;
+\end{cpp}
+\end{itemize}
+
+C++20 起，POD 类型的概念已废弃。这也包括废弃 \verb|std::is_pod| 类型特征。POD 类型既是简单类型（具有编译器提供的特殊成员或显式默认的特殊成员，并占据连续的内存区域），又符合标准布局（不包含与 C 语言不兼容的语言特性，如虚函数，且所有成员具有相同的访问控制）。从 C++20 开始，更细粒度的简单类型和标准布局类型的概念更为优先，所以不应再使用 \verb|std::is_pod|，而要使用 \verb|std::is_trivial| 和 \verb|std::is_standard_layout|。
+
+\mySubsubsection{}{there's more}
+
+类型特征并不局限于标准库所提供的内容。使用类似的技术，可以定义自己的类型特征以实现各种目标。
+
