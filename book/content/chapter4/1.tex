@@ -84,7 +84,7 @@ void show_compiler()
     std::cout << "Visual C++\n";
 #elif defined __clang__
     std::cout << "Clang\n";
-#elif defined __GNUG__
+#elif defined __GNUC__
     std::cout << "GCC\n";
 #else
     std::cout << "Unknown compiler\n";
@@ -108,7 +108,7 @@ void show_architecture()
 #else
     std::cout << "unknown\n";
 #endif
-#elif defined __clang__ || __GNUG__
+#elif defined __clang__ || __GNUC__
 #if defined __amd64__
     std::cout << "AMD64\n";
 #elif defined __i386__
